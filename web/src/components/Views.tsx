@@ -51,7 +51,7 @@ export function HomeView() {
           <h3 className="muted" style={{ marginTop: 28 }}>Linked but not written yet</h3>
           <div className="row" style={{ flexWrap: 'wrap' }}>
             {missing.map(([name, from]) => (
-              <button key={name} className="chip" onClick={() => useStore.getState().createPageFromName(name).then((p) => useStore.getState().navigate({ type: 'page', id: p.id }))}>
+              <button key={name} className="chip" onClick={() => useStore.getState().createPageFromName(name).then((p) => p && useStore.getState().navigate({ type: 'page', id: p.id }))}>
                 {name} · {from.size}
               </button>
             ))}

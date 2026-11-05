@@ -217,7 +217,7 @@ export function Sidebar() {
         <div className="overlay" style={{ background: 'transparent', padding: 0 }} onMouseDown={() => setTypeMenu(null)}>
           <div className="menu" style={{ left: typeMenu.x, top: typeMenu.y }} onMouseDown={(e) => e.stopPropagation()}>
             {types.map((t) => (
-              <button key={t.id} onClick={() => { const folderId = typeMenu.folderId; setTypeMenu(null); useStore.getState().createPage({ type: t.id, folderId }) }}>
+              <button key={t.id} onClick={() => { const folderId = typeMenu.folderId; setTypeMenu(null); useStore.getState().createPage({ type: t.id, folderId }).catch((e) => alertDialog(e.message)) }}>
                 <TypeIcon name={t.icon} size={15} /> {t.name}
               </button>
             ))}

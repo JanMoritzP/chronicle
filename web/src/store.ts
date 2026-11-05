@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { get as idbGet, set as idbSet } from 'idb-keyval'
 import { api, ApiError } from './api'
 import { resolveTypes } from './lib/pageTypes'
+import { askText } from './lib/dialog'
 import type { Bootstrap, Folder, LinkRow, PageMeta, PageType, StatTemplateRow, Template, User, Workspace, Zettel } from './types'
 import { findPageByName } from './lib/data'
 import { loadBindings, saveBindings, type Action } from './lib/keys'
@@ -58,6 +59,7 @@ interface State {
   logout: () => Promise<void>
   selectWorkspace: (id: string) => Promise<void>
   createWorkspace: (name: string) => Promise<void>
+  ensureWorkspace: () => Promise<string | null>
   refresh: () => Promise<void>
 
   navigate: (v: View, opts?: { newTab?: boolean; split?: boolean }) => void
@@ -69,8 +71,8 @@ interface State {
 
   patchPageMeta: (id: string, patch: Partial<PageMeta>) => void
   setLinksFor: (sourceId: string, links: LinkRow[]) => void
-  createPage: (opts?: { title?: string; folderId?: string | null; content?: any; props?: any; tags?: string[]; type?: string; sourceZettelId?: string; open?: boolean }) => Promise<PageMeta>
-  createPageFromName: (name: string) => Promise<PageMeta>
+  createPage: (opts?: { title?: string; folderId?: string | null; content?: any; props?: any; tags?: string[]; type?: string; sourceZettelId?: string; open?: boolean }) => Promise<PageMeta | null>
+  createPageFromName: (name: string) => Promise<PageMeta | null>
   deletePage: (id: string) => Promise<void>
   addFolder: (name: string, parentId: string | null) => Promise<void>
   upsertFolder: (f: Folder) => void
@@ -158,6 +160,16 @@ export const useStore = create<State>((set, get) => ({
     }
   },
 
+  /** Everything lives inside a world; with none yet, offer to create one instead of calling /api/workspaces/null/... */
+  async ensureWorkspace() {
+    const { wsId, workspaces } = get()
+    if (wsId && workspaces.some((w) => w.id === wsId)) return wsId
+    const name = (await askText('Create your first world', { label: 'World name', okLabel: 'Create' }))?.trim()
+    if (!name) return null
+    await get().createWorkspace(name)
+    return get().wsId
+  },
+
   async createWorkspace(name) {
     const ws = await api.createWorkspace(name)
     set((s) => ({ workspaces: [...s.workspaces, ws] }))
@@ -217,7 +229,8 @@ export const useStore = create<State>((set, get) => ({
   },
 
   async createPage(opts = {}) {
-    const ws = get().wsId!
+    const ws = await get().ensureWorkspace()
+    if (!ws) return null
     const type = opts.type ? resolveTypes(get().data.pageTypes).find((t) => t.id === opts.type) : undefined
     const tags = [...new Set([...(opts.tags ?? []), ...(type?.tag ? [type.tag] : [])])]
     const created = await api.createPage(ws, {
@@ -255,7 +268,9 @@ export const useStore = create<State>((set, get) => ({
   },
 
   async addFolder(name, parentId) {
-    const f = await api.createFolder(get().wsId!, name, parentId)
+    const ws = await get().ensureWorkspace()
+    if (!ws) return
+    const f = await api.createFolder(ws, name, parentId)
     set((s) => ({ data: { ...s.data, folders: [...s.data.folders, f] } }))
   },
   upsertFolder(f) {
@@ -263,7 +278,9 @@ export const useStore = create<State>((set, get) => ({
   },
 
   async addZettel(body, tags) {
-    const z = await api.createZettel(get().wsId!, body, tags)
+    const ws = await get().ensureWorkspace()
+    if (!ws) return
+    const z = await api.createZettel(ws, body, tags)
     set((s) => ({ data: { ...s.data, zettels: [z, ...s.data.zettels] } }))
   },
   updateZettelLocal(id, patch) {

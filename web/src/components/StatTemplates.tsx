@@ -128,7 +128,6 @@ export function StatTemplatesView() {
   const custom = useStore((s) => s.data.statTemplates)
   const readOnly = useStore((s) => s.user?.role === 'viewer')
   const navigate = useStore((s) => s.navigate)
-  const wsId = useStore((s) => s.wsId)!
   const [error, setError] = useState('')
   const list = useMemo(() => resolveTemplates(custom), [custom])
 
@@ -136,6 +135,8 @@ export function StatTemplatesView() {
     const name = (await askText(from ? `Copy of “${from.name}”` : 'New stat block form', { label: 'Name', initial: from ? `${from.name} copy` : '', okLabel: 'Create' }))?.trim()
     if (!name) return
     try {
+      const wsId = await useStore.getState().ensureWorkspace()
+      if (!wsId) return
       const sections = from ? structuredClone(from.sections) : [{ kind: 'title', key: 'name', placeholder: 'Name' }, { kind: 'rule' }, { kind: 'rows', fields: [{ key: 'field_1', label: 'First field' }] }]
       const t = await api.createStatTemplate(wsId, { name, sections })
       useStore.getState().upsertStatTemplate(t)

@@ -1,7 +1,7 @@
 import { Copy, Plus, Shapes, Trash2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { api } from '../api'
-import { confirmDialog, askText } from '../lib/dialog'
+import { alertDialog, confirmDialog, askText } from '../lib/dialog'
 import { SAMPLE_SOURCE, parseSource, resolveTypes, type ResolvedType } from '../lib/pageTypes'
 import { useStore } from '../store'
 import { TypeIcon, TYPE_ICONS, useTypes } from './TypeIcon'
@@ -11,7 +11,6 @@ export function PageTypesView() {
   const types = useTypes()
   const readOnly = useStore((s) => s.user?.role === 'viewer')
   const navigate = useStore((s) => s.navigate)
-  const wsId = useStore((s) => s.wsId)!
   const pages = useStore((s) => s.data.pages)
   const [error, setError] = useState('')
 
@@ -19,6 +18,8 @@ export function PageTypesView() {
     const name = (await askText(from ? `Copy of “${from.name}”` : 'New page type', { label: 'Name', initial: from ? `${from.name} copy` : '', okLabel: 'Create' }))?.trim()
     if (!name) return
     try {
+      const wsId = await useStore.getState().ensureWorkspace()
+      if (!wsId) return
       const source = from?.source ?? SAMPLE_SOURCE
       const t = await api.createPageType(wsId, { name, icon: from?.icon ?? 'shapes', tag: name.toLowerCase().replace(/\s+/g, '-'), source, definition: parseSource(source) })
       useStore.getState().upsertPageType(t)
@@ -44,7 +45,7 @@ export function PageTypesView() {
               <div><b>{t.name}</b> {t.tag && <span className="chip">#{t.tag}</span>} {t.builtin && <span className="muted" style={{ fontSize: 12 }}>built-in</span>}</div>
               <div className="muted todo-context">{count} page{count === 1 ? '' : 's'}</div>
             </div>
-            {!readOnly && <button className="btn sm" onClick={(e) => { e.stopPropagation(); useStore.getState().createPage({ type: t.id }) }}>New page</button>}
+            {!readOnly && <button className="btn sm" onClick={(e) => { e.stopPropagation(); useStore.getState().createPage({ type: t.id }).catch((er) => alertDialog(er.message)) }}>New page</button>}
           </div>
         )
       })}

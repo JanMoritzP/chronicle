@@ -120,7 +120,7 @@ export function MapInspector(p: Props) {
             <PagePicker placeholder="Link a page…" onPick={(pg) => p.onUpdate({ pageId: pg.id })} />
             <button className="btn sm" style={{ marginTop: 6 }} onClick={async () => {
               const created = await useStore.getState().createPage({ title: item.title || 'New place', open: false })
-              p.onUpdate({ pageId: created.id })
+              if (created) p.onUpdate({ pageId: created.id })
             }}><Plus size={13} /> New page for this</button>
           </>
         ) : <span className="muted">None</span>}

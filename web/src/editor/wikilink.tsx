@@ -28,7 +28,7 @@ function WikilinkView({ node }: NodeViewProps) {
     e.preventDefault()
     const st = useStore.getState()
     const target = page ?? (await st.createPageFromName(name))
-    st.navigate({ type: 'page', id: target.id, anchor: anchor || undefined }, openNav(e))
+    if (target) st.navigate({ type: 'page', id: target.id, anchor: anchor || undefined }, openNav(e))
   }
   return (
     <NodeViewWrapper
