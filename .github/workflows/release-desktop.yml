@@ -38,6 +38,10 @@ jobs:
       # the notes and the builder only attaches assets to the existing release.
       - run: node scripts/extract-release-notes.mjs
       - run: node scripts/publish-release.mjs
+        # the injected GITHUB_TOKEN env was not reaching the script (401 on the
+        # first authenticated call); pass the secret explicitly
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and publish
         working-directory: electron
         run: npm run release:win

@@ -118,6 +118,11 @@ try {
   if (process.env.GITHUB_STEP_SUMMARY) {
     appendFileSync(process.env.GITHUB_STEP_SUMMARY, `\n### Release prep failed\n\n\`${msg}\`\n`)
   }
-  const anno = msg.replace(/\r?\n/g, ' ').replace(/%/g, '%25')
+  // diagnostics that do not leak values: was the token even present, and is
+  // a proxy in play (Node's fetch ignores proxy env vars, so a 401 here can
+  // mean the request went through something that dropped the auth header)
+  const proxyVars = ['HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY'].filter((k) => process.env[k]).join(',') || 'none'
+  const detail = `token=${token ? `set (len ${token.length})` : 'MISSING'} proxy vars: ${proxyVars}`
+  const anno = `${msg} | ${detail}`.replace(/\r?\n/g, ' ').replace(/%/g, '%25')
   console.error(`::error file=.github/workflows/release-desktop.yml,title=release prep failed::${anno}`)
 }
