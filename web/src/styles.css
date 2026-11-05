@@ -210,6 +210,8 @@ kbd { font: 12px ui-monospace, monospace; padding: 1px 6px; border-radius: 5px; 
 .sd-field-main .input { min-width: 0; padding: 5px 8px; }
 .sd-key { width: 110px !important; flex: none; font: 12px ui-monospace, Consolas, monospace; color: var(--muted); }
 .sd-type { width: 130px !important; flex: none; }
+.sd-zone { width: 104px !important; flex: none; }
+.sd-hint { font-size: 12px; margin-left: 6px; }
 .sd-add { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 
 /* ---------- popups ---------- */

@@ -126,6 +126,15 @@ A World Anvil-style worldbuilding notebook. Self-hosted, React frontend, Node + 
 - Editors and owners create, edit and delete; viewers can read only.
 - API: `POST /api/workspaces/:ws/templates`, `PATCH|DELETE /api/templates/:id`. Tests: `scripts/smoke-templates.mjs` (29 checks).
 
+## Special pages (built)
+- A special page is a normal page with a fixed layout next to its text and an automatic tag. Built-in types: Person, Monster, Location. Custom types are per world and can be created, duplicated and deleted. Deleting a type makes its pages plain pages (the text and field values are kept).
+- Layout: four zones (top, side, main, bottom), columns side-left / side-right / single (with one column, side blocks merge into main), side width in px (160 to 520). Blocks: image (key, shape square/circle/wide/tall), statblock (any stat block form), fields (labelled key/value pairs, optionally long text), body (the normal page text). An image with the key `portrait` doubles as the page thumbnail.
+- Data: `page_types` (migration 9): `name`, `icon` (curated lucide set in `TypeIcon.tsx`), `tag` (cleaned server-side, added to every page of the type), `source` (the layout as JSON, YAML or Markdown front matter) and `definition` (the normalized layout). Pages carry `props.type` (type id, so renames never break it) and `props.data` (field and stat block values, keyed by the layout keys).
+- The layout is interpreted by the client (`web/src/lib/pageTypes.ts`: `parseSource`, `normalizeLayout`, `layoutToSource`, `resolveTypes`, `typeOf`); the server only stores it within size limits.
+- UI: the sidebar "New special page" menu creates a page of a chosen type; the sidebar "Special pages" lists the types with their page counts. The type editor has a **Designer** (column setup, add, move between zones, reorder and remove blocks in each zone, per-block and field settings) and a **Source** tab (JSON, YAML or Markdown front matter), both with a live preview you can type in. A key used twice or left empty blocks saving. Built-in types are read-only; Duplicate makes an editable copy.
+- Rides in the bootstrap (and the IndexedDB cache) and in `world.json` / backup restore. Copying between worlds does not carry custom page types: their pages become plain pages, while stat block forms are matched by name.
+- API: `POST /api/workspaces/:ws/page-types`, `PATCH|DELETE /api/page-types/:id` (editors and owners; viewers read only). Tests: `scripts/smoke-pagetypes.mjs` (11 checks), `scripts/test-layout.ts` (parse/serialize round trip, key handling; 16 checks).
+
 ## Operations
 - Password change: `POST /api/auth/password` (own), owner can set another user's.
 - Docker: health check on `/api/health`, graceful shutdown on SIGTERM (WAL checkpoint), `/data` owned by uid 1000, compose uses a named volume. Session cookie `Secure` follows `req.protocol` (behind cloudflared it is https).
@@ -135,6 +144,6 @@ A World Anvil-style worldbuilding notebook. Self-hosted, React frontend, Node + 
 - Offline edits are not queued across reloads.
 - The service worker is a stub (installability only).
 - Deleting a folder moves its contents up a level rather than trashing them.
-- Copying between worlds does not carry map pins, events or history (todos not checked). Templates are not copied either.
+- Copying between worlds does not carry map pins, events or history (todos not checked). Templates and custom page types are not copied either (their pages become plain pages; stat block forms are matched by name).
 - Single owner account; viewers cannot share. `/todo` is unavailable in read-only mode.
 - Only amd64 images; Linux and Mac Electron builds untested.

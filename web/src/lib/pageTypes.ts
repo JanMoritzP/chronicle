@@ -28,7 +28,7 @@ export interface ResolvedType {
   layout: Layout
 }
 
-const SHAPES = ['square', 'circle', 'wide', 'tall'] as const
+export const SHAPES = ['square', 'circle', 'wide', 'tall'] as const
 
 function block(raw: any, where: string): Block {
   if (typeof raw === 'string') raw = { type: raw }
@@ -86,6 +86,37 @@ export function parseSource(source: string): Layout {
     throw new Error(`Could not read the definition: ${String(e.message ?? e).split('\n')[0]}`)
   }
   return normalizeLayout(data)
+}
+
+/** The layout as YAML: what the source tab and the database store. */
+export function layoutToSource(layout: Layout): string {
+  return toYaml(layout, { indent: 2 })
+}
+
+/** Every value key a layout uses: image keys, statblock keys and field keys. */
+export function layoutKeys(layout: Layout): string[] {
+  const out: string[] = []
+  for (const zone of [layout.top, layout.side, layout.main, layout.bottom])
+    for (const b of zone) {
+      if (b.type === 'fields') out.push(...b.fields.map((f) => f.key))
+      else if (b.type !== 'body') out.push(b.key)
+    }
+  return out
+}
+
+/** Keys used twice would make two controls store the same value. */
+export function duplicateKeys(layout: Layout): string[] {
+  const seen = new Set<string>(), dup = new Set<string>()
+  for (const k of layoutKeys(layout)) { if (k && seen.has(k)) dup.add(k); seen.add(k) }
+  return [...dup]
+}
+
+/** A key that is free, for new blocks and fields. */
+export function freshKey(layout: Layout, base: string): string {
+  const used = new Set(layoutKeys(layout))
+  let k = base, n = 2
+  while (used.has(k)) k = `${base}_${n++}`
+  return k
 }
 
 const f = (key: string, label: string, extra: Partial<FieldDef> = {}): FieldDef => ({ key, label, ...extra })
