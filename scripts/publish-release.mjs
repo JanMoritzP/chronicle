@@ -40,11 +40,17 @@ const headers = {
 }
 
 async function apiRequest(method, url, data) {
-  const res = await fetch(url, {
-    method,
-    headers: data ? { ...headers, 'content-type': 'application/json' } : headers,
-    body: data ? JSON.stringify(data) : undefined,
-  })
+  let res
+  try {
+    res = await fetch(url, {
+      method,
+      headers: data ? { ...headers, 'content-type': 'application/json' } : headers,
+      body: data ? JSON.stringify(data) : undefined,
+    })
+  } catch (e) {
+    // fetch() rejects (no status) on network-level failures; surface the cause
+    throw new Error(`${method} ${url} network error: ${e.message}${e.cause ? ` (${e.cause.code || e.cause.message})` : ''}`)
+  }
   if (!res.ok) {
     const text = await res.text()
     throw new Error(`${method} ${url} failed (${res.status}): ${text.slice(0, 300)}`)
@@ -72,8 +78,11 @@ if (dryRun) {
   process.exit(0)
 }
 
+console.log(`repo=${repo} tag=${tag} token=${token ? `present (len ${token.length})` : 'MISSING'} notes=${body.length} chars`)
+
 try {
   let release = await findRelease()
+  console.log(`release for ${tag}: ${release ? `found id=${release.id}` : 'not found, will create'}`)
   if (release) {
     if (release.body === body) {
       console.log(`release ${tag} exists and its notes are already up to date`)
@@ -101,12 +110,14 @@ try {
 } catch (e) {
   // Fail soft: electron-builder still publishes the release (without the
   // pre-created notes), so a notes problem must not block the release. A
-  // re-run of the tag fixes the notes. The error goes to the step summary so
-  // it is readable without access to the full log.
+  // re-run of the tag fixes the notes. The error goes to the step summary and
+  // as a workflow annotation, both readable without access to the run log.
   const msg = `release prep failed: ${e.message}`
   console.warn(msg)
   console.warn('continuing: the builder will create the release, but it may lack the notes; re-running the workflow fixes that')
   if (process.env.GITHUB_STEP_SUMMARY) {
     appendFileSync(process.env.GITHUB_STEP_SUMMARY, `\n### Release prep failed\n\n\`${msg}\`\n`)
   }
+  const anno = msg.replace(/\r?\n/g, ' ').replace(/%/g, '%25')
+  console.error(`::error file=.github/workflows/release-desktop.yml,title=release prep failed::${anno}`)
 }
