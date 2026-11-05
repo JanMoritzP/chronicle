@@ -81,8 +81,21 @@ if (dryRun) {
 console.log(`repo=${repo} tag=${tag} token=${token ? `present (len ${token.length})` : 'MISSING'} notes=${body.length} chars`)
 
 try {
-  let release = await findRelease()
+  const release = await findRelease()
   console.log(`release for ${tag}: ${release ? `found id=${release.id}` : 'not found, will create'}`)
+
+  // Remove duplicates first: while two releases share a tag, GitHub's release
+  // validation rejects updating either one (422 already_exists on tag_name),
+  // and the builder's get-or-create picks from the listing nondeterministically.
+  // The orphan's assets are regenerated and re-uploaded by this same run.
+  const all = await apiRequest('GET', `${api}?per_page=100`)
+  for (const other of all) {
+    if (other.tag_name === tag && !other.draft && (release == null || other.id !== release.id)) {
+      await apiRequest('DELETE', `${api}/${other.id}`)
+      console.log(`removed duplicate release ${other.id} for ${tag}`)
+    }
+  }
+
   if (release) {
     if (release.body === body) {
       console.log(`release ${tag} exists and its notes are already up to date`)
@@ -93,18 +106,6 @@ try {
   } else {
     release = await apiRequest('POST', api, { tag_name: tag, name, body })
     console.log(`release ${tag} created (id ${release.id})`)
-  }
-
-  // A get-or-create race once produced a second release object for the same tag,
-  // and /releases/latest (what the portable updater reads) can return that one.
-  // Drop the duplicates: their assets are regenerated and re-uploaded by this
-  // same run, so nothing is lost.
-  const all = await apiRequest('GET', `${api}?per_page=100`)
-  for (const other of all) {
-    if (other.id !== release.id && other.tag_name === tag && !other.draft) {
-      await apiRequest('DELETE', `${api}/${other.id}`)
-      console.log(`removed duplicate release ${other.id} for ${tag}`)
-    }
   }
   console.log(`notes: ${body ? `${body.split('\n').length} line(s), first: ${body.split('\n')[0]}` : 'none'}`)
 } catch (e) {
