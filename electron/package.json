@@ -19,11 +19,38 @@
   "build": {
     "appId": "de.pocherhome.chronicle",
     "productName": "Chronicle",
-    "files": ["main.js", "preload.js", "setup.html", "package.json"],
-    "directories": { "output": "dist", "buildResources": "build" },
-    "win": { "target": ["nsis", "portable"] },
-    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true },
-    "linux": { "target": ["AppImage"], "category": "Office" },
-    "mac": { "category": "public.app-category.productivity" }
+    "files": [
+      "main.js",
+      "preload.js",
+      "setup.html",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Office"
+    },
+    "mac": {
+      "category": "public.app-category.productivity"
+    }
+  },
+  "allowScripts": {
+    "electron@39.8.10": true,
+    "electron-winstaller@5.4.0": true
   }
 }
