@@ -4,5 +4,7 @@ const { contextBridge, ipcRenderer } = require('electron')
 if (location.protocol === 'file:') {
   contextBridge.exposeInMainWorld('chronicleDesktop', {
     connect: (url) => ipcRenderer.invoke('connect', url),
+    version: () => ipcRenderer.invoke('version'),
+    checkUpdates: () => ipcRenderer.invoke('check-updates'),
   })
 }

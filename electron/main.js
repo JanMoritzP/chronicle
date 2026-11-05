@@ -10,6 +10,8 @@ const writeSettings = (patch) => {
   fs.writeFileSync(settingsFile(), JSON.stringify({ ...readSettings(), ...patch }, null, 2))
 }
 
+const updater = require('./update').createUpdater({ readSettings, writeSettings })
+
 const serverUrl = () => (process.env.CHRONICLE_URL || readSettings().serverUrl || '').replace(/\/+$/, '')
 
 function normalise(input) {
@@ -98,6 +100,7 @@ function openWindow(offset = 0) {
     else if (ctrl && !input.alt && k === '-') { event.preventDefault(); wc.setZoomLevel(wc.getZoomLevel() - 0.5) }
     else if (ctrl && !input.alt && k === '0') { event.preventDefault(); wc.setZoomLevel(0) }
     else if (ctrl && input.shift && k === 's') { event.preventDefault(); setupPage(win) }
+    else if (ctrl && input.shift && k === 'u') { event.preventDefault(); updater.check(true) }
   })
   return win
 }
@@ -112,6 +115,15 @@ ipcMain.handle('connect', async (_e, raw) => {
   return url
 })
 
+ipcMain.handle('version', (e) => {
+  if (!String(e.senderFrame?.url || '').startsWith('file:')) throw new Error('Not allowed')
+  return app.getVersion()
+})
+ipcMain.handle('check-updates', (e) => {
+  if (!String(e.senderFrame?.url || '').startsWith('file:')) throw new Error('Not allowed')
+  return updater.check(true)
+})
+
 const lock = app.requestSingleInstanceLock()
 if (!lock) app.quit()
 else {
@@ -120,6 +132,7 @@ else {
   app.whenReady().then(() => {
     Menu.setApplicationMenu(null)
     openWindow()
+    updater.start()
     app.on('activate', () => { if (!windows.size) openWindow() })
   })
   app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })

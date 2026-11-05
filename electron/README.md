@@ -41,6 +41,23 @@ npm run dist:mac     # needs a Mac
   | `F11` | Full screen |
   | `F12` | Developer tools |
   | `Ctrl+Shift+S` | Change server |
+  | `Ctrl+Shift+U` | Check for updates |
+
+## Updates
+
+The app looks for a newer version on GitHub (`JanMoritzP/chronicle`, latest release) a few seconds after start and every six hours. Nothing is shown unless there is one. The address screen also shows the version and a "Check for updates" link.
+
+- **Installed build** (`Chronicle-Setup-<version>.exe`): downloads the installer from the release and installs it when you restart, or the next time you quit.
+- **Portable build** (`Chronicle-<version>-portable.exe`): downloads the new portable exe next to the old one, checks its size and SHA-256, and swaps it in after the app quits. The folder must be writable.
+- "Skip this version" silences the automatic prompt for that version only. A manual check always shows it.
+
+### Publishing a release
+
+Automatic: commit with a `feat:` or `fix:` prefix and push to `main`. release-please (`.github/workflows/release-please.yml`) bumps the version, updates `CHANGELOG.md` and pushes the `vX.Y.Z` tag; `.github/workflows/release-desktop.yml` then builds on Windows and publishes the release. The commit subjects become the release notes, so write them for the user. The notes shown in the update dialog are that version's section of `CHANGELOG.md`. Details in AGENTS.md, section 4.
+
+The first release (0.2.0) was tagged by hand; release-please needs one existing tag to measure from.
+
+Without CI: `$env:GH_TOKEN='<token with repo scope>'; npm run release:win`. `npm run dist:win` only builds locally and publishes nothing. Tests: `node scripts/test-update-logic.mjs` and `node scripts/test-update-flow.mjs`.
 
 ## Security
 
@@ -49,6 +66,5 @@ The window is sandboxed with context isolation and no Node access. The only brid
 ## Not done
 
 - No offline mode. Without the server the app shows the address screen with the error.
-- No auto-update; install a new build over the old one.
 - Builds are unsigned.
 - Only Windows was built and run here. The Linux and Mac targets are configured but untested.

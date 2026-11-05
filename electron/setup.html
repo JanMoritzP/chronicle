@@ -13,6 +13,7 @@
   input { font: inherit; padding: 9px 11px; border-radius: 8px; border: 1px solid #d6c8b2; background: #fffaf1; color: inherit; }
   button { font: inherit; padding: 9px 12px; border-radius: 8px; border: 0; background: #b07a3f; color: #fff; cursor: pointer; }
   button:disabled { opacity: .6; cursor: default; }
+  a { color: #b07a3f; }
   .err { color: #b3402f; font-size: 13.5px; min-height: 1em; }
 </style>
 </head>
@@ -23,12 +24,15 @@
   <input id="url" autofocus spellcheck="false" placeholder="dnd.pocherhome.de" />
   <div class="err" id="err"></div>
   <button id="go">Connect</button>
+  <p><span id="ver"></span> <a href="#" id="upd">Check for updates</a></p>
 </form>
 <script>
   const q = new URLSearchParams(location.search)
   const url = document.getElementById('url'), err = document.getElementById('err'), go = document.getElementById('go')
   url.value = q.get('url') || ''
   err.textContent = q.get('error') || ''
+  window.chronicleDesktop.version().then((v) => { document.getElementById('ver').textContent = 'Version ' + v + ' ·' }).catch(() => {})
+  document.getElementById('upd').addEventListener('click', (e) => { e.preventDefault(); window.chronicleDesktop.checkUpdates() })
   document.getElementById('f').addEventListener('submit', async (e) => {
     e.preventDefault()
     go.disabled = true; err.textContent = 'Connecting…'

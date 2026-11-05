@@ -5,3 +5,4 @@ data
 .env
 
 electron/build
+electron/release-notes.md

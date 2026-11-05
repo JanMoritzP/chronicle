@@ -16,7 +16,9 @@ Open `http://localhost:3000` and log in as `gm` with that password. Then change 
 
 - Data lives in the named volume `chronicle-data` (`dnd.db`, `uploads/`, `maps/`, `backups/`). Use a named volume, not `./data`: SQLite is unreliable on bind mounts from the Windows file system.
 - The container has a health check (`docker ps` shows `healthy`) and stops cleanly (`docker stop` checkpoints the database first).
-- Update: `git pull && docker compose up -d --build`. Migrations run on start. Back up first (see below).
+- Update: `git pull && docker compose up -d --build`. The rebuild replaces the container, not the volume, so the database, uploads and backups stay. Migrations run on start. Back up first (see below).
+- `docker compose down` (without `-v`) is safe: it stops the container but keeps the volume, and it is not needed for an update. Never use `docker compose down -v` or delete the volume without a backup: that deletes the world.
+- If the app suddenly shows no data, the database is probably not gone: run `docker volume ls`. The volume name includes the folder you run compose from, so a differently named folder starts a fresh, empty volume while the old one keeps the data.
 
 ## 2. Umbrel (community app store)
 
@@ -95,6 +97,8 @@ npm run dist:mac                         # on a Mac
 ```
 
 On first start it asks for the server address (`dnd.pocherhome.de`). Builds are unsigned, so Windows SmartScreen warns once ("More info" → "Run anyway").
+
+From 0.2.0 the app updates itself from the latest GitHub release. Releases are published automatically: a `feat:` or `fix:` commit on `main` is versioned, changelogged and tagged, and the tag triggers the build (see AGENTS.md, section 4, and `electron/README.md`).
 
 ## Before going public
 

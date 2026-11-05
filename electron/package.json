@@ -1,6 +1,6 @@
 {
   "name": "chronicle-desktop",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Desktop window for a Chronicle server",
   "main": "main.js",
@@ -8,7 +8,8 @@
     "start": "electron .",
     "icon": "node make-icon.mjs",
     "dist": "npm run icon && electron-builder",
-    "dist:win": "npm run icon && electron-builder --win",
+    "dist:win": "node ../scripts/extract-release-notes.mjs && npm run icon && electron-builder --win --publish never",
+    "release:win": "node ../scripts/extract-release-notes.mjs && npm run icon && electron-builder --win --publish always",
     "dist:linux": "npm run icon && electron-builder --linux",
     "dist:mac": "npm run icon && electron-builder --mac"
   },
@@ -22,9 +23,17 @@
     "files": [
       "main.js",
       "preload.js",
+      "update.js",
+      "update-logic.js",
       "setup.html",
       "package.json"
     ],
+    "publish": {
+      "provider": "github",
+      "owner": "JanMoritzP",
+      "repo": "chronicle",
+      "releaseType": "release"
+    },
     "directories": {
       "output": "dist",
       "buildResources": "build"
@@ -37,7 +46,11 @@
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "Chronicle-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "Chronicle-${version}-portable.${ext}"
     },
     "linux": {
       "target": [
@@ -52,5 +65,8 @@
   "allowScripts": {
     "electron@39.8.10": true,
     "electron-winstaller@5.4.0": true
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.11"
   }
 }
