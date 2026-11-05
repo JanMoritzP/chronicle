@@ -92,7 +92,7 @@ Never test against the owner's real data directory.
 
 ## 4. Releasing
 
-The app version is `electron/package.json` → `version`. Root, `server` and `web` keep the same number, and the root lockfile mentions them; `release-please-config.json` keeps all of it in step.
+The app version is `electron/package.json` → `version`. Root, `server` and `web` keep the same number, and the root lockfile mentions them; `release-please-config.json` (multi-manifest form, with `.release-please-manifest.json` next to it) keeps all of it in step.
 
 **Releases are automatic.** Commit with a conventional prefix and push to `main`:
 
@@ -109,7 +109,7 @@ Consequences:
 
 Before pushing a release: `npm run typecheck`, `npm run build`, the relevant smoke scripts, `node scripts/test-update-logic.mjs`.
 
-The first release (0.2.0) was tagged by hand; release-please needs one existing tag to measure from, so that is a one-time thing.
+The first release (0.2.0) was tagged by hand and `.release-please-manifest.json` starts at 0.2.0; release-please needs a starting point, so that is a one-time thing. release-please updates the manifest file itself with every release.
 
 Without CI: `$env:GH_TOKEN='<token with repo scope>'; cd electron; npm run release:win` (builds and publishes the current version). `npm run dist:win` only builds locally; output in `electron/dist`.
 
@@ -147,7 +147,7 @@ This covers UI text, docs, changelog, release notes and defaults.
 
 ## 7. Working with the owner
 
-- **After every change: propose a commit message and, once the owner approves it, commit and push.** Message rules in section 6. When the change is a release, say so and include what the owner must do besides the push (e.g. the one-time tag, section 4).
+- **The agent does the work, the owner approves.** The agent makes the changes (code, tests, docs), proposes a commit message, and commits and pushes once the owner approves it. Message rules in section 6. When the change is a release, say so and include any extra steps (e.g. a one-time tag, section 4) in the same approval.
 - The owner reports bugs informally ("it just says not found, uncaught TypeError"). **Reproduce first** (throwaway server + the in-app browser or a script), find the root cause, fix it, verify the fix the same way. Do not guess.
 - Do the whole task: code, tests, docs, typecheck, build. Then summarise briefly: what changed, what you verified, what you could not verify, and anything the owner must do (e.g. push a tag).
 - Be honest about what was not tested. Never claim a feature works because it compiles.
@@ -168,6 +168,8 @@ This covers UI text, docs, changelog, release notes and defaults.
 - PowerShell here rejects Python heredocs and complex `node -e` one-liners; write a temp `.mjs` file instead.
 - The Sidebar and Settings views contain several creation entry points (`New page`, special page menu, `New folder`, Quick capture, links to missing pages). A fix to one flow usually applies to all; grep for siblings.
 - Known open items: see `docs/ROADMAP.md` ("Not done yet", "Known limitations"). Views such as Relations, Sessions, Todos and Maps still read `wsId` with `!`; they are only reachable inside a world, but prefer null-safe code in new work.
+- Pushing a tag in the same push that introduces the workflow file misses the tag event (GitHub had not indexed the workflow when the tag event arrived; the branch push seconds later worked, the tag event was dropped). If a tag-triggered workflow never ran after such a push, delete the tag and push it again: `git push origin :refs/tags/v0.2.0` then `git push origin v0.2.0`. Happened with v0.2.0.
+- The release-please action ignores a single-manifest `release-please-config.json` (no `packages` key) and fails with "Missing required manifest versions". It only works in multi-manifest form: `packages` key in the config plus the `.release-please-manifest.json` file. Passing `release-type` as an action input instead does not work either: the action then builds its config from the inputs only and silently drops the config file (no `include-v-in-tag`, no `extra-files`).
 
 ## 9. Definition of done
 
