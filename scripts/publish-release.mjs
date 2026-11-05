@@ -10,7 +10,7 @@
 //   node scripts/publish-release.mjs            # needs GITHUB_TOKEN, GITHUB_REPOSITORY, GITHUB_REF_NAME
 //   node scripts/publish-release.mjs --dry-run  # print what would be sent, no network
 
-import { readFileSync } from 'node:fs'
+import { appendFileSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -72,28 +72,41 @@ if (dryRun) {
   process.exit(0)
 }
 
-let release = await findRelease()
-if (release) {
-  if (release.body === body) {
-    console.log(`release ${tag} exists and its notes are already up to date`)
+try {
+  let release = await findRelease()
+  if (release) {
+    if (release.body === body) {
+      console.log(`release ${tag} exists and its notes are already up to date`)
+    } else {
+      await apiRequest('PATCH', `${api}/${release.id}`, { body })
+      console.log(`release ${tag} exists, notes updated`)
+    }
   } else {
-    await apiRequest('PATCH', `${api}/${release.id}`, { body })
-    console.log(`release ${tag} exists, notes updated`)
+    release = await apiRequest('POST', api, { tag_name: tag, name, body })
+    console.log(`release ${tag} created (id ${release.id})`)
   }
-} else {
-  release = await apiRequest('POST', api, { tag_name: tag, name, body })
-  console.log(`release ${tag} created (id ${release.id})`)
-}
 
-// A get-or-create race once produced a second release object for the same tag,
-// and /releases/latest (what the portable updater reads) can return that one.
-// Drop the duplicates: their assets are regenerated and re-uploaded by this
-// same run, so nothing is lost.
-const all = await apiRequest('GET', `${api}?per_page=100`)
-for (const other of all) {
-  if (other.id !== release.id && other.tag_name === tag && !other.draft) {
-    await apiRequest('DELETE', `${api}/${other.id}`)
-    console.log(`removed duplicate release ${other.id} for ${tag}`)
+  // A get-or-create race once produced a second release object for the same tag,
+  // and /releases/latest (what the portable updater reads) can return that one.
+  // Drop the duplicates: their assets are regenerated and re-uploaded by this
+  // same run, so nothing is lost.
+  const all = await apiRequest('GET', `${api}?per_page=100`)
+  for (const other of all) {
+    if (other.id !== release.id && other.tag_name === tag && !other.draft) {
+      await apiRequest('DELETE', `${api}/${other.id}`)
+      console.log(`removed duplicate release ${other.id} for ${tag}`)
+    }
+  }
+  console.log(`notes: ${body ? `${body.split('\n').length} line(s), first: ${body.split('\n')[0]}` : 'none'}`)
+} catch (e) {
+  // Fail soft: electron-builder still publishes the release (without the
+  // pre-created notes), so a notes problem must not block the release. A
+  // re-run of the tag fixes the notes. The error goes to the step summary so
+  // it is readable without access to the full log.
+  const msg = `release prep failed: ${e.message}`
+  console.warn(msg)
+  console.warn('continuing: the builder will create the release, but it may lack the notes; re-running the workflow fixes that')
+  if (process.env.GITHUB_STEP_SUMMARY) {
+    appendFileSync(process.env.GITHUB_STEP_SUMMARY, `\n### Release prep failed\n\n\`${msg}\`\n`)
   }
 }
-console.log(`notes: ${body ? `${body.split('\n').length} line(s), first: ${body.split('\n')[0]}` : 'none'}`)
