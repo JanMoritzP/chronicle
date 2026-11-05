@@ -2,6 +2,11 @@
 
 Newest first. The version in `electron/package.json` is the app version; the release notes on GitHub are what the in-app update dialog shows, so keep each entry short and in plain words. Sections after 0.2.0 are written by `scripts/release.mjs` from the commit subjects, so the commit messages carry the release notes.
 
+## 0.3.0 (2026-11-05)
+
+### Features
+- design special page layouts in a visual designer
+
 ## 0.2.0
 
 - **Desktop app updates itself.** It checks GitHub for a new version shortly after start and every six hours. The installed app downloads and installs the update; the portable app downloads the new exe and swaps itself on restart. `Ctrl+Shift+U` (or "Check for updates" on the address screen) checks right away.
