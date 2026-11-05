@@ -53,9 +53,9 @@ The app looks for a newer version on GitHub (`JanMoritzP/chronicle`, latest rele
 
 ### Publishing a release
 
-Automatic: commit with a `feat:` or `fix:` prefix and push to `main`. release-please (`.github/workflows/release-please.yml`) bumps the version, updates `CHANGELOG.md` and pushes the `vX.Y.Z` tag; `.github/workflows/release-desktop.yml` then builds on Windows and publishes the release. The commit subjects become the release notes, so write them for the user. The notes shown in the update dialog are that version's section of `CHANGELOG.md`. Details in AGENTS.md, section 4.
+Automatic: commit with a `feat:` or `fix:` prefix and push to `main`. The Release workflow (`.github/workflows/release.yml`) runs `scripts/release.mjs`, which bumps the version, updates `CHANGELOG.md` and pushes the commit and the `vX.Y.Z` tag; `.github/workflows/release-desktop.yml` then builds on Windows and publishes the release. The commit subjects become the release notes, so write them for the user. The notes shown in the update dialog are that version's section of `CHANGELOG.md`. Details in AGENTS.md, section 4.
 
-The first release (0.2.0) was tagged by hand; release-please needs one existing tag to measure from.
+The first release (0.2.0) was tagged by hand; the script measures from the highest existing `vX.Y.Z` tag.
 
 Without CI: `$env:GH_TOKEN='<token with repo scope>'; npm run release:win`. `npm run dist:win` only builds locally and publishes nothing. Tests: `node scripts/test-update-logic.mjs` and `node scripts/test-update-flow.mjs`.
 

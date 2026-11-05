@@ -1,7 +1,7 @@
 name: Desktop release
 
-# Runs on every v* tag (release-please pushes the tag after a feat:/fix: commit on main,
-# see release-please.yml). The tag must equal electron/package.json "version".
+# Runs on every v* tag (the Release workflow pushes the tag after a feat:/fix:
+# commit on main, see release.yml). The tag must equal electron/package.json "version".
 # Builds the Windows app and publishes it as a GitHub release: installer, portable exe, latest.yml and blockmap.
 # The installed app updates itself from latest.yml; the portable app picks the *-portable.exe from the same release.
 on:
@@ -24,7 +24,11 @@ jobs:
         run: |
           v=$(node -p "require('./electron/package.json').version")
           if [ "v$v" != "${GITHUB_REF_NAME}" ]; then echo "Tag ${GITHUB_REF_NAME} does not match electron/package.json version $v"; exit 1; fi
-      - run: npm ci
+      # --ignore-scripts: the root workspace's native deps (better-sqlite3, esbuild,
+      # sharp) ship prebuilt binaries; letting npm run install scripts made the
+      # Windows runner compile them and fail. The electron workspace keeps its
+      # scripts (the electron package downloads its binary in postinstall).
+      - run: npm ci --ignore-scripts
       - run: npm ci
         working-directory: electron
       - name: Test updater logic

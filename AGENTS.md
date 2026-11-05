@@ -12,7 +12,7 @@ Guide for any AI agent (or human) taking over this repo. Read it fully before ch
 | Web app | `web/` | React 19, Vite 7, TypeScript 5.9, zustand 5, TipTap 3 (ProseMirror), Leaflet. No UI framework; plain CSS in `web/src/styles.css`. |
 | Desktop app | `electron/` | Electron 39 + electron-builder. A thin window onto a server. **Not** an npm workspace (so the Docker build never downloads Electron). Own `package.json` and lockfile. |
 | Deploy | `Dockerfile`, `docker-compose.yml`, `umbrel/`, `docs/DEPLOY.md` | Docker image, Umbrel community store, plain Node. |
-| CI / releases | `.github/workflows/`, `release-please-config.json` | release-please sets versions, writes the changelog and tags from commit messages; a tag builds and publishes the Windows app. |
+| CI / releases | `.github/workflows/`, `scripts/release.mjs` | The Release workflow bumps versions from commit messages, writes the changelog and tags; a tag builds and publishes the Windows app. |
 | Scripts | `scripts/` | Smoke and unit tests (plain Node, no test framework), seeders. |
 | Docs | `docs/ROADMAP.md`, `docs/DEPLOY.md`, `CHANGELOG.md` | ROADMAP is the design record: decisions plus what each feature does. |
 
@@ -92,24 +92,26 @@ Never test against the owner's real data directory.
 
 ## 4. Releasing
 
-The app version is `electron/package.json` → `version`. Root, `server` and `web` keep the same number, and the root lockfile mentions them; `release-please-config.json` (multi-manifest form, with `.release-please-manifest.json` next to it) keeps all of it in step.
+The app version is `electron/package.json` → `version`. Root, `server` and `web` keep the same number, and the root lockfile mentions them too; `scripts/release.mjs` keeps all of it in step.
 
 **Releases are automatic.** Commit with a conventional prefix and push to `main`:
 
-- `feat:` bumps the minor, `fix:` the patch, a breaking change (`feat!:` or a `BREAKING CHANGE:` body) the major.
-- The workflow `.github/workflows/release-please.yml` then sets that version in all four `package.json` files and both lockfiles, prepends a section to `CHANGELOG.md` written from the commit subjects, commits that, and pushes the tag `vX.Y.Z`.
+- `feat:` bumps the minor, `fix:`/`perf:` the patch, a breaking change (`feat!:` or a `BREAKING CHANGE:` body) the major. Any other type (`chore:`, `docs:`, …) never releases.
+- The workflow `.github/workflows/release.yml` runs `scripts/release.mjs`. If there are releasable commits since the last `vX.Y.Z` tag, it sets the new version in all four `package.json` files and both lockfiles, prepends a `CHANGELOG.md` section written from the commit subjects, commits it as `chore: release X.Y.Z`, tags the commit `vX.Y.Z`, and pushes the commit and the tag in a single push.
 - The tag triggers `.github/workflows/release-desktop.yml`, which runs the updater tests, builds on Windows and publishes the GitHub release (`Chronicle-Setup-<ver>.exe`, `Chronicle-<ver>-portable.exe`, `latest.yml`). The release notes are that version's `CHANGELOG.md` section (`scripts/extract-release-notes.mjs` writes it to `electron/release-notes.md`, which electron-builder picks up); they are what the in-app update dialog shows. The release must be **published, not a draft** (`releaseType: release`), or clients will not see it.
 
 Consequences:
 
 - The commit subject becomes a changelog entry and the in-app release note (first ~700 chars), so write it for the user, important bit first (section 6).
 - A push without `feat:`/`fix:` commits releases nothing. Several pushes release together, as one version.
-- `release-as: X.Y.Z` in a commit message forces an exact version (e.g. `1.0.0`).
-- The `chore(main): release X.Y.Z` commit that appears on `main` after a push is release-please's; do not edit versions by hand afterwards. If the build fails, fix and re-run the workflow from the GitHub UI, or delete and re-push the tag.
+- A `Release-As: X.Y.Z` line in a commit body forces an exact version (e.g. `1.0.0`); it is refused when not newer than the current version.
+- The `chore: release X.Y.Z` commit that appears on `main` after a push is the workflow's; do not edit versions by hand afterwards. If the build fails, fix it and re-run the Desktop release workflow from the GitHub UI, or delete the tag and push it again.
 
 Before pushing a release: `npm run typecheck`, `npm run build`, the relevant smoke scripts, `node scripts/test-update-logic.mjs`.
 
-The first release (0.2.0) was tagged by hand and `.release-please-manifest.json` starts at 0.2.0; release-please needs a starting point, so that is a one-time thing. release-please updates the manifest file itself with every release.
+`scripts/release.mjs` is plain Node with no dependencies. Test it locally: copy it into a scratch clone, make `feat:`/`fix:` commits on a branch, and run `node scripts/release.mjs --dry-run` (drop the flag for a full run). It touches only the seven version/changelog files, and the diff must stay limited to the version lines (a full re-serialize of a `package.json` reflows hand-formatted inline arrays).
+
+The script measures from the highest `vX.Y.Z` tag reachable from `main`, so the repo needs at least one tag before the first automatic release (0.2.0 was tagged by hand).
 
 Without CI: `$env:GH_TOKEN='<token with repo scope>'; cd electron; npm run release:win` (builds and publishes the current version). `npm run dist:win` only builds locally; output in `electron/dist`.
 
@@ -169,7 +171,8 @@ This covers UI text, docs, changelog, release notes and defaults.
 - The Sidebar and Settings views contain several creation entry points (`New page`, special page menu, `New folder`, Quick capture, links to missing pages). A fix to one flow usually applies to all; grep for siblings.
 - Known open items: see `docs/ROADMAP.md` ("Not done yet", "Known limitations"). Views such as Relations, Sessions, Todos and Maps still read `wsId` with `!`; they are only reachable inside a world, but prefer null-safe code in new work.
 - Pushing a tag in the same push that introduces the workflow file misses the tag event (GitHub had not indexed the workflow when the tag event arrived; the branch push seconds later worked, the tag event was dropped). If a tag-triggered workflow never ran after such a push, delete the tag and push it again: `git push origin :refs/tags/v0.2.0` then `git push origin v0.2.0`. Happened with v0.2.0.
-- The release-please action ignores a single-manifest `release-please-config.json` (no `packages` key) and fails with "Missing required manifest versions". It only works in multi-manifest form: `packages` key in the config plus the `.release-please-manifest.json` file. Passing `release-type` as an action input instead does not work either: the action then builds its config from the inputs only and silently drops the config file (no `include-v-in-tag`, no `extra-files`).
+- Tag-triggered workflows run the workflow file **at the tagged commit**. Fixing `release-desktop.yml` on `main` does not affect an old tag: re-point the tag at the fixed commit and force-push it (`git tag -f vX.Y.Z <commit>` then `git push -f origin vX.Y.Z`).
+- release-please was replaced by `scripts/release.mjs` plus `release.yml`. Why: in multi-manifest mode it forces a release PR (the version bump only lands when a human merges it, and it needs `pull-requests: write`), and it opens a spurious release PR with an empty changelog on any push that has only hidden-type commits (its `changelogEmpty` check miscounts a header-only changelog). Do not bring it back without a good reason.
 
 ## 9. Definition of done
 

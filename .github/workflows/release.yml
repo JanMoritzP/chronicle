@@ -1,0 +1,36 @@
+name: Release
+
+# Runs on every push to main. If there are feat:/fix: commits since the last
+# vX.Y.Z tag, scripts/release.mjs sets the new version in all four package.json
+# files and both lockfiles, prepends a CHANGELOG.md section written from the
+# commit subjects, commits that, and tags it vX.Y.Z. This workflow then pushes
+# the commit and the tag; the tag triggers release-desktop.yml, which builds
+# on Windows and publishes the GitHub release. A push without feat:/fix:
+# commits does nothing.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # full history and all tags: the script measures from the last vX.Y.Z tag
+          fetch-depth: 0
+          tags: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - id: release
+        run: node scripts/release.mjs
+      - name: Push release commit and tag
+        if: steps.release.outputs.tag != ''
+        # one push for both refs: the main push re-triggers this workflow, and it
+        # must see the new tag or it would try (and fail) to release again
+        run: git push origin main "${{ steps.release.outputs.tag }}"
