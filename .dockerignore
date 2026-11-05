@@ -1,0 +1,8 @@
+**/node_modules
+**/dist
+data
+electron
+docs
+scripts
+*.log
+.env

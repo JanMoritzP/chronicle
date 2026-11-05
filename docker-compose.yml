@@ -1,0 +1,16 @@
+services:
+  chronicle:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # Only used on the very first start to create the owner account. Change it in the app afterwards, then remove it.
+      ADMIN_PASSWORD: "password"
+      ADMIN_USER: "gm"
+    volumes:
+      # A named volume, not a folder: SQLite is unreliable on bind mounts from the Windows file system.
+      - chronicle-data:/data
+
+volumes:
+  chronicle-data:

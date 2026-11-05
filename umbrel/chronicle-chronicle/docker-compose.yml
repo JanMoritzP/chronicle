@@ -1,0 +1,20 @@
+version: "3.7"
+
+services:
+  app_proxy:
+    environment:
+      APP_HOST: chronicle-chronicle_server_1
+      APP_PORT: 3000
+      # Chronicle has its own login, and public share links (/s/...) must stay reachable.
+      PROXY_AUTH_ADD: "false"
+
+  server:
+    image: ghcr.io/YOUR-GITHUB-USER/chronicle:1.0.0
+    user: "1000:1000"
+    restart: on-failure
+    stop_grace_period: 15s
+    environment:
+      ADMIN_USER: "gm"
+      ADMIN_PASSWORD: ${APP_PASSWORD}
+    volumes:
+      - ${APP_DATA_DIR}/data:/data

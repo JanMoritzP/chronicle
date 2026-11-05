@@ -1,0 +1,10 @@
+{
+  "name": "Chronicle",
+  "short_name": "Chronicle",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#e9dfd0",
+  "theme_color": "#e9dfd0",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }],
+  "share_target": { "action": "/share", "method": "GET", "params": { "title": "title", "text": "text", "url": "url" } }
+}

@@ -1,0 +1,27 @@
+manifestVersion: 1
+id: chronicle-chronicle
+name: Chronicle
+tagline: Self-hosted notebook for D&D campaigns and worldbuilding
+category: files
+version: "1.0.0"
+port: 3000
+description: >-
+  Block editor with [[wikilinks]], embeds and slash commands, nested tags and folders, a zettelkasten inbox,
+  maps with pins and timeline, relations, sessions and statistics, public share links, todo markers
+  and Markdown export.
+
+
+  The app has its own login (owner, editor and viewer roles). On first start the owner account "gm" is created
+  with the password shown by Umbrel. Change it under Settings.
+developer: Chronicle
+website: ""
+repo: "https://github.com/YOUR-GITHUB-USER/YOUR-REPO"
+support: "https://github.com/YOUR-GITHUB-USER/YOUR-REPO/issues"
+gallery: []
+path: ""
+defaultUsername: "gm"
+deterministicPassword: true
+dependencies: []
+releaseNotes: ""
+submitter: "YOUR-NAME"
+submission: "https://github.com/YOUR-GITHUB-USER/YOUR-REPO"

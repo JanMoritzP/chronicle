@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'" />
+<title>Chronicle</title>
+<style>
+  html, body { height: 100%; margin: 0; }
+  body { display: grid; place-items: center; background: #e9dfd0; color: #3b3126; font: 15px system-ui, sans-serif; padding: 20px; box-sizing: border-box; }
+  form { width: 380px; max-width: 100%; background: #f4ece0; border: 1px solid #d6c8b2; border-radius: 14px; padding: 28px; display: grid; gap: 12px; box-shadow: 0 8px 30px rgba(60,40,10,.12); }
+  h1 { margin: 0; font-size: 22px; }
+  p { margin: 0; color: #7a6a55; font-size: 13.5px; line-height: 1.45; }
+  input { font: inherit; padding: 9px 11px; border-radius: 8px; border: 1px solid #d6c8b2; background: #fffaf1; color: inherit; }
+  button { font: inherit; padding: 9px 12px; border-radius: 8px; border: 0; background: #b07a3f; color: #fff; cursor: pointer; }
+  button:disabled { opacity: .6; cursor: default; }
+  .err { color: #b3402f; font-size: 13.5px; min-height: 1em; }
+</style>
+</head>
+<body>
+<form id="f">
+  <h1>Chronicle</h1>
+  <p>Enter the address of your Chronicle server, for example <b>dnd.pocherhome.de</b> or <b>localhost:3000</b>. It is remembered; change it later with Ctrl+Shift+S.</p>
+  <input id="url" autofocus spellcheck="false" placeholder="dnd.pocherhome.de" />
+  <div class="err" id="err"></div>
+  <button id="go">Connect</button>
+</form>
+<script>
+  const q = new URLSearchParams(location.search)
+  const url = document.getElementById('url'), err = document.getElementById('err'), go = document.getElementById('go')
+  url.value = q.get('url') || ''
+  err.textContent = q.get('error') || ''
+  document.getElementById('f').addEventListener('submit', async (e) => {
+    e.preventDefault()
+    go.disabled = true; err.textContent = 'Connecting…'
+    try { await window.chronicleDesktop.connect(url.value) }
+    catch (ex) { err.textContent = String(ex.message || ex).replace(/^Error invoking remote method 'connect': (Error: )?/, ''); go.disabled = false }
+  })
+</script>
+</body>
+</html>
