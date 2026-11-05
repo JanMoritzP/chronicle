@@ -1,13 +1,17 @@
-// electron-builder publishes release notes from <app>/release-notes.md only, and they end up
-// in the GitHub release body and in latest.yml (what the in-app update dialog reads).
-// Write it from the version section of the repo CHANGELOG.md.
-import { readFileSync, writeFileSync } from 'node:fs'
+// electron-builder takes the release notes from two places, both named
+// release-notes.md: <app>/release-notes.md becomes the GitHub release body,
+// and the one in the build resources dir (electron/build) becomes the
+// releaseNotes field of latest.yml, which the installed app's update dialog
+// reads. Write both from the version section of the repo CHANGELOG.md.
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)))
 const version = JSON.parse(readFileSync(path.join(root, 'electron', 'package.json'), 'utf8')).version
-const lines = readFileSync(path.join(root, 'CHANGELOG.md'), 'utf8').split('\n')
+// \r?\n, not \n: on Windows checkouts (core.autocrlf) the file is CRLF and a
+// trailing \r would hide the "## X.Y.Z" header, so the release shipped with no notes
+const lines = readFileSync(path.join(root, 'CHANGELOG.md'), 'utf8').split(/\r?\n/)
 const header = `## ${version}`
 
 let start = -1
@@ -20,5 +24,14 @@ if (start === -1) {
 }
 const out = []
 for (let i = start + 1; i < lines.length && !lines[i].startsWith('## '); i++) out.push(lines[i])
-writeFileSync(path.join(root, 'electron', 'release-notes.md'), out.join('\n').trim() + '\n')
-console.log(`release notes for ${version} written to electron/release-notes.md`)
+const notes = out.join('\n').trim() + '\n'
+
+const targets = [
+  path.join(root, 'electron', 'release-notes.md'),
+  path.join(root, 'electron', 'build', 'release-notes.md'),
+]
+for (const file of targets) {
+  mkdirSync(path.dirname(file), { recursive: true })
+  writeFileSync(file, notes)
+}
+console.log(`release notes for ${version} written to ${targets.map((f) => path.relative(root, f)).join(' and ')}`)

@@ -53,7 +53,7 @@ The app looks for a newer version on GitHub (`JanMoritzP/chronicle`, latest rele
 
 ### Publishing a release
 
-Automatic: commit with a `feat:` or `fix:` prefix and push to `main`. The Release workflow (`.github/workflows/release.yml`) runs `scripts/release.mjs`, which bumps the version, updates `CHANGELOG.md` and pushes the commit and the `vX.Y.Z` tag; `.github/workflows/release-desktop.yml` then builds on Windows and publishes the release. The commit subjects become the release notes, so write them for the user. The notes shown in the update dialog are that version's section of `CHANGELOG.md`. Details in AGENTS.md, section 4.
+Automatic: commit with a `feat:` or `fix:` prefix and push to `main`. The Release workflow (`.github/workflows/release.yml`) runs `scripts/release.mjs`, which bumps the version, updates `CHANGELOG.md` and pushes the commit and the `vX.Y.Z` tag; `.github/workflows/release-desktop.yml` then creates the GitHub release with the notes as its body, builds on Windows and uploads the assets. The commit subjects become the release notes (shown on GitHub and in the update dialog), so write them for the user. The notes shown in the update dialog are that version's section of `CHANGELOG.md`: the installed app reads `latest.yml`, the portable app the release body. Details in AGENTS.md, section 4.
 
 The first release (0.2.0) was tagged by hand; the script measures from the highest existing `vX.Y.Z` tag.
 

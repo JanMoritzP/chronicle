@@ -33,8 +33,16 @@ jobs:
         working-directory: electron
       - name: Test updater logic
         run: node scripts/test-update-logic.mjs
+      # Write the notes file and create the release (with the notes as its body)
+      # before the builder runs, so the release page and the update dialogs show
+      # the notes and the builder only attaches assets to the existing release.
+      - run: node scripts/extract-release-notes.mjs
+      - run: node scripts/publish-release.mjs
       - name: Build and publish
         working-directory: electron
         run: npm run release:win
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # re-running a tag must be able to attach assets to the existing
+          # release, not skip publishing because it is older than 2 hours
+          EP_GH_IGNORE_TIME: 'true'

@@ -98,14 +98,14 @@ The app version is `electron/package.json` → `version`. Root, `server` and `we
 
 - `feat:` bumps the minor, `fix:`/`perf:` the patch, a breaking change (`feat!:` or a `BREAKING CHANGE:` body) the major. Any other type (`chore:`, `docs:`, …) never releases.
 - The workflow `.github/workflows/release.yml` runs `scripts/release.mjs`. If there are releasable commits since the last `vX.Y.Z` tag, it sets the new version in all four `package.json` files and both lockfiles, prepends a `CHANGELOG.md` section written from the commit subjects, commits it as `chore: release X.Y.Z`, tags the commit `vX.Y.Z`, and pushes the commit and the tag in a single push.
-- The tag triggers `.github/workflows/release-desktop.yml`, which runs the updater tests, builds on Windows and publishes the GitHub release (`Chronicle-Setup-<ver>.exe`, `Chronicle-<ver>-portable.exe`, `latest.yml`). The release notes are that version's `CHANGELOG.md` section (`scripts/extract-release-notes.mjs` writes it to `electron/release-notes.md`, which electron-builder picks up); they are what the in-app update dialog shows. The release must be **published, not a draft** (`releaseType: release`), or clients will not see it.
+- The tag triggers `.github/workflows/release-desktop.yml`, which runs the updater tests, writes the notes and creates the GitHub release (`scripts/extract-release-notes.mjs` + `scripts/publish-release.mjs`), then builds on Windows and electron-builder uploads the assets (`Chronicle-Setup-<ver>.exe`, `Chronicle-<ver>-portable.exe`, `latest.yml`). The release notes are that version's `CHANGELOG.md` section, written to two files: `electron/release-notes.md` becomes the GitHub release body (what the portable app's dialog reads), and `electron/build/release-notes.md` becomes the `releaseNotes` field of `latest.yml` (what the installed app's dialog reads). The release must be **published, not a draft** (`releaseType: release`), or clients will not see it.
 
 Consequences:
 
 - The commit subject becomes a changelog entry and the in-app release note (first ~700 chars), so write it for the user, important bit first (section 6).
 - A push without `feat:`/`fix:` commits releases nothing. Several pushes release together, as one version.
 - A `Release-As: X.Y.Z` line in a commit body forces an exact version (e.g. `1.0.0`); it is refused when not newer than the current version.
-- The `chore: release X.Y.Z` commit that appears on `main` after a push is the workflow's; do not edit versions by hand afterwards. If the build fails, fix it and re-run the Desktop release workflow from the GitHub UI, or delete the tag and push it again.
+- The `chore: release X.Y.Z` commit that appears on `main` after a push is the workflow's; do not edit versions by hand afterwards. If the build fails, fix it and re-run the Desktop release workflow from the GitHub UI, or delete the tag and push it again. Re-running on the same tag also updates the release notes (the publish step patches the release body).
 
 Before pushing a release: `npm run typecheck`, `npm run build`, the relevant smoke scripts, `node scripts/test-update-logic.mjs`.
 
