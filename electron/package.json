@@ -1,6 +1,6 @@
 {
   "name": "chronicle-desktop",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Desktop window for a Chronicle server",
   "main": "main.js",
