@@ -4,6 +4,7 @@ import { Eye, Pencil } from 'lucide-react'
 import { Fragment, useState, type CSSProperties, type ReactNode } from 'react'
 import { LibraryField, refText, refsOfData, type LibRef } from '../components/LibraryField'
 import { Select } from '../components/Select'
+import { makeLinker, useAutoLinks, type Linker } from '../components/useAutoLinks'
 import { ABILITY_KEYS, findTemplate, TEMPLATES, type Field, type StatTemplate } from './templates'
 import { useTemplates } from './useTemplates'
 
@@ -14,19 +15,22 @@ const modOf = (v: string) => {
   return m >= 0 ? `+${m}` : `−${Math.abs(m)}`
 }
 
-/** ***Name.*** for bold italic entry names, **bold**, *italic*; line breaks stay as they are. */
-export function richText(text: string): ReactNode[] {
+/**
+ * ***Name.*** for bold italic entry names, **bold**, *italic*; line breaks stay as they are.
+ * With a linker, library names in plain and italic text become links (bold names are headings and stay text).
+ */
+export function richText(text: string, lk?: Linker): ReactNode[] {
   return text.split(/(\*\*\*[^*\n]+\*\*\*|\*\*[^*\n]+\*\*|\*[^*\n]+\*)/g).map((part, i) => {
     if (part.startsWith('***') && part.endsWith('***') && part.length > 6) return <b key={i}><i>{part.slice(3, -3)}</i></b>
     if (part.startsWith('**') && part.endsWith('**') && part.length > 4) return <b key={i}>{part.slice(2, -2)}</b>
-    if (part.startsWith('*') && part.endsWith('*') && part.length > 2) return <i key={i}>{part.slice(1, -1)}</i>
-    return <Fragment key={i}>{part}</Fragment>
+    if (part.startsWith('*') && part.endsWith('*') && part.length > 2) return <i key={i}>{lk ? lk(part.slice(1, -1), true) : part.slice(1, -1)}</i>
+    return <Fragment key={i}>{lk ? lk(part, false) : part}</Fragment>
   })
 }
 
-const paragraphs = (text: string) => text.split(/\n+/).filter((p) => p.trim()).map((p, i) => <p key={i}>{richText(p)}</p>)
+const paragraphs = (text: string, lk?: Linker) => text.split(/\n+/).filter((p) => p.trim()).map((p, i) => <p key={i}>{richText(p, lk)}</p>)
 
-function FieldValue({ f, value, refs, onChange, onRefs }: { f: Field; value: string; refs?: LibRef[]; onChange?: (v: string) => void; onRefs?: (r: LibRef[] | null) => void }) {
+function FieldValue({ f, value, refs, lk, onChange, onRefs }: { f: Field; value: string; refs?: LibRef[]; lk?: Linker; onChange?: (v: string) => void; onRefs?: (r: LibRef[] | null) => void }) {
   const ro = f.type === 'link' ? !onRefs : !onChange
   const mod = f.mod ? modOf(value) : ''
   switch (f.type) {
@@ -42,7 +46,7 @@ function FieldValue({ f, value, refs, onChange, onRefs }: { f: Field; value: str
         </Select>
       )
     case 'long':
-      return ro ? <span className="sb-rich">{paragraphs(value)}</span> : <textarea value={value} placeholder={f.placeholder} onChange={(e) => onChange!(e.target.value)} />
+      return ro ? <span className="sb-rich">{paragraphs(value, lk)}</span> : <textarea value={value} placeholder={f.placeholder} onChange={(e) => onChange!(e.target.value)} />
     case 'number':
       return ro ? <span>{value}{mod && ` (${mod})`}</span> : (
         <>
@@ -51,7 +55,7 @@ function FieldValue({ f, value, refs, onChange, onRefs }: { f: Field; value: str
         </>
       )
     default:
-      return ro ? <span>{richText(value)}</span> : <input value={value} placeholder={f.placeholder} onChange={(e) => onChange!(e.target.value)} />
+      return ro ? <span>{richText(value, lk)}</span> : <input value={value} placeholder={f.placeholder} onChange={(e) => onChange!(e.target.value)} />
   }
 }
 
@@ -100,14 +104,17 @@ function Abilities({ s, val, onChange }: { s: { layout: 'row' | 'table'; saves?:
   )
 }
 
-export function StatBlockBody({ template, data, onChange }: { template: StatTemplate; data: Record<string, string>; onChange?: (key: string, v: string, extra?: Record<string, string>) => void }) {
+export function StatBlockBody({ template, data, onChange, libraryLinks }: { template: StatTemplate; data: Record<string, string>; onChange?: (key: string, v: string, extra?: Record<string, string>) => void; libraryLinks?: boolean }) {
   const ro = !onChange
+  const links = useAutoLinks()
   // a linked field keeps its shown text under its key and its links as JSON under "<key>:refs"
   const linkProps = (f: Field) => f.type !== 'link' ? {} : {
     refs: refsOfData(data, f.key),
     onRefs: ro ? undefined : (r: LibRef[] | null) => onChange!(f.key, r ? r.map(refText).join(', ') : '', { [`${f.key}:refs`]: r ? JSON.stringify(r) : '' }),
   }
   const val = (k: string) => (data[k] == null ? '' : String(data[k]))
+  // names of library entries in the text link to them, once per field; libraryLinks keeps them on the library entry instead of an imported page
+  const linker = () => (ro ? makeLinker(links, { selfName: val('name'), preferPage: !libraryLinks }) : undefined)
   const look = template.look
   const style = { '--sb-width': `${look.width}px`, ...(look.accent ? { '--sb-accent': look.accent } : {}) } as CSSProperties
   return (
@@ -140,7 +147,7 @@ export function StatBlockBody({ template, data, onChange }: { template: StatTemp
                 {shown.map((f) => (
                   <div key={f.key} className={`sb-row${f.type === 'long' ? ' sb-row-long' : ''}`}>
                     <b>{f.label}</b>
-                    <FieldValue f={f} value={val(f.key)} {...linkProps(f)} onChange={ro ? undefined : (v) => onChange!(f.key, v)} />
+                    <FieldValue f={f} value={val(f.key)} {...linkProps(f)} lk={linker()} onChange={ro ? undefined : (v) => onChange!(f.key, v)} />
                   </div>
                 ))}
               </div>
@@ -152,7 +159,7 @@ export function StatBlockBody({ template, data, onChange }: { template: StatTemp
                 {s.fields.map((f) => (
                   <div key={f.key} className="sb-cell">
                     <b>{f.label}</b>
-                    {ro && !filled(f, val(f.key)) ? <span>–</span> : <FieldValue f={f} value={val(f.key)} {...linkProps(f)} onChange={ro ? undefined : (v) => onChange!(f.key, v)} />}
+                    {ro && !filled(f, val(f.key)) ? <span>–</span> : <FieldValue f={f} value={val(f.key)} {...linkProps(f)} lk={linker()} onChange={ro ? undefined : (v) => onChange!(f.key, v)} />}
                   </div>
                 ))}
               </div>
@@ -162,7 +169,7 @@ export function StatBlockBody({ template, data, onChange }: { template: StatTemp
             return (
               <div key={i} className="sb-long">
                 {s.heading && <h4>{s.heading}</h4>}
-                {ro ? <div className="sb-rich">{paragraphs(val(s.key))}</div> : <textarea className="sb-text" value={val(s.key)} placeholder={s.placeholder ?? s.heading} onChange={(e) => onChange!(s.key, e.target.value)} />}
+                {ro ? <div className="sb-rich">{paragraphs(val(s.key), linker())}</div> : <textarea className="sb-text" value={val(s.key)} placeholder={s.placeholder ?? s.heading} onChange={(e) => onChange!(s.key, e.target.value)} />}
               </div>
             )
           case 'list': {
@@ -172,7 +179,7 @@ export function StatBlockBody({ template, data, onChange }: { template: StatTemp
               <div key={i} className="sb-long">
                 {s.heading && <h4>{s.heading}</h4>}
                 {ro ? (
-                  <ul className="sb-list">{items.map((x, j) => <li key={j}>{richText(x)}</li>)}</ul>
+                  <ul className="sb-list">{(() => { const lk = linker(); return items.map((x, j) => <li key={j}>{richText(x, lk)}</li>) })()}</ul>
                 ) : (
                   <textarea className="sb-text" value={val(s.key)} placeholder={s.placeholder ?? 'One item per line'} onChange={(e) => onChange!(s.key, e.target.value)} />
                 )}

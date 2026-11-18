@@ -1,4 +1,5 @@
 import type { LibraryEntry } from '../types'
+import { autolinkDoc, buildMatcher } from './autolink'
 
 // Mappers from Open5e records to Chronicle: creatures become stat block data, everything else becomes
 // a plain description (facts + sections) that is shown in the library and written into a page body.
@@ -353,6 +354,22 @@ export function resolveRef(index: Index, category: string, apiKey: string | unde
 
 type StatPart = { template: string; data: Record<string, string> }
 
+/** A value of the core traits table of a class ("Primary Ability | Charisma"). */
+function coreTrait(d: any, label: string): string {
+  const table = (d.features ?? []).find((f: any) => f.feature_type === 'CORE_TRAITS_TABLE')?.desc ?? ''
+  const line = String(table).split('\n').find((l: string) => l.includes(`|${label}|`))
+  return line ? (line.split('|')[2] ?? '').trim() : ''
+}
+
+/** The abilities named in a text ("Dexterity and Charisma"), in the order they are written, as links. */
+function abilityRefs(index: Index, text: string): Ref[] {
+  if (!index || !text) return []
+  return index.rows
+    .filter((r) => r[1] === 'ability' && text.includes(r[2]))
+    .sort((a, b) => text.indexOf(a[2]) - text.indexOf(b[2]))
+    .map((r) => ({ name: r[2], libKey: r[0] }))
+}
+
 function withRefs(data: Record<string, string>, key: string, refs: Ref[]) {
   if (!refs.length) return
   data[key] = refs.map(refText).join(', ')
@@ -476,8 +493,11 @@ export function importPlan(e: LibraryEntry, index: Index): ImportPlan {
   if (e.category === 'class') {
     const fact = (label: string) => t.facts.find((f) => f[0] === label)?.[1]
     if (fact('Hit die')) data.hit_die = fact('Hit die')
-    if (fact('Saving throws')) data.saves = fact('Saving throws')
-    if (fact('Primary ability')) data.primary = fact('Primary ability')
+    // abilities are entries of their own, so these fields link to them
+    const saves = abilityRefs(index, [fact('Saving throws'), coreTrait(d, 'Saving Throw Proficiencies')].filter(Boolean).join(' '))
+    if (saves.length) data.saves = saves
+    const primary = abilityRefs(index, [fact('Primary ability'), coreTrait(d, 'Primary Ability')].filter(Boolean).join(' '))
+    if (primary.length) data.primary = primary
     if (d.subclass_of?.name) data.subclass_of = [resolveRef(index, 'class', d.subclass_of.key, d.subclass_of.name)]
   } else if (e.category === 'species' && d.subspecies_of) {
     const parent = index?.rows.find((r) => r[0] === `species:${d.subspecies_of}`)
@@ -496,5 +516,7 @@ export function importPlan(e: LibraryEntry, index: Index): ImportPlan {
       if (d.suggested_hit_dice) data.hit_die = String(d.suggested_hit_dice)
     }
   }
-  return { type, props: { library: e.key, data }, content: textDoc(t.sections, e) }
+  // the names of other entries in the text become links to them
+  const doc = textDoc(t.sections, e)
+  return { type, props: { library: e.key, data }, content: index ? autolinkDoc(doc, buildMatcher(index), { key: e.key, name: e.name }).doc : doc }
 }

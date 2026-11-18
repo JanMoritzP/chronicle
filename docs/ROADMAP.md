@@ -188,6 +188,13 @@ A read-only reference library of everything Open5e publishes (api.open5e.com/v2)
 - Not linked: a creature's skills, languages, resistances and condition immunities stay text, because they carry numbers or qualifiers ("Stealth +6", "nonmagical attacks") that a linked entry cannot hold when typed by hand. Item categories, rarities and environments have no explanation text in Open5e and stay text.
 - Existing libraries have to be refreshed once (Library, Refresh) to download the new kinds.
 
+**Names in text link to their entries (phase 6).**
+- The names of library entries inside running text are links: "Charisma" in a class, a prone creature, *Fireball* in a feature, fire damage in a trait. `web/src/lib/autolink.ts` finds them (tested by `scripts/test-autolink.ts`).
+- Where: the Library view (sections, tables, facts and the text fields of spell, item and creature stat blocks), the text fields of stat blocks on pages when read (shown as links, nothing stored, and to the imported page where the entry was imported), and the body of a page when it is imported (stored as links, so backlinks and the repoint after an import work). The page menu has "Link library terms" for pages that already exist. Shared pages show plain text.
+- Rules, so that ordinary words stay plain: abilities, skills, classes, species, languages, items, feats and rules are linked only with the entry's capitals (Charisma, not charisma); conditions in any case (invisible needs a capital); spells only in italics, which is how the data writes them; damage types only before "damage" (fire damage); spell schools only before "spell" or "school"; weapon properties, creatures, creature types, alignments and sizes are not linked in text. Very short or common names (Common, Light, Shield, Range), items under five letters, single word feats under seven and single word rules under eight are skipped, and a one word rule at the end of a capitalised phrase (Weapon Proficiencies) is not cut out of it.
+- Each entry is linked once per section (once per field in a stat block); headings, code and existing links are left alone; an entry never links to itself.
+- A class page's saving throws and primary ability are linked fields (ability). Pages imported before this change keep their text; "Link library terms" adds the links.
+
 ## Operations
 - Password change: `POST /api/auth/password` (own), owner can set another user's.
 - Docker: health check on `/api/health`, graceful shutdown on SIGTERM (WAL checkpoint), `/data` owned by uid 1000, compose uses a named volume. Session cookie `Secure` follows `req.protocol` (behind cloudflared it is https).

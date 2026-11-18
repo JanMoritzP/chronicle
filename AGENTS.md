@@ -42,7 +42,7 @@ Never test against the owner's real data directory.
 
 ### Tests (all plain Node scripts; each prints PASS/FAIL and exits non-zero on failure)
 - API smoke tests against a running throwaway server: `node scripts/smoke-<area>.mjs http://localhost:3222 gm testpass123`. Areas: `auth`, `copy`, `export`, `library` (downloads the real Open5e data, needs internet), `maps`, `pagetypes`, `relations`, `sessions`, `share`, `stattemplates`, `templates`, `todos`, `worlds`, plus `smoke.mjs` (core).
-- Pure logic: `scripts/test-family.ts`, `scripts/test-time.ts` (bundle with esbuild, run with node).
+- Pure logic: `scripts/test-family.ts`, `scripts/test-time.ts`, `scripts/test-autolink.ts` (bundle with esbuild, run with node).
 - Updater: `node scripts/test-update-logic.mjs` (no Electron), `node scripts/test-update-flow.mjs` (real Electron, fake GitHub; **unset `ELECTRON_RUN_AS_NODE` first**).
 - Desktop app: `node scripts/test-electron.mjs <server-url>`.
 - Add a smoke script for every new server route family, in the same style (copy a small one such as `smoke-templates.mjs`).

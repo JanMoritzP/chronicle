@@ -1,5 +1,5 @@
 import { EditorContent, useEditor } from '@tiptap/react'
-import { Clock, Copy, Globe, LayoutTemplate, Maximize2, MoreHorizontal, PanelRightOpen, Trash2 } from 'lucide-react'
+import { BookMarked, Clock, Copy, Globe, LayoutTemplate, Maximize2, MoreHorizontal, PanelRightOpen, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, ApiError } from '../api'
 import { buildExtensions } from '../editor/extensions'
@@ -9,6 +9,8 @@ import { PageRelationsSection, RelationDialog } from './Relations'
 import { ShareDialog } from './ShareDialog'
 import { pageSavedBus, todoBus } from '../lib/bus'
 import { ago, backlinksOf } from '../lib/data'
+import { autolinkDoc, buildMatcher } from '../lib/autolink'
+import { useLibrary } from '../lib/library'
 import { searchPages } from '../lib/linkSearch'
 import { useStore } from '../store'
 import { alertDialog, askText } from '../lib/dialog'
@@ -281,6 +283,18 @@ function PageEditor({ page, anchor }: { page: FullPage; anchor?: string }) {
                       alertDialog(`Type /${t.slug} in any page to insert it.`, 'Template saved')
                     } catch (e: any) { alertDialog(e.message) }
                   }}><LayoutTemplate size={15} /> Save as template…</button>
+                  <button title="Turns the names of spells, conditions, abilities and other library entries in the text into links" onClick={async () => {
+                    setShowMenu(false)
+                    if (!editor) return
+                    const lib = useLibrary.getState()
+                    if (!lib.loaded) await lib.load().catch(() => {})
+                    const index = useLibrary.getState().index
+                    if (!index) { alertDialog('The library is empty. The owner can download it from the Library view.'); return }
+                    const { doc, count } = autolinkDoc(editor.getJSON(), buildMatcher(index), { key: meta?.library ?? undefined, name: title })
+                    if (!count) { alertDialog('No names of library entries were found that are not linked yet.', 'Nothing to link'); return }
+                    editor.chain().setContent(doc, { emitUpdate: true }).run()
+                    alertDialog(`${count === 1 ? '1 name is' : `${count} names are`} now linked to the library.`, 'Links added')
+                  }}><BookMarked size={15} /> Link library terms</button>
                   <button onClick={() => { setShowMenu(false); setShowShare(true) }}><Globe size={15} /> Share publicly…</button>
                   <button onClick={async () => { await flush(); await useStore.getState().deletePage(page.id) }}><Trash2 size={15} /> Move to trash</button>
                 </div>

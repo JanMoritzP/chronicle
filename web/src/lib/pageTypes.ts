@@ -166,7 +166,7 @@ const BUILTIN_LAYOUTS: Record<string, { name: string; icon: string; tag: string;
     name: 'Class', icon: 'shield', tag: 'class',
     layout: {
       columns: 'side-right', flow: 'wrap',
-      side: [{ type: 'fields', title: 'Class', fields: [f('hit_die', 'Hit die'), f('saves', 'Saving throws'), f('primary', 'Primary ability'), f('subclass_of', 'Subclass of', { library: 'class' })] }],
+      side: [{ type: 'fields', title: 'Class', fields: [f('hit_die', 'Hit die'), f('saves', 'Saving throws', { library: 'ability', multi: true }), f('primary', 'Primary ability', { library: 'ability', multi: true }), f('subclass_of', 'Subclass of', { library: 'class' })] }],
       main: [{ type: 'body' }],
     },
   },

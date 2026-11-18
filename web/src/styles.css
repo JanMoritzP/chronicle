@@ -599,3 +599,7 @@ input[type=color] { width: 34px; height: 24px; padding: 0; border: 1px solid var
 .lib-table table { border-collapse: collapse; font-size: 13.5px; width: 100%; }
 .lib-table th, .lib-table td { border: 1px solid var(--border); padding: 3px 8px; text-align: left; vertical-align: top; }
 .lib-table th { background: var(--accent-soft); }
+
+/* library names found in running text */
+.autolink { background: none; border: 0; padding: 0; font: inherit; color: var(--link); cursor: pointer; border-bottom: 1px dotted var(--link); text-align: inherit; }
+.autolink:hover { background: var(--accent-soft); }
