@@ -144,7 +144,7 @@ A World Anvil-style worldbuilding notebook. Self-hosted, React frontend, Node + 
 - Rides in the bootstrap (and the IndexedDB cache) and in `world.json` / backup restore. Copying between worlds does not carry custom page types: their pages become plain pages, while stat block forms are matched by name.
 - API: `POST /api/workspaces/:ws/page-types`, `PATCH|DELETE /api/page-types/:id` (editors and owners; viewers read only). Tests: `scripts/smoke-pagetypes.mjs` (11 checks), `scripts/test-layout.ts` (parse/serialize round trip, key handling; 16 checks).
 
-## Library (Open5e, phases 1 and 2 built)
+## Library (Open5e, built)
 
 A read-only reference library of everything Open5e publishes (api.open5e.com/v2): creatures, magic items, equipment (weapons and armor are part of it), spells, classes and subclasses, species, backgrounds, feats and conditions. It belongs to the server, not to a world, and is opened at any time from the sidebar ("Library") or the command list.
 
@@ -168,9 +168,12 @@ A read-only reference library of everything Open5e publishes (api.open5e.com/v2)
 - Importing sets `props.library` on the page, so an entry becomes a page only once per world (the button then reads "Open the page"). If pages link to the entry, a dialog asks whether to point those links at the new page. `POST /api/workspaces/:ws/library-links/repoint` rewrites the link nodes (keeping a differing shown text as the alias) and reindexes the pages like a normal save.
 - Public pages: a library link on a shared page is a link to `/s/<token>?lib=<id>`, which shows the entry read-only. `GET /api/public/library/:id` answers only for entries that a shared page links to, so the library is not browsable. Markdown export writes a library link as plain text.
 
-**Planned.**
-- Phase 3: a linked-field type for special pages (class, species, background as one link, spells and feats as several) so character sheets autocomplete from the library.
-- Items and spells have no stat block form yet; they import as plain text.
+**Linked fields (phase 3).**
+- A field of a special page can be a link to library entries of one kind: species, class, background, feat, spell, magic item, equipment, creature or condition. In the designer the field's type reads "Link: class" and so on, with "Several" for lists such as spells. In the YAML source: `{ key: class, label: Class, library: class }` and `{ key: spells, label: Spells, library: spell, multi: true }`.
+- The value is a list of entries `{ name, libKey?, pageId? }` in `props.data`. Typing offers the pages of the world that were imported from that kind first, then library entries (imported ones are left out), and "Use “…” as text" for homebrew. Entries open the library entry or the page; ctrl and shift work as for links in text. Older plain-text values show as one unlinked entry and are replaced when the field is edited.
+- Field entries go into the same link index as links in the text (`links.lib_key` for library entries, `target_id` for pages), so "Linked from", the graph and backlinks include them. The index is rebuilt on every save, also when only the fields changed. The repoint after an import rewrites field entries too. Copying a page to another world keeps library entries and turns entries that point at a page left behind into plain text.
+- The built-in Person page uses it for Race (species) and Class / Role (class).
+- Not done: stat block forms (the 5e Player Character form has Class and Background as text) cannot hold links yet; items and spells have no stat block form and import as plain text.
 
 ## Operations
 - Password change: `POST /api/auth/password` (own), owner can set another user's.

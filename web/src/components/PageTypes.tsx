@@ -6,6 +6,8 @@ import { useTemplates } from '../editor/useTemplates'
 import { alertDialog, confirmDialog, askText } from '../lib/dialog'
 import { SHAPES, SAMPLE_SOURCE, duplicateKeys, freshKey, layoutKeys, layoutToSource, parseSource, resolveTypes, type Block, type FieldDef, type Layout, type ResolvedType } from '../lib/pageTypes'
 import { useStore } from '../store'
+import { LIBRARY_CATEGORIES } from '../lib/library'
+import type { LibraryCategory } from '../types'
 import { Select } from './Select'
 import { TypeIcon, TYPE_ICONS, useTypes } from './TypeIcon'
 import { TypeLayout } from './TypeLayout'
@@ -336,7 +338,18 @@ function FieldsEditor({ b, layout, onChange }: { b: Extract<Block, { type: 'fiel
         <div key={i} className="sd-field-main">
           <input className="input" value={f.label} placeholder="Label" onChange={(e) => set(fields.map((x, j) => (j === i ? { ...f, label: e.target.value } : x)))} />
           <input className="input sd-key" value={f.key} placeholder="key" title="Internal name the value is stored under. Changing it later hides values already entered." onChange={(e) => set(fields.map((x, j) => (j === i ? { ...f, key: e.target.value } : x)))} />
-          <label className="row" style={{ fontSize: 13, whiteSpace: 'nowrap' }}><input type="checkbox" checked={!!f.multiline} onChange={(e) => set(fields.map((x, j) => (j === i ? { ...f, multiline: e.target.checked || undefined } : x)))} /> Long</label>
+          <Select className="sd-type" value={f.library ? `lib:${f.library}` : f.multiline ? 'long' : 'text'} title="What the field holds"
+            onChange={(v) => set(fields.map((x, j) => {
+              if (j !== i) return x
+              const { library: _l, multi: _m, multiline: _ml, ...rest } = x
+              if (v.startsWith('lib:')) return { ...rest, library: v.slice(4) as LibraryCategory, multi: x.multi }
+              return { ...rest, multiline: v === 'long' || undefined }
+            }))}>
+            <option value="text">Text</option>
+            <option value="long">Long text</option>
+            {LIBRARY_CATEGORIES.map((c) => <option key={c.id} value={`lib:${c.id}`}>Link: {c.label.toLowerCase()}</option>)}
+          </Select>
+          {f.library && <label className="row" style={{ fontSize: 13, whiteSpace: 'nowrap' }} title="Allow several entries, e.g. all spells"><input type="checkbox" checked={!!f.multi} onChange={(e) => set(fields.map((x, j) => (j === i ? { ...f, multi: e.target.checked || undefined } : x)))} /> Several</label>}
           <button className="icon-btn" title="Move up" onClick={() => set(move(fields, i, -1))}><ArrowUp size={14} /></button>
           <button className="icon-btn" title="Move down" onClick={() => set(move(fields, i, 1))}><ArrowDown size={14} /></button>
           <button className="icon-btn" title="Remove field" onClick={() => set(fields.filter((_, j) => j !== i))}><X size={14} /></button>

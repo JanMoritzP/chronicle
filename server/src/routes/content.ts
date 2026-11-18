@@ -241,7 +241,7 @@ export async function contentRoutes(app: FastifyInstance) {
       let content = p.content, text = p.text, outline = p.outline, wc = p.word_count, hasStats = p.has_stats
       if (d.content) {
         content = JSON.stringify(d.content)
-        const ex = reindexLinks(id, p.workspace_id, d.content)
+        const ex = reindexLinks(id, p.workspace_id, d.content, d.props ?? JSON.parse(p.props))
         text = ex.text; outline = JSON.stringify(ex.outline); wc = ex.wordCount; hasStats = ex.hasStats ? 1 : 0
         recordActivity(id, p.workspace_id, ex.wordCount - p.word_count)
       }
@@ -253,6 +253,8 @@ export async function contentRoutes(app: FastifyInstance) {
         title, d.icon === undefined ? p.icon : d.icon, d.folderId === undefined ? p.folder_id : d.folderId,
         JSON.stringify(aliases), content, text, outline, wc, hasStats, d.props ? JSON.stringify(d.props) : p.props, now(), id,
       )
+      // linked fields live in props, so a props-only save has to refresh the link index too
+      if (d.props && !d.content) reindexLinks(id, p.workspace_id, JSON.parse(p.content) as DocNode, d.props)
       if (d.tags) setTags(id, d.tags)
       if (d.title !== undefined || d.aliases) relinkByName(p.workspace_id, id, title, aliases)
     })()

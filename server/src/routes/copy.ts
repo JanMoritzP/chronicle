@@ -175,7 +175,10 @@ export async function copyRoutes(app: FastifyInstance) {
           if (typeof props?.portrait === 'string') props.portrait = copyUpload(props.portrait)
           if (props?.data && typeof props.data === 'object') {
             for (const [k, v] of Object.entries(props.data) as [string, any][]) {
-              if (v && typeof v === 'object' && typeof v.template === 'string') v.template = copyTemplate(v.template)
+              if (Array.isArray(v)) {
+                // linked fields: a page that stays behind leaves only its name
+                for (const r of v) if (r && typeof r === 'object' && typeof r.pageId === 'string') { if (idMap.has(r.pageId)) r.pageId = idMap.get(r.pageId); else delete r.pageId }
+              } else if (v && typeof v === 'object' && typeof v.template === 'string') v.template = copyTemplate(v.template)
               else if (typeof v === 'string') props.data[k] = copyUpload(v)
             }
           }

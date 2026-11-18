@@ -1,7 +1,9 @@
 import { parse as parseYaml, stringify as toYaml } from 'yaml'
-import type { PageMeta, PageType } from '../types'
+import type { LibraryCategory, PageMeta, PageType } from '../types'
+import { LIBRARY_CATEGORIES } from './library'
 
-export interface FieldDef { key: string; label: string; placeholder?: string; multiline?: boolean }
+/** A field is plain text, long text, or a link to library entries (class, species, spells...) that can also point at imported pages. */
+export interface FieldDef { key: string; label: string; placeholder?: string; multiline?: boolean; library?: LibraryCategory; multi?: boolean }
 export type Block =
   | { type: 'image'; key: string; label?: string; shape: 'square' | 'circle' | 'wide' | 'tall' }
   | { type: 'statblock'; key: string; template: string }
@@ -49,7 +51,8 @@ function block(raw: any, where: string): Block {
       const fields = raw.fields.map((f: any, i: number): FieldDef => {
         if (typeof f === 'string') return { key: f.toLowerCase().replace(/\W+/g, '_'), label: f }
         if (!f?.key) throw new Error(`${where}: field #${i + 1} has no key`)
-        return { key: String(f.key), label: String(f.label ?? f.key), placeholder: f.placeholder ? String(f.placeholder) : undefined, multiline: !!f.multiline }
+        const library = LIBRARY_CATEGORIES.find((c) => c.id === f.library)?.id
+        return { key: String(f.key), label: String(f.label ?? f.key), placeholder: f.placeholder ? String(f.placeholder) : undefined, multiline: library ? false : !!f.multiline, library, multi: library && f.multi === true ? true : undefined }
       })
       return { type: 'fields', title: raw.title ? String(raw.title) : undefined, fields }
     }
@@ -134,7 +137,7 @@ const BUILTIN_LAYOUTS: Record<string, { name: string; icon: string; tag: string;
       columns: 'side-right', flow: 'wrap',
       side: [
         { type: 'image', key: 'portrait', shape: 'square' },
-        { type: 'fields', title: 'Details', fields: [f('race', 'Race'), f('class', 'Class / Role'), f('age', 'Age'), f('alignment', 'Alignment'), f('affiliation', 'Affiliation'), f('home', 'Home')] },
+        { type: 'fields', title: 'Details', fields: [f('race', 'Race', { library: 'species' }), f('class', 'Class / Role', { library: 'class' }), f('age', 'Age'), f('alignment', 'Alignment'), f('affiliation', 'Affiliation'), f('home', 'Home')] },
       ],
       main: [{ type: 'body' }],
     },
@@ -179,6 +182,8 @@ side:
     fields:
       - { key: origin, label: Origin }
       - { key: motto, label: Motto, multiline: true }
+      - { key: class, label: Class, library: class }              # links to the library; library: species | class | background | feat | spell | magicitem | item | creature | condition
+      - { key: spells, label: Spells, library: spell, multi: true } # multi: several entries
 main:
   - type: body
 bottom: []

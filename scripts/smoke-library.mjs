@@ -102,6 +102,37 @@ check('link index follows the repoint', r.data.filter((l) => l.sourceId === ambu
 pr = await fetch(base + '/api/public/library/' + encodeURIComponent(key))
 check('after the repoint the entry is no longer public', pr.status === 404)
 
+// ---- linked fields in special pages ----
+const wizard = idx.rows.find((x) => x[2] === 'Wizard' && x[1] === 'class')[0]
+const elf = idx.rows.find((x) => x[2] === 'Elf' && x[1] === 'species')[0]
+r = await call('POST', `/api/workspaces/${ws}/pages`, { title: 'Sildar', props: { type: 'person', data: { class: [{ name: 'Wizard', libKey: wizard }], spells: [{ name: 'Fireball', libKey: fire }], race: 'Half-elf', home: [{ name: 'Elsewhere' }] } } })
+const sildar = r.data
+r = await call('GET', `/api/workspaces/${ws}/links`)
+let mine = r.data.filter((l) => l.sourceId === sildar.id)
+check('linked fields are indexed like text links', mine.length === 2 && mine.some((l) => l.libKey === wizard) && mine.some((l) => l.libKey === fire), JSON.stringify(mine.map((l) => l.libKey)))
+
+r = await call('PATCH', '/api/pages/' + sildar.id, { props: { type: 'person', data: { class: [{ name: 'Wizard', libKey: wizard }], race: [{ name: 'Elf', libKey: elf }] } } })
+r = await call('GET', `/api/workspaces/${ws}/links`)
+mine = r.data.filter((l) => l.sourceId === sildar.id)
+check('saving only the fields refreshes the link index', mine.length === 2 && mine.some((l) => l.libKey === elf) && !mine.some((l) => l.libKey === fire), JSON.stringify(mine.map((l) => l.libKey)))
+
+const pageB = (await call('POST', `/api/workspaces/${ws}/pages`, { title: 'Elf (library)', props: { library: elf } })).data
+const otherPage = (await call('POST', `/api/workspaces/${ws2}/pages`, { title: 'Stranger' })).data
+r = await call('POST', `/api/workspaces/${ws}/pages`, { title: 'Mira', props: { data: { race: [{ name: 'Elf', pageId: pageB.id }], home: [{ name: 'Stranger', pageId: otherPage.id }] } } })
+const mira = r.data
+r = await call('GET', `/api/workspaces/${ws}/links`)
+mine = r.data.filter((l) => l.sourceId === mira.id)
+check('a field entry that points at a page links to it, and one from another world is ignored', mine.length === 1 && mine[0].targetId === pageB.id, JSON.stringify(mine))
+
+const wizardPage = (await call('POST', `/api/workspaces/${ws}/pages`, { title: 'Wizard (library)', props: { library: wizard } })).data
+r = await call('POST', `/api/workspaces/${ws}/library-links/repoint`, { libKey: wizard, pageId: wizardPage.id })
+check('repoint also moves linked fields', r.status === 200 && r.data.changed === 1, JSON.stringify(r.data))
+r = await call('GET', '/api/pages/' + sildar.id)
+const cls = r.data.props?.data?.class?.[0]
+check('the field entry now names the page', cls?.pageId === wizardPage.id && !cls.libKey && cls.name === 'Wizard (library)', JSON.stringify(cls))
+r = await call('GET', `/api/workspaces/${ws}/links`)
+check('and the link index follows', r.data.filter((l) => l.sourceId === sildar.id).some((l) => l.targetId === wizardPage.id))
+
 const anon = await fetch(base + '/api/library/index')
 check('library needs a login', anon.status === 401)
 console.log(wasEmpty ? 'First download done.' : 'Library already existed.')

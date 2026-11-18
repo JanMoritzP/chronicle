@@ -60,7 +60,24 @@ export function applyContent(p: PageRow, doc: DocNode) {
   })()
 }
 
-export function reindexLinks(pageId: string, workspaceId: string, doc: DocNode) {
+export interface FieldRef { name: string; libKey?: string; pageId?: string }
+
+/** Entries of linked fields in a page's data (class, species, spells...). Plain-text entries carry no link and are left out. */
+export function fieldRefs(props: any): FieldRef[] {
+  const out: FieldRef[] = []
+  for (const v of Object.values(props?.data ?? {})) {
+    if (!Array.isArray(v)) continue
+    for (const r of v) {
+      if (r && typeof r === 'object' && typeof r.name === 'string' && (typeof r.libKey === 'string' || typeof r.pageId === 'string')) {
+        out.push({ name: r.name, ...(typeof r.libKey === 'string' ? { libKey: r.libKey } : {}), ...(typeof r.pageId === 'string' ? { pageId: r.pageId } : {}) })
+      }
+    }
+  }
+  return out
+}
+
+/** Rebuilds the link index of a page: links in its text plus links in its linked fields. Pass props when they are being changed in the same save. */
+export function reindexLinks(pageId: string, workspaceId: string, doc: DocNode, props?: any) {
   // every path that stores page content calls this, so the todo index is refreshed here too
   reindexTodos(pageId, workspaceId, doc)
   const ex = extract(doc)
@@ -75,6 +92,14 @@ export function reindexLinks(pageId: string, workspaceId: string, doc: DocNode) 
     }
     if (!target) target = resolveTarget(workspaceId, l.targetName)
     ins.run(pageId, target, l.targetName, l.anchor, l.embed ? 1 : 0, null)
+  }
+  if (props === undefined) {
+    const row = db.prepare('SELECT props FROM pages WHERE id = ?').get(pageId) as { props: string } | undefined
+    try { props = row ? JSON.parse(row.props) : {} } catch { props = {} }
+  }
+  for (const r of fieldRefs(props)) {
+    if (r.libKey) ins.run(pageId, null, r.name, null, 0, r.libKey)
+    else if (r.pageId && db.prepare('SELECT 1 FROM pages WHERE id = ? AND workspace_id = ? AND deleted_at IS NULL').get(r.pageId, workspaceId)) ins.run(pageId, r.pageId, r.name, null, 0, null)
   }
   return ex
 }

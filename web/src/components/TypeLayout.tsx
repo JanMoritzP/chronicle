@@ -4,6 +4,7 @@ import { StatBlockBody, StatBlockEditor } from '../editor/StatBlock'
 import { findTemplate, TEMPLATES } from '../editor/templates'
 import { useTemplates } from '../editor/useTemplates'
 import type { Block, Layout } from '../lib/pageTypes'
+import { LibraryField, refsOf } from './LibraryField'
 
 export type TypeData = Record<string, any>
 
@@ -52,13 +53,18 @@ function StatBlockSlot({ b, value, readOnly, set }: { b: Extract<Block, { type: 
   )
 }
 
-function FieldsBlock({ b, data, readOnly, set }: { b: Extract<Block, { type: 'fields' }>; data: TypeData; readOnly: boolean; set: (k: string, v: string) => void }) {
-  const shown = readOnly ? b.fields.filter((f) => data[f.key]) : b.fields
+function FieldsBlock({ b, data, readOnly, set }: { b: Extract<Block, { type: 'fields' }>; data: TypeData; readOnly: boolean; set: (k: string, v: any) => void }) {
+  const shown = readOnly ? b.fields.filter((f) => (f.library ? refsOf(data[f.key]).length > 0 : data[f.key])) : b.fields
   if (!shown.length) return null
   return (
     <div className="tl-fields">
       {b.title && <h4>{b.title}</h4>}
-      {shown.map((f) => (
+      {shown.map((f) => f.library ? (
+        <div key={f.key} className="tl-field">
+          <span>{f.label}</span>
+          <LibraryField def={f} value={data[f.key]} readOnly={readOnly} onChange={(v) => set(f.key, v)} />
+        </div>
+      ) : (
         <label key={f.key} className="tl-field">
           <span>{f.label}</span>
           {readOnly ? <div>{data[f.key]}</div> : f.multiline

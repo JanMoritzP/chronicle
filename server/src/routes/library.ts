@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { requireEditor, requireOwner, requireUser } from '../auth.js'
-import { db } from '../db.js'
+import { db, now } from '../db.js'
 import type { DocNode } from '../doc.js'
 import { libraryEntry, libraryIndex, libraryStatus, refreshLibrary } from '../library.js'
 import { applyContent, type PageRow } from '../pages.js'
@@ -41,6 +41,16 @@ export async function libraryRoutes(app: FastifyInstance) {
     for (const p of sources) {
       const doc = JSON.parse(p.content) as DocNode
       let hit = 0
+      // linked fields (class, species, spells...) keep their entries in props
+      const props = JSON.parse(p.props)
+      let fieldHit = 0
+      for (const v of Object.values(props?.data ?? {})) {
+        if (!Array.isArray(v)) continue
+        for (const r of v as any[]) {
+          if (r && r.libKey === b.data.libKey) { delete r.libKey; r.pageId = target.id; r.name = target.title; fieldHit++ }
+        }
+      }
+      if (fieldHit) db.prepare('UPDATE pages SET props = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(props), now(), p.id)
       const walk = (n: DocNode) => {
         if (n.type === 'wikilink' && n.attrs?.libKey === b.data.libKey) {
           const shown = String(n.attrs.alias || n.attrs.name || '')
@@ -50,7 +60,7 @@ export async function libraryRoutes(app: FastifyInstance) {
         n.content?.forEach(walk)
       }
       walk(doc)
-      if (hit) { applyContent(p, doc); changed++ }
+      if (hit || fieldHit) { applyContent(p, doc); changed++ }
     }
     return { changed }
   })
