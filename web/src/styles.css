@@ -595,3 +595,7 @@ input[type=color] { width: 34px; height: 24px; padding: 0; border: 1px solid var
 .lf-input { flex: 1; min-width: 90px; border: 0; border-bottom: 1px solid transparent; background: transparent; outline: 0; padding: 1px 0; }
 .lf-input:focus { border-bottom-color: var(--accent); }
 .lf-pop { position: absolute; z-index: 60; right: 0; top: 100%; margin-top: 4px; width: 280px; max-width: calc(100vw - 24px); max-height: 280px; overflow: auto; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); padding: 4px; }
+.lib-table { overflow-x: auto; margin: 8px 0; }
+.lib-table table { border-collapse: collapse; font-size: 13.5px; width: 100%; }
+.lib-table th, .lib-table td { border: 1px solid var(--border); padding: 3px 8px; text-align: left; vertical-align: top; }
+.lib-table th { background: var(--accent-soft); }

@@ -2,6 +2,7 @@ import { Node, mergeAttributes } from '@tiptap/core'
 import { NodeViewWrapper, ReactNodeViewRenderer, type NodeViewProps } from '@tiptap/react'
 import { Eye, Pencil } from 'lucide-react'
 import { Fragment, useState, type CSSProperties, type ReactNode } from 'react'
+import { LibraryField, refsOfData, type LibRef } from '../components/LibraryField'
 import { Select } from '../components/Select'
 import { ABILITY_KEYS, findTemplate, TEMPLATES, type Field, type StatTemplate } from './templates'
 import { useTemplates } from './useTemplates'
@@ -25,12 +26,14 @@ export function richText(text: string): ReactNode[] {
 
 const paragraphs = (text: string) => text.split(/\n+/).filter((p) => p.trim()).map((p, i) => <p key={i}>{richText(p)}</p>)
 
-function FieldValue({ f, value, onChange }: { f: Field; value: string; onChange?: (v: string) => void }) {
-  const ro = !onChange
+function FieldValue({ f, value, refs, onChange, onRefs }: { f: Field; value: string; refs?: LibRef[]; onChange?: (v: string) => void; onRefs?: (r: LibRef[] | null) => void }) {
+  const ro = f.type === 'link' ? !onRefs : !onChange
   const mod = f.mod ? modOf(value) : ''
   switch (f.type) {
     case 'checkbox':
       return <input type="checkbox" className="sb-check" checked={value === 'true'} disabled={ro} onChange={(e) => onChange?.(e.target.checked ? 'true' : '')} />
+    case 'link':
+      return <LibraryField def={{ key: f.key, label: f.label, library: f.library, multi: f.multi }} value={refs} readOnly={ro} onChange={(r) => onRefs?.(r)} />
     case 'select':
       return ro ? <span>{value}</span> : (
         <Select className="sb-select" value={value} onChange={onChange!} placeholder="–">
@@ -97,8 +100,13 @@ function Abilities({ s, val, onChange }: { s: { layout: 'row' | 'table'; saves?:
   )
 }
 
-export function StatBlockBody({ template, data, onChange }: { template: StatTemplate; data: Record<string, string>; onChange?: (key: string, v: string) => void }) {
+export function StatBlockBody({ template, data, onChange }: { template: StatTemplate; data: Record<string, string>; onChange?: (key: string, v: string, extra?: Record<string, string>) => void }) {
   const ro = !onChange
+  // a linked field keeps its shown text under its key and its links as JSON under "<key>:refs"
+  const linkProps = (f: Field) => f.type !== 'link' ? {} : {
+    refs: refsOfData(data, f.key),
+    onRefs: ro ? undefined : (r: LibRef[] | null) => onChange!(f.key, r ? r.map((x) => x.name).join(', ') : '', { [`${f.key}:refs`]: r ? JSON.stringify(r) : '' }),
+  }
   const val = (k: string) => (data[k] == null ? '' : String(data[k]))
   const look = template.look
   const style = { '--sb-width': `${look.width}px`, ...(look.accent ? { '--sb-accent': look.accent } : {}) } as CSSProperties
@@ -132,7 +140,7 @@ export function StatBlockBody({ template, data, onChange }: { template: StatTemp
                 {shown.map((f) => (
                   <div key={f.key} className={`sb-row${f.type === 'long' ? ' sb-row-long' : ''}`}>
                     <b>{f.label}</b>
-                    <FieldValue f={f} value={val(f.key)} onChange={ro ? undefined : (v) => onChange!(f.key, v)} />
+                    <FieldValue f={f} value={val(f.key)} {...linkProps(f)} onChange={ro ? undefined : (v) => onChange!(f.key, v)} />
                   </div>
                 ))}
               </div>
@@ -144,7 +152,7 @@ export function StatBlockBody({ template, data, onChange }: { template: StatTemp
                 {s.fields.map((f) => (
                   <div key={f.key} className="sb-cell">
                     <b>{f.label}</b>
-                    {ro && !filled(f, val(f.key)) ? <span>–</span> : <FieldValue f={f} value={val(f.key)} onChange={ro ? undefined : (v) => onChange!(f.key, v)} />}
+                    {ro && !filled(f, val(f.key)) ? <span>–</span> : <FieldValue f={f} value={val(f.key)} {...linkProps(f)} onChange={ro ? undefined : (v) => onChange!(f.key, v)} />}
                   </div>
                 ))}
               </div>
@@ -181,7 +189,7 @@ export function StatBlockBody({ template, data, onChange }: { template: StatTemp
 export function StatBlockEditor({ template, data, onChange, onTemplate, extra }: {
   template: StatTemplate
   data: Record<string, string>
-  onChange: (key: string, v: string) => void
+  onChange: (key: string, v: string, extra?: Record<string, string>) => void
   onTemplate: (id: string) => void
   extra?: ReactNode
 }) {
@@ -214,7 +222,7 @@ function StatBlockView({ node, updateAttributes, editor, deleteNode }: NodeViewP
         <StatBlockEditor
           template={template}
           data={data}
-          onChange={(k, v) => updateAttributes({ data: { ...data, [k]: v } })}
+          onChange={(k, v, extra) => updateAttributes({ data: { ...data, [k]: v, ...extra } })}
           onTemplate={(id) => updateAttributes({ template: id })}
           extra={<button className="btn sm danger" onClick={deleteNode}>Remove</button>}
         />

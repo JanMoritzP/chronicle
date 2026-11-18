@@ -1,4 +1,5 @@
 ﻿import crypto from 'node:crypto'
+import { dataRefs, type Ref } from './refs.js'
 export interface DocNode {
   type?: string
   text?: string
@@ -69,6 +70,17 @@ export function extractTodos(doc: DocNode): ExtractedTodo[] {
     }
     const b = n.type && TEXT_BLOCKS.has(n.type) ? n : block
     for (const c of n.content ?? []) walk(c, b)
+  }
+  walk(doc)
+  return out
+}
+
+/** Linked fields of the stat blocks inside a document. */
+export function statblockRefs(doc: DocNode): Ref[] {
+  const out: Ref[] = []
+  const walk = (n: DocNode) => {
+    if (n.type === 'statblock') out.push(...dataRefs(n.attrs?.data))
+    n.content?.forEach(walk)
   }
   walk(doc)
   return out

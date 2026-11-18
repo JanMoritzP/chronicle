@@ -48,7 +48,7 @@ function StatBlockSlot({ b, value, readOnly, set }: { b: Extract<Block, { type: 
     <div className="tl-statblock">
       {readOnly
         ? <StatBlockBody template={template} data={data} />
-        : <StatBlockEditor template={template} data={data} onChange={(k, v) => set({ template: template.id, data: { ...data, [k]: v } })} onTemplate={(id) => set({ template: id, data })} />}
+        : <StatBlockEditor template={template} data={data} onChange={(k, v, extra) => set({ template: template.id, data: { ...data, [k]: v, ...extra } })} onTemplate={(id) => set({ template: id, data })} />}
     </div>
   )
 }

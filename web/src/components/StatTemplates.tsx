@@ -4,6 +4,8 @@ import { api } from '../api'
 import { StatBlockBody } from '../editor/StatBlock'
 import { ABILITY_KEYS, CLASSIC_LOOK, DEFAULT_LOOK, normalizeLook, parseTemplateSource, resolveTemplates, sectionsToSource, type Field, type FieldType, type Look, type Section, type StatTemplate } from '../editor/templates'
 import { askText, confirmDialog } from '../lib/dialog'
+import { LIBRARY_CATEGORIES } from '../lib/library'
+import type { LibraryCategory } from '../types'
 import { useStore } from '../store'
 import { Select } from './Select'
 
@@ -55,7 +57,7 @@ const ADD: { kind: Section['kind']; make: () => Section }[] = [
   { kind: 'heading', make: () => ({ kind: 'heading', text: 'Section heading' }) },
   { kind: 'rule', make: () => ({ kind: 'rule' }) },
 ]
-const FIELD_TYPE_LABEL: Record<FieldType, string> = { text: 'Short text', number: 'Number', checkbox: 'Checkbox', select: 'Choice list', long: 'Long text' }
+const FIELD_TYPE_LABEL: Record<Exclude<FieldType, 'link'>, string> = { text: 'Short text', number: 'Number', checkbox: 'Checkbox', select: 'Choice list', long: 'Long text' }
 
 const move = <T,>(list: T[], i: number, d: number): T[] => {
   const j = i + d
@@ -67,13 +69,21 @@ const move = <T,>(list: T[], i: number, d: number): T[] => {
 
 function FieldEditor({ f, onChange, onRemove, onMove }: { f: Field; onChange: (f: Field) => void; onRemove: () => void; onMove: (d: number) => void }) {
   const type = f.type ?? 'text'
+  const kind = type === 'link' ? `lib:${f.library ?? 'spell'}` : type
   return (
     <div className="sd-field">
       <div className="sd-field-main">
         <input className="input" value={f.label} placeholder="Label" onChange={(e) => onChange({ ...f, label: e.target.value })} />
         <input className="input sd-key" value={f.key} placeholder={slug(f.label) || 'key'} title="Internal name the value is stored under. Changing it later hides values already entered." onChange={(e) => onChange({ ...f, key: slug(e.target.value) })} />
-        <Select className="input sd-type" value={type} onChange={(v) => { const t = v as FieldType; const n = { ...f, type: t === 'text' ? undefined : t }; if (t !== 'select') delete n.options; if (t !== 'number') delete n.mod; onChange(n) }}>
-          {(Object.keys(FIELD_TYPE_LABEL) as FieldType[]).map((t) => <option key={t} value={t}>{FIELD_TYPE_LABEL[t]}</option>)}
+        <Select className="input sd-type" value={kind} onChange={(v) => {
+          const n: Field = { ...f }
+          delete n.options; delete n.mod; delete n.library; delete n.multi
+          if (v.startsWith('lib:')) { n.type = 'link'; n.library = v.slice(4) as LibraryCategory; if (f.multi) n.multi = true }
+          else { n.type = v === 'text' ? undefined : (v as FieldType); if (v === 'select') n.options = f.options; if (v === 'number' && f.mod) n.mod = true }
+          onChange(n)
+        }}>
+          {(Object.keys(FIELD_TYPE_LABEL) as (keyof typeof FIELD_TYPE_LABEL)[]).map((t) => <option key={t} value={t}>{FIELD_TYPE_LABEL[t]}</option>)}
+          {LIBRARY_CATEGORIES.map((c) => <option key={c.id} value={`lib:${c.id}`}>Link: {c.label.toLowerCase()}</option>)}
         </Select>
         <button className="icon-btn" title="Move up" onClick={() => onMove(-1)}><ArrowUp size={14} /></button>
         <button className="icon-btn" title="Move down" onClick={() => onMove(1)}><ArrowDown size={14} /></button>
@@ -81,6 +91,9 @@ function FieldEditor({ f, onChange, onRemove, onMove }: { f: Field; onChange: (f
       </div>
       {type === 'select' && (
         <input className="input" value={(f.options ?? []).join(', ')} placeholder="Choices, separated by commas" onChange={(e) => onChange({ ...f, options: e.target.value.split(',').map((s) => s.trimStart()) })} onBlur={(e) => onChange({ ...f, options: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })} />
+      )}
+      {type === 'link' && (
+        <label className="row" style={{ fontSize: 13 }}><input type="checkbox" checked={!!f.multi} onChange={(e) => onChange({ ...f, multi: e.target.checked || undefined })} /> Allow several entries</label>
       )}
       {type === 'number' && (
         <label className="row" style={{ fontSize: 13 }}><input type="checkbox" checked={!!f.mod} onChange={(e) => onChange({ ...f, mod: e.target.checked || undefined })} /> Show ability modifier (16 → +3)</label>

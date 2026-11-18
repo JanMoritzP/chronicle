@@ -133,6 +133,33 @@ check('the field entry now names the page', cls?.pageId === wizardPage.id && !cl
 r = await call('GET', `/api/workspaces/${ws}/links`)
 check('and the link index follows', r.data.filter((l) => l.sourceId === sildar.id).some((l) => l.targetId === wizardPage.id))
 
+// ---- linked fields inside stat blocks (special page slot and stat block in the text) ----
+const cleric = idx.rows.find((x) => x[2] === 'Cleric' && x[1] === 'class')[0]
+const spell = (k, name = 'Cleric') => ({ template: '5e-spell', data: { name: 'Bless', classes: name, 'classes:refs': JSON.stringify([{ name, libKey: k }]) } })
+const blessDoc = { type: 'doc', content: [{ type: 'paragraph' }, { type: 'statblock', attrs: spell(cleric) }] }
+r = await call('POST', `/api/workspaces/${ws}/pages`, { title: 'Bless', props: { type: 'spell', data: { main: spell(cleric) } }, content: blessDoc })
+const bless = r.data
+r = await call('GET', `/api/workspaces/${ws}/links`)
+mine = r.data.filter((l) => l.sourceId === bless.id)
+check('stat block links are indexed, in the slot and in the text', mine.length === 2 && mine.every((l) => l.libKey === cleric), JSON.stringify(mine.map((l) => l.libKey)))
+
+r = await call('POST', `/api/pages/${bless.id}/share`)
+const pub2 = await (await fetch(base + '/api/public/' + r.data.token)).json()
+const pubText = JSON.stringify(pub2.content)
+check('a shared stat block keeps its text but not its links', pubText.includes('"classes":"Cleric"') && !pubText.includes(':refs'), pubText.slice(0, 200))
+await call('DELETE', `/api/pages/${bless.id}/share`)
+
+const clericPage = (await call('POST', `/api/workspaces/${ws}/pages`, { title: 'Cleric (library)', props: { library: cleric } })).data
+r = await call('POST', `/api/workspaces/${ws}/library-links/repoint`, { libKey: cleric, pageId: clericPage.id })
+check('repoint changes stat block links', r.status === 200 && r.data.changed === 1, JSON.stringify(r.data))
+r = await call('GET', '/api/pages/' + bless.id)
+const slot = r.data.props.data.main.data
+const node = r.data.content.content.find((n) => n.type === 'statblock').attrs.data
+check('in the slot the entry names the page', JSON.parse(slot['classes:refs'])[0].pageId === clericPage.id && slot.classes === 'Cleric (library)', JSON.stringify(slot))
+check('in the text the entry names the page', JSON.parse(node['classes:refs'])[0].pageId === clericPage.id && node.classes === 'Cleric (library)')
+r = await call('GET', `/api/workspaces/${ws}/links`)
+check('and the link index follows', r.data.filter((l) => l.sourceId === bless.id).every((l) => l.targetId === clericPage.id))
+
 const anon = await fetch(base + '/api/library/index')
 check('library needs a login', anon.status === 401)
 console.log(wasEmpty ? 'First download done.' : 'Library already existed.')

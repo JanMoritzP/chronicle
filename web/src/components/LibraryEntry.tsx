@@ -2,29 +2,34 @@ import { ExternalLink } from 'lucide-react'
 import { Fragment, useMemo } from 'react'
 import { StatBlockBody, richText } from '../editor/StatBlock'
 import { templateById } from '../editor/templates'
-import { creatureToStatBlock, entryText } from '../lib/open5e'
+import { useLibrary } from '../lib/library'
+import { entryText, statBlockFor, textBlocks } from '../lib/open5e'
 import type { LibraryEntry } from '../types'
 
 function Markdownish({ text }: { text: string }) {
-  const lines = text.split('\n')
-  const out: React.ReactNode[] = []
-  for (let i = 0; i < lines.length;) {
-    if (lines[i].startsWith('* ')) {
-      const items: string[] = []
-      while (i < lines.length && lines[i].startsWith('* ')) items.push(lines[i++].slice(2))
-      out.push(<ul key={i}>{items.map((t, k) => <li key={k}>{richText(t)}</li>)}</ul>)
-    } else {
-      if (lines[i].trim()) out.push(<p key={i}>{richText(lines[i])}</p>)
-      i++
-    }
-  }
-  return <>{out}</>
+  return (
+    <>
+      {textBlocks(text).map((b, i) => {
+        if (b.kind === 'ul') return <ul key={i}>{b.items.map((t, k) => <li key={k}>{richText(t)}</li>)}</ul>
+        if (b.kind === 'p') return <p key={i}>{richText(b.text)}</p>
+        return (
+          <div key={i} className="lib-table">
+            <table>
+              {b.head && <thead><tr>{b.head.map((c, k) => <th key={k}>{richText(c)}</th>)}</tr></thead>}
+              <tbody>{b.rows.map((r, k) => <tr key={k}>{r.map((c, j) => <td key={j}>{richText(c)}</td>)}</tr>)}</tbody>
+            </table>
+          </div>
+        )
+      })}
+    </>
+  )
 }
 
 /** A library entry as a read-only page. Used in the Library view and on public shared pages. */
 export function EntryBody({ entry }: { entry: LibraryEntry }) {
+  const index = useLibrary((s) => s.index)
   const t = useMemo(() => entryText(entry), [entry])
-  const sb = useMemo(() => (entry.category === 'creature' ? creatureToStatBlock(entry) : null), [entry])
+  const sb = useMemo(() => statBlockFor(entry, index), [entry, index])
   const template = sb ? templateById(sb.template) : undefined
   return (
     <>

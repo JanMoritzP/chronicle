@@ -131,8 +131,90 @@ const costText = (c: unknown) => {
   return Number.isFinite(n) && n > 0 ? `${n % 1 === 0 ? n : n.toFixed(2)} gp` : ''
 }
 const CASTING: Record<string, string> = { action: '1 action', bonus_action: '1 bonus action', reaction: '1 reaction' }
+const ordinal = (n: number) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`
 
-/** Everything except creatures: a subtitle, a few labelled facts and titled text sections. */
+// ---------- markdown-ish text: paragraphs, bullet lists and tables ----------
+
+export type TextBlock =
+  | { kind: 'p'; text: string }
+  | { kind: 'ul'; items: string[] }
+  | { kind: 'table'; head: string[] | null; rows: string[][] }
+
+const cells = (line: string) => line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim())
+const isSeparator = (line: string) => cells(line).every((c) => /^:?-{2,}:?$/.test(c))
+
+export function textBlocks(text: string): TextBlock[] {
+  const lines = text.split('\n')
+  const out: TextBlock[] = []
+  for (let i = 0; i < lines.length;) {
+    const line = lines[i]
+    if (line.trimStart().startsWith('|')) {
+      const rows: string[][] = []
+      let head: string[] | null = null
+      while (i < lines.length && lines[i].trimStart().startsWith('|')) {
+        if (isSeparator(lines[i])) { if (rows.length === 1) { head = rows[0]; rows.length = 0 } }
+        else rows.push(cells(lines[i]))
+        i++
+      }
+      if (head?.every((c) => !c)) head = null
+      out.push({ kind: 'table', head, rows })
+    } else if (/^\s*[*-] /.test(line)) {
+      const items: string[] = []
+      while (i < lines.length && /^\s*[*-] /.test(lines[i])) items.push(lines[i++].replace(/^\s*[*-] /, ''))
+      out.push({ kind: 'ul', items })
+    } else {
+      if (line.trim()) out.push({ kind: 'p', text: line })
+      i++
+    }
+  }
+  return out
+}
+
+const mdTable = (head: string[], rows: string[][]) => [`| ${head.join(' | ')} |`, `|${head.map(() => '---').join('|')}|`, ...rows.map((r) => `| ${r.join(' | ')} |`)].join('\n')
+
+/** Text that goes into a stat block field: list items become bullets, which the stat block text shows as they are. */
+const statText = (s: unknown) => clean(s).replace(/^\s*[*-] /gm, '• ').replace(/\n{3,}/g, '\n\n')
+
+// ---------- classes: the level table and the features ----------
+
+function classSections(d: any): { heading: string; text: string }[] {
+  const features: any[] = d.features ?? []
+  const of = (t: string) => features.filter((f) => f.feature_type === t)
+  const sections: { heading: string; text: string }[] = []
+  const section = (heading: string, text: unknown) => { const s = clean(text); if (s && s !== '[Column data]') sections.push({ heading, text: s }) }
+
+  section('', d.desc)
+  for (const f of of('CORE_TRAITS_TABLE')) section(f.name, f.desc)
+  for (const f of of('PROFICIENCIES')) section(f.name, f.desc)
+  for (const f of of('STARTING_EQUIPMENT')) section(f.name, f.desc)
+
+  // one row per level: proficiency bonus, features gained, then the class specific columns and spell slots
+  const columns = [...of('PROFICIENCY_BONUS'), ...of('CLASS_TABLE_DATA'), ...of('SPELL_SLOTS')].filter((f) => f.data_for_class_table?.length)
+  const levelFeatures = of('CLASS_LEVEL_FEATURE')
+  const levels = new Set<number>()
+  for (const f of levelFeatures) for (const g of f.gained_at ?? []) levels.add(Number(g.level))
+  for (const c of columns) for (const r of c.data_for_class_table) levels.add(Number(r.level))
+  const maxLevel = Math.min(20, Math.max(0, ...levels))
+  if (columns.length || levelFeatures.length) {
+    const head = ['Level', ...columns.map((c) => (c.feature_type === 'SPELL_SLOTS' ? `${c.name} slots` : c.name)), 'Features']
+    const rows: string[][] = []
+    for (let lv = 1; lv <= maxLevel; lv++) {
+      const names = levelFeatures.filter((f) => (f.gained_at ?? []).some((g: any) => Number(g.level) === lv)).map((f) => f.name)
+      rows.push([String(lv), ...columns.map((c) => c.data_for_class_table.find((r: any) => Number(r.level) === lv)?.column_value ?? '—'), names.join(', ') || '—'])
+    }
+    if (rows.length) section('Level progression', mdTable(head, rows))
+  }
+
+  const firstLevel = (f: any) => Math.min(99, ...((f.gained_at ?? []).map((g: any) => Number(g.level))))
+  for (const f of [...levelFeatures].sort((a, b) => firstLevel(a) - firstLevel(b))) {
+    const lv = ([...new Set<number>((f.gained_at ?? []).map((g: any) => Number(g.level)))]).sort((a, b) => a - b)
+    section(`${f.name}${lv.length ? ` (level ${lv.join(', ')})` : ''}`, f.desc)
+  }
+  for (const f of of('CLASS_FEATURE_OPTION_LIST')) section(f.name, f.desc)
+  return sections
+}
+
+/** Everything except stat block based entries: a subtitle, a few labelled facts and titled text sections. */
 export function entryText(e: LibraryEntry): EntryText {
   const d = e.data
   const facts: [string, string][] = []
@@ -142,51 +224,12 @@ export function entryText(e: LibraryEntry): EntryText {
   let subtitle = ''
 
   switch (e.category) {
-    case 'spell': {
-      subtitle = `${d.level === 0 ? 'Cantrip' : `Level ${d.level}`} ${d.school?.name ?? ''}`.trim() + (d.ritual ? ' (ritual)' : '')
-      fact('Casting time', CASTING[d.casting_time] ?? d.casting_time)
-      fact('Range', d.range_text)
-      fact('Components', [d.verbal && 'V', d.somatic && 'S', d.material && `M${d.material_specified ? ` (${d.material_specified})` : ''}`].filter(Boolean).join(', '))
-      fact('Duration', `${d.concentration ? 'Concentration, ' : ''}${d.duration ?? ''}`.replace(/, $/, ''))
-      fact('Classes', (d.classes ?? []).map((c: any) => c.name ?? c).join(', '))
-      section('', d.desc)
-      section('At higher levels', d.higher_level)
-      break
-    }
-    case 'magicitem': {
-      subtitle = [d.category?.name, d.rarity?.name?.toLowerCase()].filter(Boolean).join(', ') + (d.requires_attunement ? ` (requires attunement${d.attunement_detail ? ` ${d.attunement_detail}` : ''})` : '')
-      if (d.armor?.ac_display) fact('Armor Class', d.armor.ac_display)
-      if (d.weapon?.damage_dice) fact('Damage', `${d.weapon.damage_dice} ${String(d.weapon.damage_type?.name ?? '').toLowerCase()}`.trim())
-      section('', d.desc)
-      break
-    }
-    case 'item': {
-      subtitle = d.category?.name ?? ''
-      fact('Cost', costText(d.cost))
-      fact('Weight', Number(d.weight) > 0 ? `${Number(d.weight)} ${d.weight_unit ?? 'lb'}` : '')
-      if (d.weapon) {
-        fact('Damage', `${d.weapon.damage_dice ?? ''} ${String(d.weapon.damage_type?.name ?? '').toLowerCase()}`.trim())
-        fact('Properties', (d.weapon.properties ?? []).map((p: any) => p.property?.name + (p.detail ? ` (${p.detail})` : '')).join(', '))
-      }
-      if (d.armor) {
-        fact('Armor Class', d.armor.ac_display)
-        fact('Strength', d.armor.strength_score_required)
-        fact('Stealth', d.armor.grants_stealth_disadvantage ? 'Disadvantage' : '')
-      }
-      section('', d.desc)
-      break
-    }
     case 'class': {
       subtitle = d.subclass_of?.name ? `Subclass of ${d.subclass_of.name}` : 'Class'
-      fact('Hit die', d.hit_dice)
+      fact('Hit die', d.hit_points?.hit_dice_name ?? d.hit_dice)
       fact('Saving throws', (d.saving_throws ?? []).map((s: any) => s.name).join(', '))
       fact('Primary ability', (d.primary_abilities ?? []).map((s: any) => s.name ?? s).join(', '))
-      section('', d.desc)
-      for (const f of d.features ?? []) {
-        if (f.feature_type && f.feature_type !== 'CLASS_LEVEL_FEATURE') continue
-        const lv = [...new Set((f.gained_at ?? []).map((g: any) => g.level))].sort((a: any, b: any) => a - b)
-        section(`${f.name}${lv.length ? ` (level ${lv.join(', ')})` : ''}`, f.desc)
-      }
+      sections.push(...classSections(d))
       break
     }
     case 'species': {
@@ -211,7 +254,9 @@ export function entryText(e: LibraryEntry): EntryText {
     }
     case 'condition': {
       subtitle = 'Condition'
-      section('', (d.descriptions ?? []).map((x: any) => clean(x.desc)).filter(Boolean).join('\n\n'))
+      // a condition lists its wording in every rules version; the entry's own book is the one that counts
+      const own = (d.descriptions ?? []).filter((x: any) => x.document === e.source)
+      section('', (own.length ? own : (d.descriptions ?? []).slice(0, 1)).map((x: any) => clean(x.desc)).filter(Boolean).join('\n\n'))
       break
     }
     default:
@@ -220,29 +265,139 @@ export function entryText(e: LibraryEntry): EntryText {
   return { subtitle, facts, sections }
 }
 
+// ---------- spells and items as stat blocks ----------
+
+export interface Ref { name: string; libKey?: string; pageId?: string }
+type Index = { rows: [string, string, string, string, string][] } | null
+
+/** The library entry a name or key from another entry points at: by key first, then by name (the same entry may live in another book). */
+export function resolveRef(index: Index, category: string, apiKey: string | undefined, name: string): Ref {
+  if (index) {
+    const id = apiKey ? `${category}:${apiKey}` : ''
+    let row = id ? index.rows.find((r) => r[0] === id) : undefined
+    if (!row) {
+      const want = name.toLowerCase()
+      row = index.rows.find((r) => r[1] === category && r[2].toLowerCase() === want && (category !== 'class' || r[4] === 'Class'))
+    }
+    if (row) return { name: row[2], libKey: row[0] }
+  }
+  return { name }
+}
+
+type StatPart = { template: string; data: Record<string, string> }
+
+function withRefs(data: Record<string, string>, key: string, refs: Ref[]) {
+  if (!refs.length) return
+  data[key] = refs.map((r) => r.name).join(', ')
+  if (refs.some((r) => r.libKey)) data[`${key}:refs`] = JSON.stringify(refs)
+}
+
+export function spellToStatBlock(e: LibraryEntry, index: Index): StatPart {
+  const d = e.data
+  const out: Record<string, string> = { name: e.name }
+  const school = String(d.school?.name ?? '')
+  out.sub = (d.level === 0 ? `${school} cantrip` : `${ordinal(d.level)}-level ${school.toLowerCase()}`).trim() + (d.ritual ? ' (ritual)' : '')
+  out.time = [CASTING[d.casting_time] ?? d.casting_time, d.reaction_condition].filter(Boolean).join(', ')
+  out.range = d.range_text ?? ''
+  out.components = [d.verbal && 'V', d.somatic && 'S', d.material && `M${d.material_specified ? ` (${d.material_specified})` : ''}`].filter(Boolean).join(', ')
+  out.duration = `${d.concentration ? 'Concentration, ' : ''}${d.duration ?? ''}`.replace(/, $/, '')
+  withRefs(out, 'classes', (d.classes ?? []).map((c: any) => resolveRef(index, 'class', c.key, c.name ?? String(c))))
+  out.desc = statText(d.desc)
+  out.higher = statText(d.higher_level)
+  for (const k of Object.keys(out)) if (out[k] === '') delete out[k]
+  return { template: '5e-spell', data: out }
+}
+
+export function itemToStatBlock(e: LibraryEntry): StatPart {
+  const d = e.data
+  const out: Record<string, string> = { name: e.name }
+  if (e.category === 'magicitem') {
+    out.sub = [d.category?.name, String(d.rarity?.name ?? '').toLowerCase()].filter(Boolean).join(', ') + (d.requires_attunement ? ` (requires attunement${d.attunement_detail ? ` ${d.attunement_detail}` : ''})` : '')
+  } else out.sub = d.category?.name ?? ''
+  if (d.weapon?.damage_dice) out.damage = `${d.weapon.damage_dice} ${String(d.weapon.damage_type?.name ?? '').toLowerCase()}`.trim()
+  if (d.weapon?.properties?.length) out.properties = d.weapon.properties.map((p: any) => `${p.property?.name ?? ''}${p.detail ? ` (${p.detail})` : ''}`).filter(Boolean).join(', ')
+  if (d.armor) {
+    out.ac = d.armor.ac_display ?? ''
+    if (d.armor.strength_score_required) out.strength = `Str ${d.armor.strength_score_required}`
+    if (d.armor.grants_stealth_disadvantage) out.stealth = 'Disadvantage'
+  }
+  out.cost = e.category === 'item' ? costText(d.cost) : ''
+  out.weight = Number(d.weight) > 0 ? `${Number(d.weight)} ${d.weight_unit ?? 'lb'}` : ''
+  out.desc = statText(d.desc)
+  for (const k of Object.keys(out)) if (out[k] === '') delete out[k]
+  return { template: '5e-item', data: out }
+}
+
+/** The stat block form and data of entries that are shown as stat blocks (creatures, spells, items), else null. */
+export function statBlockFor(e: LibraryEntry, index: Index): StatPart | null {
+  switch (e.category) {
+    case 'creature': return creatureToStatBlock(e)
+    case 'spell': return spellToStatBlock(e, index)
+    case 'item': case 'magicitem': return itemToStatBlock(e)
+    default: return null
+  }
+}
+
+// ---------- importing: one special page per kind ----------
+
 /** Page body for an imported entry, as an editor document. */
-export function entryDoc(e: LibraryEntry): any {
-  const t = entryText(e)
+export function textDoc(sections: { heading: string; text: string }[], e: LibraryEntry): any {
   const text = (s: string, marks?: any[]) => ({ type: 'text', text: s, ...(marks ? { marks } : {}) })
-  const para = (s: string) => ({ type: 'paragraph', content: s ? [text(s)] : undefined })
+  // **bold**, *italic*, ***both*** and _italic_ become marks instead of showing their punctuation
+  const inline = (s: string) => s.split(/(\*\*\*[^*\n]+\*\*\*|\*\*[^*\n]+\*\*|\*[^*\n]+\*|(?<!\w)_[^_\n]+_(?!\w))/g).filter(Boolean).map((part) => {
+    if (part.startsWith('***') && part.length > 6) return text(part.slice(3, -3), [{ type: 'bold' }, { type: 'italic' }])
+    if (part.startsWith('**') && part.length > 4) return text(part.slice(2, -2), [{ type: 'bold' }])
+    if ((part.startsWith('*') || part.startsWith('_')) && part.length > 2) return text(part.slice(1, -1), [{ type: 'italic' }])
+    return text(part)
+  })
+  const para = (s: string) => ({ type: 'paragraph', content: s ? inline(s) : undefined })
+  const plain = (s: string) => s.replace(/\*\*\*|\*\*|__/g, '')
   const content: any[] = []
-  if (t.subtitle) content.push({ type: 'paragraph', content: [text(t.subtitle, [{ type: 'italic' }])] })
-  for (const [label, value] of t.facts) content.push({ type: 'paragraph', content: [text(`${label}: `, [{ type: 'bold' }]), text(value)] })
-  for (const s of t.sections) {
-    if (s.heading) content.push({ type: 'heading', attrs: { level: 2 }, content: [text(s.heading)] })
-    const lines = s.text.split('\n')
-    let i = 0
-    while (i < lines.length) {
-      if (lines[i].startsWith('* ')) {
-        const items: any[] = []
-        while (i < lines.length && lines[i].startsWith('* ')) items.push({ type: 'listItem', content: [para(lines[i++].slice(2).replace(/\*\*/g, ''))] })
-        content.push({ type: 'bulletList', content: items })
-      } else {
-        if (lines[i].trim()) content.push(para(lines[i].replace(/\*\*|__/g, '')))
-        i++
+  for (const s of sections) {
+    if (s.heading) content.push({ type: 'heading', attrs: { level: 2 }, content: [text(plain(s.heading))] })
+    for (const b of textBlocks(s.text)) {
+      if (b.kind === 'ul') content.push({ type: 'bulletList', content: b.items.map((i) => ({ type: 'listItem', content: [para(i)] })) })
+      else if (b.kind === 'p') content.push(para(b.text))
+      else {
+        const row = (r: string[], header: boolean) => ({ type: 'tableRow', content: r.map((c) => ({ type: header ? 'tableHeader' : 'tableCell', content: [para(c)] })) })
+        content.push({ type: 'table', content: [...(b.head ? [row(b.head, true)] : []), ...b.rows.map((r) => row(r, false))] })
       }
     }
   }
   content.push(para(`Source: ${e.sourceName}${e.license ? `. ${e.license}.` : ''}`))
   return { type: 'doc', content }
+}
+
+export interface ImportPlan {
+  /** id of the special page type the page becomes */
+  type: string
+  props: Record<string, any>
+  content: any
+}
+
+const PAGE_TYPE: Record<string, string> = { creature: 'monster', spell: 'spell', item: 'item', magicitem: 'item', class: 'class', species: 'species', background: 'background', feat: 'feat', condition: 'condition' }
+
+/** What becomes of a library entry when it is added to a world: its special page type, field values and body text. */
+export function importPlan(e: LibraryEntry, index: Index): ImportPlan {
+  const type = PAGE_TYPE[e.category]
+  const stat = statBlockFor(e, index)
+  if (stat) return { type, props: { library: e.key, data: { main: stat } }, content: textDoc([], e) }
+
+  const t = entryText(e)
+  const d = e.data
+  const data: Record<string, any> = {}
+  if (e.category === 'class') {
+    const fact = (label: string) => t.facts.find((f) => f[0] === label)?.[1]
+    if (fact('Hit die')) data.hit_die = fact('Hit die')
+    if (fact('Saving throws')) data.saves = fact('Saving throws')
+    if (fact('Primary ability')) data.primary = fact('Primary ability')
+    if (d.subclass_of?.name) data.subclass_of = [resolveRef(index, 'class', d.subclass_of.key, d.subclass_of.name)]
+  } else if (e.category === 'species' && d.subspecies_of) {
+    const parent = index?.rows.find((r) => r[0] === `species:${d.subspecies_of}`)
+    data.subspecies_of = [parent ? { name: parent[2], libKey: parent[0] } : { name: String(d.subspecies_of) }]
+  } else if (e.category === 'feat') {
+    if (d.prerequisite) data.prerequisite = String(d.prerequisite)
+    if (d.type) data.kind = upperFirst(String(d.type).toLowerCase())
+  }
+  return { type, props: { library: e.key, data }, content: textDoc(t.sections, e) }
 }

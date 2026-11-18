@@ -4,7 +4,7 @@ import { api } from '../api'
 import { alertDialog, confirmDialog } from '../lib/dialog'
 import { highlight } from '../lib/fuzzy'
 import { LIBRARY_CATEGORIES, searchLibrary, useLibrary, type LibraryHit } from '../lib/library'
-import { creatureToStatBlock, entryDoc } from '../lib/open5e'
+import { importPlan } from '../lib/open5e'
 import { useStore } from '../store'
 import type { LibraryCategory, LibraryEntry } from '../types'
 import { EntryBody } from './LibraryEntry'
@@ -19,7 +19,7 @@ async function fetchEntry(key: string): Promise<LibraryEntry> {
 }
 
 /**
- * Creatures become Monster pages with the stat block filled in; everything else becomes a normal page.
+ * Every kind becomes its own special page (Monster, Spell, Item, Class...) with the entry's data in its fields and stat block.
  * Links that pointed at the library entry can be moved to the new page. An entry is only imported once per world.
  */
 export async function addToWorld(key: string): Promise<void> {
@@ -28,10 +28,8 @@ export async function addToWorld(key: string): Promise<void> {
   if (existing) { st.navigate({ type: 'page', id: existing.id }); return }
   const e = await fetchEntry(key)
   const linking = new Set(st.data.links.filter((l) => l.libKey === key).map((l) => l.sourceId)).size
-  const library = key
-  const page = e.category === 'creature'
-    ? await st.createPage({ title: e.name, type: 'monster', props: { library, data: { main: creatureToStatBlock(e) } }, open: false })
-    : await st.createPage({ title: e.name, content: entryDoc(e), props: { library }, open: false })
+  const plan = importPlan(e, useLibrary.getState().index)
+  const page = await st.createPage({ title: e.name, type: plan.type, props: plan.props, content: plan.content, open: false })
   if (!page) return
   if (linking > 0) {
     const ok = await confirmDialog(

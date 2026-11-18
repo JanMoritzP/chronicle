@@ -14,6 +14,15 @@ export function refsOf(v: unknown): LibRef[] {
   return typeof v === 'string' && v.trim() ? [{ name: v.trim() }] : []
 }
 
+/** Linked entries of a stat block field: the links when stored, else the shown text as one unlinked entry. */
+export function refsOfData(data: Record<string, string>, key: string): LibRef[] {
+  const stored = data[`${key}:refs`]
+  if (stored) {
+    try { const list = refsOf(JSON.parse(stored)); if (list.length) return list } catch { /* fall back to the text */ }
+  }
+  return refsOf(data[key])
+}
+
 interface Option { key: string; label: string; sub: string; indices: number[]; ref: LibRef }
 
 function Chip({ r, readOnly, onRemove }: { r: LibRef; readOnly: boolean; onRemove: () => void }) {
@@ -26,7 +35,9 @@ function Chip({ r, readOnly, onRemove }: { r: LibRef; readOnly: boolean; onRemov
     if (page) navigate({ type: 'page', id: page.id }, how)
     else if (r.libKey) navigate({ type: 'library', key: r.libKey }, how)
   }
-  const linked = !!page || !!r.libKey
+  // shared pages have no world to open entries in
+  const signedIn = useStore((s) => !!s.user)
+  const linked = signedIn && (!!page || !!r.libKey)
   return (
     <span className={`lf-chip${linked ? ' linked' : ''}`}>
       {linked

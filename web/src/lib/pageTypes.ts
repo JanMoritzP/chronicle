@@ -150,6 +150,32 @@ const BUILTIN_LAYOUTS: Record<string, { name: string; icon: string; tag: string;
       main: [{ type: 'body' }],
     },
   },
+  spell: {
+    name: 'Spell', icon: 'wand-sparkles', tag: 'spell',
+    layout: { columns: 'side-right', sideWidth: 380, flow: 'wrap', side: [{ type: 'statblock', key: 'main', template: '5e-spell' }], main: [{ type: 'body' }] },
+  },
+  item: {
+    name: 'Item', icon: 'gem', tag: 'item',
+    layout: { columns: 'side-right', sideWidth: 380, flow: 'wrap', side: [{ type: 'statblock', key: 'main', template: '5e-item' }, { type: 'image', key: 'portrait', shape: 'square' }], main: [{ type: 'body' }] },
+  },
+  class: {
+    name: 'Class', icon: 'shield', tag: 'class',
+    layout: {
+      columns: 'side-right', flow: 'wrap',
+      side: [{ type: 'fields', title: 'Class', fields: [f('hit_die', 'Hit die'), f('saves', 'Saving throws'), f('primary', 'Primary ability'), f('subclass_of', 'Subclass of', { library: 'class' })] }],
+      main: [{ type: 'body' }],
+    },
+  },
+  species: {
+    name: 'Species', icon: 'users', tag: 'species',
+    layout: { columns: 'side-right', flow: 'wrap', side: [{ type: 'fields', title: 'Species', fields: [f('subspecies_of', 'Subspecies of', { library: 'species' })] }], main: [{ type: 'body' }] },
+  },
+  background: { name: 'Background', icon: 'book', tag: 'background', layout: { columns: 'single', main: [{ type: 'body' }] } },
+  feat: {
+    name: 'Feat', icon: 'star', tag: 'feat',
+    layout: { columns: 'side-right', flow: 'wrap', side: [{ type: 'fields', title: 'Feat', fields: [f('kind', 'Kind'), f('prerequisite', 'Prerequisite')] }], main: [{ type: 'body' }] },
+  },
+  condition: { name: 'Condition', icon: 'flame', tag: 'condition', layout: { columns: 'single', main: [{ type: 'body' }] } },
   location: {
     name: 'Location', icon: 'map-pin', tag: 'location',
     layout: {

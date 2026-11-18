@@ -1,6 +1,7 @@
 import crypto from 'node:crypto'
 import { db, now } from './db.js'
-import { ensureHeadingIds, extract, extractTodos, type DocNode } from './doc.js'
+import { ensureHeadingIds, extract, extractTodos, statblockRefs, type DocNode } from './doc.js'
+import { dataRefs, propsStatData, type Ref } from './refs.js'
 
 export const uid = () => crypto.randomUUID()
 
@@ -60,11 +61,12 @@ export function applyContent(p: PageRow, doc: DocNode) {
   })()
 }
 
-export interface FieldRef { name: string; libKey?: string; pageId?: string }
+export type FieldRef = Ref
 
-/** Entries of linked fields in a page's data (class, species, spells...). Plain-text entries carry no link and are left out. */
+/** Entries of linked fields in a page's data (class, species, spells...), also inside stat block slots. Plain-text entries carry no link and are left out. */
 export function fieldRefs(props: any): FieldRef[] {
   const out: FieldRef[] = []
+  for (const d of propsStatData(props)) out.push(...dataRefs(d))
   for (const v of Object.values(props?.data ?? {})) {
     if (!Array.isArray(v)) continue
     for (const r of v) {
@@ -97,7 +99,7 @@ export function reindexLinks(pageId: string, workspaceId: string, doc: DocNode, 
     const row = db.prepare('SELECT props FROM pages WHERE id = ?').get(pageId) as { props: string } | undefined
     try { props = row ? JSON.parse(row.props) : {} } catch { props = {} }
   }
-  for (const r of fieldRefs(props)) {
+  for (const r of [...fieldRefs(props), ...statblockRefs(doc)]) {
     if (r.libKey) ins.run(pageId, null, r.name, null, 0, r.libKey)
     else if (r.pageId && db.prepare('SELECT 1 FROM pages WHERE id = ? AND workspace_id = ? AND deleted_at IS NULL').get(r.pageId, workspaceId)) ins.run(pageId, r.pageId, r.name, null, 0, null)
   }

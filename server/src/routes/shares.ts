@@ -54,6 +54,11 @@ function publicDoc(page: PageRow, doc: DocNode, depth = 0): DocNode {
       return inner.content?.length ? [{ type: 'blockquote', content: inner.content }] : []
     }
     if (n.type === 'todo') return []
+    if (n.type === 'statblock' && n.attrs?.data) {
+      // the links of linked fields are private; the shown text stays
+      const data = Object.fromEntries(Object.entries(n.attrs.data as Record<string, unknown>).filter(([k]) => !k.endsWith(':refs')))
+      return [{ ...n, attrs: { ...n.attrs, data } }]
+    }
     if (n.type === 'image' && typeof n.attrs?.src === 'string') {
       const m = UPLOAD_URL.exec(n.attrs.src)
       return [{ ...n, attrs: { ...n.attrs, src: m ? `/api/public/img/${m[1]}` : '' } }]

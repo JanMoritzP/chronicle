@@ -7,6 +7,7 @@ import { config } from '../config.js'
 import { db, now } from '../db.js'
 import type { DocNode } from '../doc.js'
 import { recordActivity, reindexLinks, relinkByName, setTags, uid, type PageRow } from '../pages.js'
+import { rewriteDataRefs, type Ref } from '../refs.js'
 
 const EXT: Record<string, string> = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/webp': '.webp', 'image/gif': '.gif', 'image/avif': '.avif' }
 const UPLOAD_URL = /^\/api\/uploads\/([0-9a-f-]{36})$/
@@ -142,8 +143,16 @@ export async function copyRoutes(app: FastifyInstance) {
       return nid
     }
 
+    // linked stat block fields: pages that were copied follow, a page that stays behind leaves only its name
+    const carryRef = (r: Ref): Ref | null => {
+      if (!r.pageId) return null
+      return idMap.has(r.pageId) ? { ...r, pageId: idMap.get(r.pageId)! } : { name: r.name, ...(r.libKey ? { libKey: r.libKey } : {}) }
+    }
     const rewrite = (n: DocNode) => {
-      if (n.type === 'statblock' && n.attrs) n.attrs.template = copyTemplate(n.attrs.template)
+      if (n.type === 'statblock' && n.attrs) {
+        n.attrs.template = copyTemplate(n.attrs.template)
+        rewriteDataRefs(n.attrs.data, carryRef)
+      }
       if ((n.type === 'wikilink' || n.type === 'embed') && n.attrs) {
         const old = n.attrs.pageId as string | null
         if (old && idMap.has(old)) n.attrs.pageId = idMap.get(old)
@@ -178,7 +187,7 @@ export async function copyRoutes(app: FastifyInstance) {
               if (Array.isArray(v)) {
                 // linked fields: a page that stays behind leaves only its name
                 for (const r of v) if (r && typeof r === 'object' && typeof r.pageId === 'string') { if (idMap.has(r.pageId)) r.pageId = idMap.get(r.pageId); else delete r.pageId }
-              } else if (v && typeof v === 'object' && typeof v.template === 'string') v.template = copyTemplate(v.template)
+              } else if (v && typeof v === 'object' && typeof v.template === 'string') { v.template = copyTemplate(v.template); rewriteDataRefs(v.data, carryRef) }
               else if (typeof v === 'string') props.data[k] = copyUpload(v)
             }
           }

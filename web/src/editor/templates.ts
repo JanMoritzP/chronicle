@@ -1,8 +1,9 @@
 import { parse as parseYaml, stringify as toYaml } from 'yaml'
-import type { StatTemplateRow } from '../types'
+import { LIBRARY_CATEGORIES } from '../lib/library'
+import type { LibraryCategory, StatTemplateRow } from '../types'
 
 // Stat templates are plain data: the built-in ones below, plus any the user designs per world.
-export type FieldType = 'text' | 'number' | 'checkbox' | 'select' | 'long'
+export type FieldType = 'text' | 'number' | 'checkbox' | 'select' | 'long' | 'link'
 export interface Field {
   key: string
   label: string
@@ -12,6 +13,10 @@ export interface Field {
   placeholder?: string
   /** number fields: also show the D&D ability modifier, e.g. 16 (+3) */
   mod?: boolean
+  /** link fields: the kind of library entry the field holds (class, spell...) */
+  library?: LibraryCategory
+  /** link fields: several entries instead of one */
+  multi?: boolean
 }
 export type Section =
   | { kind: 'title'; key: string; placeholder?: string }
@@ -103,6 +108,50 @@ export const TEMPLATES: StatTemplate[] = [
     ],
   },
   {
+    id: '5e-spell',
+    name: '5e Spell',
+    builtin: true,
+    look: { ...CLASSIC_LOOK, width: 460 },
+    sections: [
+      { kind: 'title', key: 'name', placeholder: 'Spell name' },
+      { kind: 'subtitle', key: 'sub', placeholder: '3rd-level evocation' },
+      { kind: 'rule' },
+      {
+        kind: 'rows',
+        fields: [
+          { key: 'time', label: 'Casting Time', placeholder: '1 action' },
+          { key: 'range', label: 'Range', placeholder: '150 feet' },
+          { key: 'components', label: 'Components', placeholder: 'V, S, M (a ball of bat guano and sulfur)' },
+          { key: 'duration', label: 'Duration', placeholder: 'Instantaneous' },
+          { key: 'classes', label: 'Classes', type: 'link', library: 'class', multi: true },
+        ],
+      },
+      { kind: 'rule' },
+      { kind: 'long', key: 'desc', placeholder: 'What the spell does…' },
+      { kind: 'long', key: 'higher', heading: 'At Higher Levels' },
+    ],
+  },
+  {
+    id: '5e-item',
+    name: '5e Item',
+    builtin: true,
+    look: { ...CLASSIC_LOOK, width: 460 },
+    sections: [
+      { kind: 'title', key: 'name', placeholder: 'Item name' },
+      { kind: 'subtitle', key: 'sub', placeholder: 'Wondrous item, rare (requires attunement)' },
+      { kind: 'rule' },
+      {
+        kind: 'rows',
+        fields: [
+          { key: 'ac', label: 'Armor Class' }, { key: 'damage', label: 'Damage', placeholder: '1d8 slashing' }, { key: 'properties', label: 'Properties' },
+          { key: 'strength', label: 'Strength' }, { key: 'stealth', label: 'Stealth' }, { key: 'cost', label: 'Cost' }, { key: 'weight', label: 'Weight' },
+        ],
+      },
+      { kind: 'rule' },
+      { kind: 'long', key: 'desc', placeholder: 'What the item does…' },
+    ],
+  },
+  {
     id: '5e-character',
     name: '5e Player Character',
     builtin: true,
@@ -114,7 +163,9 @@ export const TEMPLATES: StatTemplate[] = [
       {
         kind: 'rows',
         fields: [
-          { key: 'player', label: 'Player' }, { key: 'background', label: 'Background' }, { key: 'alignment', label: 'Alignment' },
+          { key: 'player', label: 'Player' }, { key: 'species', label: 'Species', type: 'link', library: 'species' },
+          { key: 'classes', label: 'Class', type: 'link', library: 'class', multi: true },
+          { key: 'background', label: 'Background', type: 'link', library: 'background' }, { key: 'alignment', label: 'Alignment' },
           { key: 'ac', label: 'Armor Class' }, { key: 'hp', label: 'Hit Points' }, { key: 'speed', label: 'Speed' }, { key: 'prof', label: 'Proficiency' },
         ],
       },
@@ -123,6 +174,7 @@ export const TEMPLATES: StatTemplate[] = [
       { kind: 'rule' },
       { kind: 'rows', fields: [{ key: 'saves', label: 'Saving Throws' }, { key: 'skills', label: 'Skills' }, { key: 'languages', label: 'Languages' }, { key: 'tools', label: 'Tools' }] },
       { kind: 'rule' },
+      { kind: 'rows', fields: [{ key: 'feats', label: 'Feats', type: 'link', library: 'feat', multi: true }, { key: 'spells', label: 'Spells', type: 'link', library: 'spell', multi: true }] },
       { kind: 'long', key: 'features', heading: 'Features', placeholder: 'Class & racial features…' },
       { kind: 'long', key: 'attacks', heading: 'Attacks & Spells' },
       { kind: 'long', key: 'gear', heading: 'Equipment' },
@@ -144,7 +196,7 @@ export const TEMPLATES: StatTemplate[] = [
 
 export const templateById = (id: string) => TEMPLATES.find((t) => t.id === id)
 
-const FIELD_TYPES: FieldType[] = ['text', 'number', 'checkbox', 'select', 'long']
+const FIELD_TYPES: FieldType[] = ['text', 'number', 'checkbox', 'select', 'long', 'link']
 const str = (v: any) => (v == null ? '' : String(v))
 const opt = (v: any) => (v == null || v === '' ? undefined : String(v))
 
@@ -158,6 +210,12 @@ function field(raw: any, where: string): Field {
   if (f.type === 'select') f.options = Array.isArray(raw.options) ? raw.options.map(str).filter(Boolean) : str(raw.options).split(',').map((s) => s.trim()).filter(Boolean)
   if (opt(raw.placeholder)) f.placeholder = str(raw.placeholder)
   if (raw.mod) f.mod = true
+  if (f.type === 'link') {
+    const library = LIBRARY_CATEGORIES.find((c) => c.id === raw.library)?.id
+    if (!library) throw new Error(`${where}: a link field needs library: ${LIBRARY_CATEGORIES.map((c) => c.id).join(' | ')}`)
+    f.library = library
+    if (raw.multi === true) f.multi = true
+  }
   return f
 }
 

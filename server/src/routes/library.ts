@@ -5,6 +5,7 @@ import { db, now } from '../db.js'
 import type { DocNode } from '../doc.js'
 import { libraryEntry, libraryIndex, libraryStatus, refreshLibrary } from '../library.js'
 import { applyContent, type PageRow } from '../pages.js'
+import { propsStatData, rewriteDataRefs } from '../refs.js'
 
 export async function libraryRoutes(app: FastifyInstance) {
   app.get('/api/library/status', { preHandler: requireUser }, async () => libraryStatus())
@@ -50,8 +51,12 @@ export async function libraryRoutes(app: FastifyInstance) {
           if (r && r.libKey === b.data.libKey) { delete r.libKey; r.pageId = target.id; r.name = target.title; fieldHit++ }
         }
       }
+      // stat block slots of special pages
+      const moveRef = (r: { libKey?: string }) => (r.libKey === b.data.libKey ? { name: target.title, pageId: target.id } : null)
+      for (const d of propsStatData(props)) fieldHit += rewriteDataRefs(d, moveRef)
       if (fieldHit) db.prepare('UPDATE pages SET props = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(props), now(), p.id)
       const walk = (n: DocNode) => {
+        if (n.type === 'statblock') hit += rewriteDataRefs(n.attrs?.data, moveRef)
         if (n.type === 'wikilink' && n.attrs?.libKey === b.data.libKey) {
           const shown = String(n.attrs.alias || n.attrs.name || '')
           n.attrs = { ...n.attrs, name: target.title, pageId: target.id, libKey: null, anchor: null, anchorText: null, alias: shown && shown.toLowerCase() !== target.title.toLowerCase() ? shown : null }

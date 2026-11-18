@@ -101,7 +101,7 @@ function block(n: DocNode, ctx: MdContext): string[] {
     case 'statblock': {
       const a = n.attrs ?? {}
       const data = (a.data ?? {}) as Record<string, string>
-      const lines = Object.entries(data).filter(([, v]) => v !== '' && v != null).map(([k, v]) => `${k}: ${String(v).replace(/\n/g, ' ')}`)
+      const lines = Object.entries(data).filter(([k, v]) => v !== '' && v != null && !k.endsWith(':refs')).map(([k, v]) => `${k}: ${String(v).replace(/\n/g, ' ')}`)
       return ['```statblock ' + (a.template ?? ''), ...lines, '```']
     }
     default: return blocks(n.content, ctx)
