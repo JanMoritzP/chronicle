@@ -65,15 +65,16 @@ export function reindexLinks(pageId: string, workspaceId: string, doc: DocNode) 
   reindexTodos(pageId, workspaceId, doc)
   const ex = extract(doc)
   db.prepare('DELETE FROM links WHERE source_id = ?').run(pageId)
-  const ins = db.prepare('INSERT INTO links(source_id,target_id,target_name,anchor,embed) VALUES(?,?,?,?,?)')
+  const ins = db.prepare('INSERT INTO links(source_id,target_id,target_name,anchor,embed,lib_key) VALUES(?,?,?,?,?,?)')
   for (const l of ex.links) {
+    if (l.libKey) { ins.run(pageId, null, l.targetName, null, 0, l.libKey); continue }
     let target = l.targetId
     if (target) {
       const ok = db.prepare('SELECT 1 FROM pages WHERE id = ? AND workspace_id = ?').get(target, workspaceId)
       if (!ok) target = null
     }
     if (!target) target = resolveTarget(workspaceId, l.targetName)
-    ins.run(pageId, target, l.targetName, l.anchor, l.embed ? 1 : 0)
+    ins.run(pageId, target, l.targetName, l.anchor, l.embed ? 1 : 0, null)
   }
   return ex
 }
@@ -83,7 +84,7 @@ export function relinkByName(workspaceId: string, pageId: string, title: string,
   const names = [title, ...aliases].map((s) => s.trim().toLowerCase()).filter(Boolean)
   if (!names.length) return
   const upd = db.prepare(
-    `UPDATE links SET target_id = ? WHERE target_id IS NULL AND lower(trim(target_name)) = ?
+    `UPDATE links SET target_id = ? WHERE target_id IS NULL AND lib_key IS NULL AND lower(trim(target_name)) = ?
      AND source_id IN (SELECT id FROM pages WHERE workspace_id = ?)`,
   )
   for (const n of names) upd.run(pageId, n, workspaceId)

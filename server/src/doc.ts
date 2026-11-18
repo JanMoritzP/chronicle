@@ -12,6 +12,8 @@ export interface ExtractedLink {
   targetName: string
   anchor: string | null
   embed: boolean
+  /** set for links into the Open5e library; these never resolve to a page */
+  libKey: string | null
 }
 
 export interface Extracted {
@@ -88,6 +90,7 @@ export function extract(doc: DocNode): Extracted {
         targetName: String(n.attrs?.name ?? ''),
         anchor: n.attrs?.anchor ?? null,
         embed: n.type === 'embed',
+        libKey: n.type === 'wikilink' && n.attrs?.libKey ? String(n.attrs.libKey) : null,
       })
     }
     if (n.type === 'heading') {

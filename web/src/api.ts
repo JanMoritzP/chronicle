@@ -59,6 +59,7 @@ export const api = {
   libraryStatus: () => req<LibraryStatus>('GET', '/api/library/status'),
   libraryRefresh: () => req<LibraryStatus>('POST', '/api/library/refresh'),
   libraryIndex: () => req<LibraryIndex>('GET', '/api/library/index'),
+  libraryRepoint: (ws: string, libKey: string, pageId: string) => req<{ changed: number }>('POST', `/api/workspaces/${ws}/library-links/repoint`, { libKey, pageId }),
   libraryEntry: (key: string) => req<LibraryEntry>('GET', `/api/library/entries/${encodeURIComponent(key)}`),
   todos: (ws: string) => req<TodoItem[]>('GET', `/api/workspaces/${ws}/todos`),
   patchTodo: async (pageId: string, todoId: string, b: { done?: boolean; message?: string }) => {

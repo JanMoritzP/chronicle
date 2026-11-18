@@ -75,6 +75,10 @@ export function libraryIndex() {
   return { version: at ? Number(at.v) : 0, sources, rows }
 }
 
+export function libraryHas(key: string): boolean {
+  return !!open().prepare('SELECT 1 FROM entries WHERE key = ?').get(key)
+}
+
 export function libraryEntry(key: string) {
   const db = open()
   const r = db.prepare('SELECT key, category, name, source, data FROM entries WHERE key = ?').get(key) as { key: string; category: string; name: string; source: string; data: string } | undefined

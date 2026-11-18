@@ -27,7 +27,7 @@ function pageDerived(id: string) {
 
 function linksOf(sourceId: string) {
   return db.prepare(
-    'SELECT source_id AS sourceId, target_id AS targetId, target_name AS targetName, anchor, embed FROM links WHERE source_id = ?',
+    'SELECT source_id AS sourceId, target_id AS targetId, target_name AS targetName, anchor, embed, lib_key AS libKey FROM links WHERE source_id = ?',
   ).all(sourceId)
 }
 
@@ -100,7 +100,7 @@ export async function contentRoutes(app: FastifyInstance) {
     const tagMap = new Map<string, string[]>()
     for (const t of tagRows) (tagMap.get(t.page_id) ?? tagMap.set(t.page_id, []).get(t.page_id)!).push(t.tag)
     const links = db.prepare(
-      `SELECT l.source_id AS sourceId, l.target_id AS targetId, l.target_name AS targetName, l.anchor, l.embed
+      `SELECT l.source_id AS sourceId, l.target_id AS targetId, l.target_name AS targetName, l.anchor, l.embed, l.lib_key AS libKey
        FROM links l JOIN pages p ON p.id = l.source_id WHERE p.workspace_id = ? AND p.deleted_at IS NULL`,
     ).all(ws)
     const folders = db.prepare(
@@ -123,7 +123,7 @@ export async function contentRoutes(app: FastifyInstance) {
           id: p.id, folderId: p.folder_id, title: p.title, icon: p.icon,
           aliases: JSON.parse(p.aliases), tags: tagMap.get(p.id) ?? [],
           outline: JSON.parse(p.outline), text: p.text.slice(0, 4000),
-          hasStats: !!p.has_stats, portrait: portraitOf(p, props), type: props?.type ?? null,
+          hasStats: !!p.has_stats, portrait: portraitOf(p, props), type: props?.type ?? null, library: props?.library ?? null,
           wordCount: p.word_count, createdAt: p.created_at, updatedAt: p.updated_at, todos: todoMap.get(p.id) ?? 0,
         }
       }),
@@ -133,7 +133,7 @@ export async function contentRoutes(app: FastifyInstance) {
   app.get('/api/workspaces/:ws/links', { preHandler: requireUser }, async (req) => {
     const { ws } = req.params as { ws: string }
     return db.prepare(
-      `SELECT l.source_id AS sourceId, l.target_id AS targetId, l.target_name AS targetName, l.anchor, l.embed
+      `SELECT l.source_id AS sourceId, l.target_id AS targetId, l.target_name AS targetName, l.anchor, l.embed, l.lib_key AS libKey
        FROM links l JOIN pages p ON p.id = l.source_id WHERE p.workspace_id = ? AND p.deleted_at IS NULL`,
     ).all(ws)
   })

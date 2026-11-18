@@ -262,6 +262,10 @@ const migrations: string[] = [
   `
   ALTER TABLE workspaces ADD COLUMN settings TEXT NOT NULL DEFAULT '{}';
   `,
+  `
+  ALTER TABLE links ADD COLUMN lib_key TEXT;
+  CREATE INDEX links_lib ON links(lib_key);
+  `,
 ]
 
 export const SCHEMA_VERSION = migrations.length

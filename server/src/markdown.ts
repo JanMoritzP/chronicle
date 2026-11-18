@@ -48,7 +48,8 @@ function inline(nodes: DocNode[] | undefined, ctx: MdContext): string {
         return wrap(text, marks.filter((m) => m.type !== 'code'))
       }
       case 'hardBreak': return '  \n'
-      case 'wikilink': return wikiSyntax(n.attrs ?? {}, false, ctx.titles)
+      // library entries are not pages of the export, so they stay plain text
+      case 'wikilink': if (n.attrs?.libKey) return esc(String(n.attrs.alias || n.attrs.name || '')); return wikiSyntax(n.attrs ?? {}, false, ctx.titles)
       case 'image': return image(n, ctx)
       case 'todo': return n.attrs?.done ? `**DONE:** ~~${esc(String(n.attrs?.message ?? ''))}~~` : `**TODO:** ${esc(String(n.attrs?.message ?? ''))}`
       default: return inline(n.content, ctx)

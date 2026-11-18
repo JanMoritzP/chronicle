@@ -54,6 +54,54 @@ check('second refresh starts', second.status === 200)
 for (;;) { await new Promise((res) => setTimeout(res, 3000)); r = await call('GET', '/api/library/status'); if (!r.data.running) break }
 check('second refresh keeps the same count', r.data.count === status.count && !r.data.error)
 
+// ---- links from pages into the library ----
+const key = goblins[0][0]
+const fire = idx.rows.find((x) => x[2] === 'Fireball' && x[1] === 'spell')[0]
+const ws = (await call('POST', '/api/workspaces', { name: 'lib-links-' + Math.floor(Math.random() * 1e6) })).data.id
+const ws2 = (await call('POST', '/api/workspaces', { name: 'lib-other-' + Math.floor(Math.random() * 1e6) })).data.id
+const link = (attrs) => ({ type: 'text', text: 'x' }, { type: 'wikilink', attrs: { name: 'Goblin', pageId: null, anchor: null, anchorText: null, alias: null, ...attrs } })
+const docWith = (...nodes) => ({ type: 'doc', content: [{ type: 'paragraph', content: nodes }] })
+r = await call('POST', `/api/workspaces/${ws}/pages`, { title: 'Ambush', content: docWith(link({ libKey: key }), link({ libKey: key, alias: 'the little thing' })) })
+const ambush = r.data
+r = await call('GET', `/api/workspaces/${ws}/links`)
+const rows = r.data.filter((l) => l.sourceId === ambush.id)
+check('library links are stored with their key and no target page', rows.length === 2 && rows.every((l) => l.libKey === key && l.targetId === null), JSON.stringify(rows))
+
+r = await call('POST', `/api/workspaces/${ws}/pages`, { title: 'Goblin' })
+const named = r.data
+r = await call('GET', `/api/workspaces/${ws}/links`)
+check('a page named like the entry does not capture the library links', r.data.filter((l) => l.sourceId === ambush.id).every((l) => l.targetId === null && l.libKey === key))
+
+// public sharing
+r = await call('POST', `/api/pages/${ambush.id}/share`)
+const token = r.data.token
+const pub = await (await fetch(base + '/api/public/' + token)).json()
+const marks = JSON.stringify(pub.content)
+check('shared page links the library entry through its own address', marks.includes('?lib=' + encodeURIComponent(key)), marks.slice(0, 160))
+let pr = await fetch(base + '/api/public/library/' + encodeURIComponent(key))
+check('a linked library entry is public', pr.status === 200 && (await pr.json()).name === 'Goblin')
+pr = await fetch(base + '/api/public/library/' + encodeURIComponent(fire))
+check('an entry no shared page links to stays private', pr.status === 404)
+pr = await fetch(base + '/api/public/library/' + encodeURIComponent('../x'))
+check('bad public key is refused', pr.status === 404)
+
+// import: the entry becomes a page, links are moved to it
+r = await call('POST', `/api/workspaces/${ws}/pages`, { title: 'Goblin (library)', props: { library: key } })
+const imported = r.data
+r = await call('GET', `/api/workspaces/${ws}/bootstrap`)
+check('imported page remembers its library entry', r.data.pages.find((p) => p.id === imported.id)?.library === key)
+r = await call('POST', `/api/workspaces/${ws2}/library-links/repoint`, { libKey: key, pageId: imported.id })
+check('repoint refuses a page of another world', r.status === 404)
+r = await call('POST', `/api/workspaces/${ws}/library-links/repoint`, { libKey: key, pageId: imported.id })
+check('repoint changes the page that linked', r.status === 200 && r.data.changed === 1, JSON.stringify(r.data))
+r = await call('GET', '/api/pages/' + ambush.id)
+const nodes = JSON.stringify(r.data.content)
+check('links now name the page and keep the shown text', nodes.includes(imported.id) && !nodes.includes('libKey":"' + key) && nodes.includes('the little thing'))
+r = await call('GET', `/api/workspaces/${ws}/links`)
+check('link index follows the repoint', r.data.filter((l) => l.sourceId === ambush.id).every((l) => l.targetId === imported.id && !l.libKey))
+pr = await fetch(base + '/api/public/library/' + encodeURIComponent(key))
+check('after the repoint the entry is no longer public', pr.status === 404)
+
 const anon = await fetch(base + '/api/library/index')
 check('library needs a login', anon.status === 401)
 console.log(wasEmpty ? 'First download done.' : 'Library already existed.')

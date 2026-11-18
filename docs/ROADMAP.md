@@ -144,7 +144,7 @@ A World Anvil-style worldbuilding notebook. Self-hosted, React frontend, Node + 
 - Rides in the bootstrap (and the IndexedDB cache) and in `world.json` / backup restore. Copying between worlds does not carry custom page types: their pages become plain pages, while stat block forms are matched by name.
 - API: `POST /api/workspaces/:ws/page-types`, `PATCH|DELETE /api/page-types/:id` (editors and owners; viewers read only). Tests: `scripts/smoke-pagetypes.mjs` (11 checks), `scripts/test-layout.ts` (parse/serialize round trip, key handling; 16 checks).
 
-## Library (Open5e, phase 1 built)
+## Library (Open5e, phases 1 and 2 built)
 
 A read-only reference library of everything Open5e publishes (api.open5e.com/v2): creatures, magic items, equipment (weapons and armor are part of it), spells, classes and subclasses, species, backgrounds, feats and conditions. It belongs to the server, not to a world, and is opened at any time from the sidebar ("Library") or the command list.
 
@@ -161,8 +161,14 @@ A read-only reference library of everything Open5e publishes (api.open5e.com/v2)
 
 **API.** `GET /api/library/status`, `GET /api/library/index`, `GET /api/library/entries/:id` (any signed-in user), `POST /api/library/refresh` (owner, runs in the background, the client polls the status). Tests: `node scripts/smoke-library.mjs <url> gm <password>` (needs internet).
 
+**Links to library entries (phase 2).**
+- Typing `{{` shows library entries under "Library" after the pages (from two letters on, five at most, source and kind shown). Picking one inserts a wikilink with the attribute `libKey` (the entry id) and no page. It is drawn with a dotted underline and opens the entry in the Library view (Ctrl for a new tab, Shift for the split view). Entries already imported into the world are left out of the popup because their page shows up instead.
+- `links.lib_key` (migration 12) holds these links; `target_id` stays empty and they are never matched by name, so a page called "Goblin" does not capture a link to the library Goblin, and they are not counted as missing pages or ghosts when copying.
+- The Library view lists "Linked from": pages of the current world that link to the entry. Links are per world, the library is global.
+- Importing sets `props.library` on the page, so an entry becomes a page only once per world (the button then reads "Open the page"). If pages link to the entry, a dialog asks whether to point those links at the new page. `POST /api/workspaces/:ws/library-links/repoint` rewrites the link nodes (keeping a differing shown text as the alias) and reindexes the pages like a normal save.
+- Public pages: a library link on a shared page is a link to `/s/<token>?lib=<id>`, which shows the entry read-only. `GET /api/public/library/:id` answers only for entries that a shared page links to, so the library is not browsable. Markdown export writes a library link as plain text.
+
 **Planned.**
-- Phase 2: link to library entries from pages (`{{Fireball}}` autocomplete shows library entries next to pages, with the source as a badge), backlinks on library entries, and "Import to this world" that offers to repoint existing links at the new page. Public shared pages show a linked library entry as a read-only page, served only for entries linked from the shared page.
 - Phase 3: a linked-field type for special pages (class, species, background as one link, spells and feats as several) so character sheets autocomplete from the library.
 - Items and spells have no stat block form yet; they import as plain text.
 

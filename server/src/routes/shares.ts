@@ -6,6 +6,7 @@ import { requireEditor, requireUser } from '../auth.js'
 import { config } from '../config.js'
 import { db, now } from '../db.js'
 import { sliceSection, type DocNode } from '../doc.js'
+import { libraryEntry, libraryHas } from '../library.js'
 import { resolveTarget, type PageRow } from '../pages.js'
 
 const EXT: Record<string, string> = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/webp': '.webp', 'image/gif': '.gif', 'image/avif': '.avif' }
@@ -32,6 +33,12 @@ function publicDoc(page: PageRow, doc: DocNode, depth = 0): DocNode {
     if (n.type === 'wikilink') {
       const a = n.attrs ?? {}
       const label = String(a.alias || a.name || 'link')
+      if (a.libKey) {
+        // a library entry linked from a shared page is readable too, through the same page's address
+        const t = tokenOf(page.id)
+        if (!t || !libraryHas(String(a.libKey))) return [{ type: 'text', text: label }]
+        return [{ type: 'text', text: label, marks: [{ type: 'link', attrs: { href: `/s/${t}?lib=${encodeURIComponent(String(a.libKey))}`, target: null, rel: null } }] }]
+      }
       const target = (a.pageId && (db.prepare('SELECT id FROM pages WHERE id = ? AND workspace_id = ? AND deleted_at IS NULL').get(a.pageId, ws) as { id: string } | undefined)?.id) || resolveTarget(ws, String(a.name ?? ''))
       const token = target ? tokenOf(target) : null
       if (!token) return [{ type: 'text', text: label }]
@@ -107,6 +114,19 @@ export async function shareRoutes(app: FastifyInstance) {
       portrait: portrait ? `/api/public/img/${portrait}` : null,
       content: publicDoc(p, JSON.parse(p.content)),
     }
+  })
+
+  /** A library entry, but only one that a shared page links to. */
+  app.get('/api/public/library/:key', limit, async (req, reply) => {
+    const { key } = req.params as { key: string }
+    if (!/^[\w.:-]{1,200}$/.test(key)) return reply.code(404).send({ error: 'not found' })
+    const used = db.prepare(
+      `SELECT 1 FROM shares s JOIN pages p ON p.id = s.page_id JOIN workspaces w ON w.id = p.workspace_id
+       WHERE p.deleted_at IS NULL AND w.deleted_at IS NULL AND instr(p.content, ?) > 0 LIMIT 1`,
+    ).get(`"libKey":"${key}"`)
+    const e = used ? libraryEntry(key) : null
+    if (!e) return reply.code(404).send({ error: 'This entry is not shared.' })
+    return e
   })
 
   app.get('/api/public/img/:id', limit, async (req, reply) => {

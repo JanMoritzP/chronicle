@@ -1,14 +1,13 @@
-import { BookPlus, Download, ExternalLink } from 'lucide-react'
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { BookPlus, Download } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../api'
-import { StatBlockBody, richText } from '../editor/StatBlock'
-import { templateById } from '../editor/templates'
-import { alertDialog } from '../lib/dialog'
+import { alertDialog, confirmDialog } from '../lib/dialog'
 import { highlight } from '../lib/fuzzy'
 import { LIBRARY_CATEGORIES, searchLibrary, useLibrary, type LibraryHit } from '../lib/library'
-import { creatureToStatBlock, entryDoc, entryText } from '../lib/open5e'
+import { creatureToStatBlock, entryDoc } from '../lib/open5e'
 import { useStore } from '../store'
 import type { LibraryCategory, LibraryEntry } from '../types'
+import { EntryBody } from './LibraryEntry'
 
 const entryCache = new Map<string, LibraryEntry>()
 async function fetchEntry(key: string): Promise<LibraryEntry> {
@@ -19,15 +18,33 @@ async function fetchEntry(key: string): Promise<LibraryEntry> {
   return e
 }
 
-/** Creatures become Monster pages with the stat block filled in; everything else becomes a normal page. */
+/**
+ * Creatures become Monster pages with the stat block filled in; everything else becomes a normal page.
+ * Links that pointed at the library entry can be moved to the new page. An entry is only imported once per world.
+ */
 export async function addToWorld(key: string): Promise<void> {
-  const e = await fetchEntry(key)
   const st = useStore.getState()
-  if (e.category === 'creature') {
-    await st.createPage({ title: e.name, type: 'monster', props: { data: { main: creatureToStatBlock(e) } } })
-  } else {
-    await st.createPage({ title: e.name, content: entryDoc(e) })
+  const existing = st.data.pages.find((p) => p.library === key)
+  if (existing) { st.navigate({ type: 'page', id: existing.id }); return }
+  const e = await fetchEntry(key)
+  const linking = new Set(st.data.links.filter((l) => l.libKey === key).map((l) => l.sourceId)).size
+  const library = key
+  const page = e.category === 'creature'
+    ? await st.createPage({ title: e.name, type: 'monster', props: { library, data: { main: creatureToStatBlock(e) } }, open: false })
+    : await st.createPage({ title: e.name, content: entryDoc(e), props: { library }, open: false })
+  if (!page) return
+  if (linking > 0) {
+    const ok = await confirmDialog(
+      `${linking === 1 ? '1 page links' : `${linking} pages link`} to “${e.name}” in the library. Point ${linking === 1 ? 'that link' : 'those links'} at your new page instead?`,
+      { title: 'Update links', okLabel: 'Point links to the page' },
+    )
+    const ws = useStore.getState().wsId
+    if (ok && ws) {
+      await api.libraryRepoint(ws, key, page.id)
+      await useStore.getState().refresh()
+    }
   }
+  useStore.getState().navigate({ type: 'page', id: page.id })
 }
 
 function useLibraryReady() {
@@ -128,50 +145,39 @@ export function LibraryDialog() {
   )
 }
 
-function Markdownish({ text }: { text: string }) {
-  const lines = text.split('\n')
-  const out: React.ReactNode[] = []
-  for (let i = 0; i < lines.length;) {
-    if (lines[i].startsWith('* ')) {
-      const items: string[] = []
-      while (i < lines.length && lines[i].startsWith('* ')) items.push(lines[i++].slice(2))
-      out.push(<ul key={i}>{items.map((t, k) => <li key={k}>{richText(t)}</li>)}</ul>)
-    } else {
-      if (lines[i].trim()) out.push(<p key={i}>{richText(lines[i])}</p>)
-      i++
-    }
-  }
-  return <>{out}</>
-}
-
 function EntryDetail({ entry }: { entry: LibraryEntry }) {
   const readOnly = useStore((s) => s.user?.role === 'viewer')
+  const pages = useStore((s) => s.data.pages)
+  const links = useStore((s) => s.data.links)
+  const navigate = useStore((s) => s.navigate)
   const [busy, setBusy] = useState(false)
-  const t = useMemo(() => entryText(entry), [entry])
-  const sb = useMemo(() => (entry.category === 'creature' ? creatureToStatBlock(entry) : null), [entry])
-  const template = sb ? templateById(sb.template) : undefined
+  const imported = pages.find((p) => p.library === entry.key)
+  const linkedFrom = useMemo(() => {
+    const ids = new Set(links.filter((l) => l.libKey === entry.key).map((l) => l.sourceId))
+    return pages.filter((p) => ids.has(p.id))
+  }, [links, pages, entry.key])
   return (
     <div className="lib-detail">
       <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
         <h2 style={{ margin: 0 }} className="grow">{entry.name}</h2>
-        {!readOnly && (
+        {imported ? (
+          <button className="btn row" title="This entry is already a page in this world" onClick={() => navigate({ type: 'page', id: imported.id })}><BookPlus size={15} /> Open the page</button>
+        ) : !readOnly && (
           <button className="btn primary row" disabled={busy} onClick={async () => {
             setBusy(true)
             try { await addToWorld(entry.key) } catch (e: any) { alertDialog(e.message) } finally { setBusy(false) }
           }}><BookPlus size={15} /> Add to this world</button>
         )}
       </div>
-      {sb && template ? <StatBlockBody template={template} data={sb.data} /> : (
-        <>
-          {t.subtitle && <p className="muted"><i>{t.subtitle}</i></p>}
-          {t.facts.length > 0 && <dl className="lib-facts">{t.facts.map(([k, v]) => <Fragment key={k}><dt>{k}</dt><dd>{v}</dd></Fragment>)}</dl>}
-          {t.sections.map((s, i) => <section key={i}>{s.heading && <h3>{s.heading}</h3>}<Markdownish text={s.text} /></section>)}
-        </>
+      <EntryBody entry={entry} />
+      {linkedFrom.length > 0 && (
+        <div className="lib-linked">
+          <h3>Linked from</h3>
+          <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+            {linkedFrom.map((p) => <button key={p.id} className="lib-chip" onClick={() => navigate({ type: 'page', id: p.id })}>{p.title || 'Untitled'}</button>)}
+          </div>
+        </div>
       )}
-      <p className="muted lib-credit">
-        Source: {entry.sourceName}{entry.license ? `. ${entry.license}.` : ''}{' '}
-        {entry.permalink && <a href={entry.permalink} target="_blank" rel="noreferrer noopener" title="Open the source">Open source <ExternalLink size={12} /></a>}
-      </p>
     </div>
   )
 }

@@ -79,7 +79,7 @@ export async function copyRoutes(app: FastifyInstance) {
         cur.mentions++
         linked.set(r.id, cur)
       }
-      ghosts += (db.prepare('SELECT COUNT(*) n FROM links WHERE source_id = ? AND target_id IS NULL').get(p.id) as { n: number }).n
+      ghosts += (db.prepare('SELECT COUNT(*) n FROM links WHERE source_id = ? AND target_id IS NULL AND lib_key IS NULL').get(p.id) as { n: number }).n
     }
     const used = titlesIn(b.data.targetWorkspaceId)
     return {
@@ -224,7 +224,7 @@ export async function copyRoutes(app: FastifyInstance) {
     }
 
     const ghostNames = (db.prepare(
-      `SELECT COUNT(DISTINCT lower(target_name)) n FROM links WHERE target_id IS NULL AND source_id IN (${result.map(() => '?').join(',')})`,
+      `SELECT COUNT(DISTINCT lower(target_name)) n FROM links WHERE target_id IS NULL AND lib_key IS NULL AND source_id IN (${result.map(() => '?').join(',')})`,
     ).get(...result.map((r) => r.to)) as { n: number }).n
     return { workspaceId: target, pages: result, ghostLinks: ghosted, unresolvedNames: ghostNames, images: upMap.size }
   })

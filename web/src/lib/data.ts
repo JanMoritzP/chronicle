@@ -22,7 +22,7 @@ export function backlinksOf(links: LinkRow[], pageId: string) {
 export function unresolvedByName(links: LinkRow[]) {
   const m = new Map<string, Set<string>>()
   for (const l of links) {
-    if (l.targetId) continue
+    if (l.targetId || l.libKey) continue
     const k = l.targetName.trim()
     if (!k) continue
     ;(m.get(k) ?? m.set(k, new Set()).get(k)!).add(l.sourceId)

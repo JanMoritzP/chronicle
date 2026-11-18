@@ -2,11 +2,12 @@ import { Node, Extension, mergeAttributes, type Editor } from '@tiptap/core'
 import { NodeViewWrapper, ReactNodeViewRenderer, type NodeViewProps } from '@tiptap/react'
 import { Plugin, PluginKey, TextSelection } from '@tiptap/pm/state'
 import Suggestion from '@tiptap/suggestion'
-import { FilePlus2, FileText, Hash } from 'lucide-react'
+import { BookMarked, FilePlus2, FileText, Hash } from 'lucide-react'
 import { createElement } from 'react'
 import { useStore } from '../store'
 import { PageIcon } from '../components/TypeIcon'
 import { findPageByName } from '../lib/data'
+import { searchLibrary, useLibrary } from '../lib/library'
 import { parseLinkText, resolveLink, searchPages, searchSections } from '../lib/linkSearch'
 import { suggestRender, type SuggestItem } from './suggest'
 
@@ -18,7 +19,19 @@ function openNav(e: { ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }) {
 
 function WikilinkView({ node }: NodeViewProps) {
   const pages = useStore((s) => s.data.pages)
-  const { name, pageId, alias, anchor, anchorText } = node.attrs
+  const { name, pageId, alias, anchor, anchorText, libKey } = node.attrs
+  if (libKey) {
+    const go = (e: { preventDefault: () => void; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }) => {
+      e.preventDefault()
+      useStore.getState().navigate({ type: 'library', key: libKey }, openNav(e))
+    }
+    return (
+      <NodeViewWrapper as="span" className="wikilink lib" contentEditable={false} data-lib-key={libKey} title="Library entry" onClick={go}
+        onAuxClick={(e: React.MouseEvent) => { if (e.button === 1) go({ preventDefault: () => e.preventDefault(), ctrlKey: true, metaKey: false, shiftKey: false }) }}>
+        {alias || name || 'link'}
+      </NodeViewWrapper>
+    )
+  }
   const page = pageId ? pages.find((p) => p.id === pageId) : findPageByName(pages, name)
   const heading = page && anchor ? page.outline.find((h) => h.id === anchor) : undefined
   const section = heading?.text ?? anchorText
@@ -60,6 +73,7 @@ export const Wikilink = Node.create({
       anchor: { default: null },
       anchorText: { default: null },
       alias: { default: null },
+      libKey: { default: null },
     }
   },
   parseHTML() {
@@ -143,6 +157,22 @@ function wikiItems(editor: Editor, query: string): SuggestItem[] {
       icon: createElement(PageIcon, { page: h.page, size: 15 }),
       run: pick({ name: h.page.title, pageId: h.page.id, anchor: null, anchorText: null }),
     })
+  }
+  if (name.length >= 2) {
+    const lib = useLibrary.getState()
+    if (!lib.loaded) lib.load().catch(() => {})
+    const imported = new Set(useStore.getState().data.pages.map((p) => p.library).filter(Boolean))
+    for (const h of searchLibrary(lib.index, name, null, 12).filter((x) => !imported.has(x.row[0])).slice(0, 5)) {
+      items.push({
+        key: `l:${h.row[0]}`,
+        group: 'Library',
+        label: h.row[2],
+        sub: `${h.row[4]} · ${lib.index?.sources[h.row[3]] ?? h.row[3]}`,
+        indices: h.indices,
+        icon: createElement(BookMarked, { size: 15 }),
+        run: (range) => insertLink(editor, range, { name: h.row[2], pageId: null, anchor: null, anchorText: null, libKey: h.row[0] }),
+      })
+    }
   }
   if (name.length >= 2) {
     const secs: { page: any; h: any; score: number }[] = []

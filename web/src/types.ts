@@ -1,5 +1,7 @@
 export interface PageMeta {
   id: string
+  /** library entry this page was imported from */
+  library?: string | null
   folderId: string | null
   title: string
   icon: string | null
@@ -22,7 +24,7 @@ export interface TodoItem {
   createdAt: number; doneAt: number | null; pageTitle: string; pageIcon: string | null
 }
 export interface Folder { id: string; parentId: string | null; name: string; sort: number }
-export interface LinkRow { sourceId: string; targetId: string | null; targetName: string; anchor: string | null; embed: number }
+export interface LinkRow { sourceId: string; targetId: string | null; targetName: string; anchor: string | null; embed: number; /** set when the link points into the Open5e library */ libKey?: string | null }
 export interface Zettel { id: string; body: string; tags: string[]; createdAt: number; pageId: string | null; processedAt: number | null }
 export interface WorldSettings { newPageTodo: string }
 export interface Workspace { id: string; name: string; settings?: WorldSettings }
