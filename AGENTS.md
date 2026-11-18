@@ -41,7 +41,7 @@ Never test against the owner's real data directory.
 5. Stop it afterwards (`Get-Process node | Stop-Process`) and delete the temp data dir.
 
 ### Tests (all plain Node scripts; each prints PASS/FAIL and exits non-zero on failure)
-- API smoke tests against a running throwaway server: `node scripts/smoke-<area>.mjs http://localhost:3222 gm testpass123`. Areas: `auth`, `copy`, `export`, `maps`, `pagetypes`, `relations`, `sessions`, `share`, `stattemplates`, `templates`, `todos`, `worlds`, plus `smoke.mjs` (core).
+- API smoke tests against a running throwaway server: `node scripts/smoke-<area>.mjs http://localhost:3222 gm testpass123`. Areas: `auth`, `copy`, `export`, `library` (downloads the real Open5e data, needs internet), `maps`, `pagetypes`, `relations`, `sessions`, `share`, `stattemplates`, `templates`, `todos`, `worlds`, plus `smoke.mjs` (core).
 - Pure logic: `scripts/test-family.ts`, `scripts/test-time.ts` (bundle with esbuild, run with node).
 - Updater: `node scripts/test-update-logic.mjs` (no Electron), `node scripts/test-update-flow.mjs` (real Electron, fake GitHub; **unset `ELECTRON_RUN_AS_NODE` first**).
 - Desktop app: `node scripts/test-electron.mjs <server-url>`.
@@ -54,6 +54,7 @@ Never test against the owner's real data directory.
 - **Pages** store a TipTap JSON document. Page links are stored as page **ids**, so renames never break links. `pages.props` is a JSON bag: `props.type` = page type id, `props.data` = special-page field data, `props.portrait`.
 - **Special pages (page types).** Built-in: Person, Monster, Location. Custom ones live in the per-workspace `page_types` table (migration #9). The layout (zones top/side/main/bottom, blocks image/statblock/fields/body) is designed in `PageTypes.tsx` (a visual designer or the raw source) and stored twice: `source` (JSON/YAML/Markdown front matter) and normalized `definition`. Parsing, normalization, serialization and resolution are in `web/src/lib/pageTypes.ts` (`parseSource`, `normalizeLayout`, `layoutToSource`, `duplicateKeys`, `resolveTypes`, `typeOf`). A type may add a tag to its pages.
 - **Stat block templates.** Built-in plus custom (`stat_templates`, migration #10). Resolution: `web/src/editor/templates.ts` (`resolveTemplates`, `findTemplate`) and `web/src/editor/useTemplates.ts`. Known caveat: a Monster page's stat block is separate data from the editor's `/statblock` node.
+- **Library.** The Open5e reference data (creatures, spells, items, classes…) is global, not per world: `server/src/library.ts` keeps it in its own `DATA_DIR/library.db` (outside backups) and logs refresh changes to `library.log`. Entry ids are `<category>:<open5e key>`. Mapping to Chronicle data is in `web/src/lib/open5e.ts`; the UI is `components/Library.tsx`. See ROADMAP "Library".
 - **Bootstrap.** `GET /api/workspaces/:ws/bootstrap` returns everything the client needs for one world (pages meta, folders, links, zettels, templates, pageTypes, statTemplates…). New per-world lists should ride in it and be cached in IndexedDB (`bootstrap:<wsId>`). An old cached bootstrap may lack new fields: **code defensively** (`data.pageTypes ?? []`).
 - **IDs/time:** string ids (`uid()`), timestamps in ms. Map/timeline time `T` is an integer day count (see ROADMAP).
 

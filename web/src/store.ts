@@ -20,6 +20,7 @@ export type View =
   | { type: 'relations' }
   | { type: 'sessions' }
   | { type: 'todos' }
+  | { type: 'library'; key?: string }
   | { type: 'templates' }
   | { type: 'template'; id: string }
   | { type: 'pagetypes' }
@@ -51,6 +52,7 @@ interface State {
   searchOpen: boolean
   searchInitial: string
   captureOpen: boolean
+  libraryOpen: boolean
   copyPages: string[] | null
   bindings: Record<Action, string[]>
 
@@ -88,7 +90,7 @@ interface State {
   upsertStatTemplate: (t: StatTemplateRow) => void
   removeStatTemplateLocal: (id: string) => void
 
-  setUi: (p: Partial<Pick<State, 'sidebarOpen' | 'zen' | 'searchOpen' | 'searchInitial' | 'captureOpen' | 'copyPages'>>) => void
+  setUi: (p: Partial<Pick<State, 'sidebarOpen' | 'zen' | 'searchOpen' | 'searchInitial' | 'captureOpen' | 'libraryOpen' | 'copyPages'>>) => void
   setBindings: (b: Record<Action, string[]>) => void
 }
 
@@ -100,7 +102,7 @@ const resolveActive = (s: Pick<State, 'tabs' | 'activeTab'>) => s.tabs.find((t) 
 export const useStore = create<State>((set, get) => ({
   user: null, authChecked: false, workspaces: [], wsId: null, data: emptyData, loaded: false, offline: false,
   tabs: [firstTab], activeTab: firstTab.id, splitTab: null,
-  sidebarOpen: window.innerWidth > 900, zen: false, searchOpen: false, searchInitial: '', captureOpen: false, copyPages: null,
+  sidebarOpen: window.innerWidth > 900, zen: false, searchOpen: false, searchInitial: '', captureOpen: false, libraryOpen: false, copyPages: null,
   bindings: loadBindings(),
 
   async init() {

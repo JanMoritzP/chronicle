@@ -69,7 +69,7 @@ Keep HTTPS on in Cloudflare. The server trusts the proxy headers, so the session
 |---|---|---|
 | `PORT` | 3000 | |
 | `HOST` | 0.0.0.0 | |
-| `DATA_DIR` | `/data` in Docker | database, uploads, maps, backups |
+| `DATA_DIR` | `/data` in Docker | database, uploads, maps, backups, the Open5e library (`library.db`, `library.log`) |
 | `ADMIN_USER` | gm | first start only |
 | `ADMIN_PASSWORD` | | first start only, min 8 chars |
 | `SESSION_DAYS` | 30 | |

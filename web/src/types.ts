@@ -65,3 +65,10 @@ export interface StatTemplateRow { id: string; name: string; sections: any[]; lo
 export interface Bootstrap { pages: PageMeta[]; folders: Folder[]; links: LinkRow[]; zettels: Zettel[]; templates?: Template[]; pageTypes?: PageType[]; statTemplates?: StatTemplateRow[] }
 
 export interface BackupInfo { name: string; size: number; createdAt: number; kind: 'daily' | 'pre-restore' | 'other' }
+
+export type LibraryCategory = 'creature' | 'magicitem' | 'item' | 'spell' | 'class' | 'species' | 'background' | 'feat' | 'condition'
+export interface LibraryStatus { count: number; byCategory: Record<string, number>; updatedAt: number | null; running: boolean; phase: string; error: string | null }
+/** One row per entry: key, category, name, source key, short description. */
+export type LibraryRow = [string, LibraryCategory, string, string, string]
+export interface LibraryIndex { version: number; sources: Record<string, string>; rows: LibraryRow[] }
+export interface LibraryEntry { key: string; category: LibraryCategory; name: string; source: string; sourceName: string; license: string; permalink: string; data: any }

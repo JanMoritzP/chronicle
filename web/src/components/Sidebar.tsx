@@ -1,5 +1,5 @@
 import {
-  BookOpen, CalendarDays, ChevronDown, ChevronRight, FilePlus2, FolderPlus, Hash, Inbox, LayoutTemplate, ListTodo, Map as MapIcon, Network, ScrollText, Search, Settings, Shapes, Trash2, Users, Zap,
+  BookOpen, CalendarDays, ChevronDown, ChevronRight, FilePlus2, FolderPlus, Hash, Inbox, LayoutTemplate, Library, ListTodo, Map as MapIcon, Network, ScrollText, Search, Settings, Shapes, Trash2, Users, Zap,
 } from 'lucide-react'
 import { useMemo, useRef, useState } from 'react'
 import { api } from '../api'
@@ -195,6 +195,7 @@ export function Sidebar() {
           <ListTodo size={15} /> <span className="grow">Todos</span>
           {openTodos > 0 && <span className="chip">{openTodos}</span>}
         </div>
+        <div className="side-item" tabIndex={0} role="button" aria-label="Library" onClick={() => navigate({ type: 'library' })} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate({ type: 'library' }) } }}><Library size={15} /> <span className="grow">Library</span></div>
         <div className="side-item" tabIndex={0} role="button" aria-label="Templates" onClick={() => navigate({ type: 'templates' })} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate({ type: 'templates' }) } }}><LayoutTemplate size={15} /> <span className="grow">Templates</span></div>
         <div className="side-item" tabIndex={0} role="button" aria-label="Special pages" onClick={() => navigate({ type: 'pagetypes' })} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate({ type: 'pagetypes' }) } }}><Shapes size={15} /> <span className="grow">Special pages</span></div>
         <div className="side-item" tabIndex={0} role="button" aria-label="Stat block forms" onClick={() => navigate({ type: 'stattemplates' })} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate({ type: 'stattemplates' }) } }}><ScrollText size={15} /> <span className="grow">Stat block forms</span></div>

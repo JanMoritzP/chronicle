@@ -1,6 +1,6 @@
 import { get, set } from 'idb-keyval'
 import type { Calendar } from './lib/calendar'
-import type { BackupInfo, Bootstrap, EventRow, FullPage, MapFull, MapItem, MapLayer, CopyPreview, CopyResult, GameSession, MapMeta, PageType, Relation, StatsResult, StatTemplateRow, Template, TodoItem, User, Workspace, WorldSettings } from './types'
+import type { LibraryEntry, LibraryIndex, LibraryStatus, BackupInfo, Bootstrap, EventRow, FullPage, MapFull, MapItem, MapLayer, CopyPreview, CopyResult, GameSession, MapMeta, PageType, Relation, StatsResult, StatTemplateRow, Template, TodoItem, User, Workspace, WorldSettings } from './types'
 
 export interface StatTemplateBody { name: string; sections: any[]; look?: Record<string, any> }
 export interface PageTypeBody { name: string; icon: string; tag: string; source: string; definition: Record<string, any> }
@@ -56,6 +56,10 @@ export const api = {
   createZettel: (ws: string, body: string, tags: string[]) => req<any>('POST', `/api/workspaces/${ws}/zettels`, { body, tags }),
   patchZettel: (id: string, b: any) => req('PATCH', `/api/zettels/${id}`, b),
   deleteZettel: (id: string) => req('DELETE', `/api/zettels/${id}`),
+  libraryStatus: () => req<LibraryStatus>('GET', '/api/library/status'),
+  libraryRefresh: () => req<LibraryStatus>('POST', '/api/library/refresh'),
+  libraryIndex: () => req<LibraryIndex>('GET', '/api/library/index'),
+  libraryEntry: (key: string) => req<LibraryEntry>('GET', `/api/library/entries/${encodeURIComponent(key)}`),
   todos: (ws: string) => req<TodoItem[]>('GET', `/api/workspaces/${ws}/todos`),
   patchTodo: async (pageId: string, todoId: string, b: { done?: boolean; message?: string }) => {
     const r = await req('PATCH', `/api/pages/${pageId}/todos/${todoId}`, b)

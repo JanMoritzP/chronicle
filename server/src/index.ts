@@ -22,6 +22,8 @@ import { templateRoutes } from './routes/templates.js'
 import { pageTypeRoutes } from './routes/pagetypes.js'
 import { statTemplateRoutes } from './routes/stattemplates.js'
 import { uploadRoutes } from './routes/uploads.js'
+import { libraryRoutes } from './routes/library.js'
+import { closeLibrary } from './library.js'
 
 migrate()
 ensureOwner()
@@ -67,6 +69,7 @@ await app.register(templateRoutes)
 await app.register(pageTypeRoutes)
 await app.register(statTemplateRoutes)
 await app.register(exportRoutes)
+await app.register(libraryRoutes)
 await app.register(backupRoutes)
 
 app.get('/robots.txt', async (_req, reply) => reply.type('text/plain').send('User-agent: *\nDisallow: /\n'))
@@ -91,7 +94,7 @@ for (const sig of ['SIGTERM', 'SIGINT'] as const) {
     if (stopping) return
     stopping = true
     const force = setTimeout(() => process.exit(1), 8000)
-    try { await app.close(); db.pragma('wal_checkpoint(TRUNCATE)'); db.close() } catch (e) { console.error(e) }
+    try { await app.close(); db.pragma('wal_checkpoint(TRUNCATE)'); db.close(); closeLibrary() } catch (e) { console.error(e) }
     clearTimeout(force)
     process.exit(0)
   })

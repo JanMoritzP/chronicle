@@ -36,6 +36,8 @@ export function SearchDialog() {
         { id: 'timeline', label: 'Open timeline', run: () => st.navigate({ type: 'timeline' }) },
         { id: 'sessions', label: 'Open sessions and statistics', run: () => st.navigate({ type: 'sessions' }) },
         { id: 'templates', label: 'Open templates', run: () => st.navigate({ type: 'templates' }) },
+        ...(st.user?.role === 'viewer' ? [] : [{ id: 'library', label: 'Add from the library', hint: bindings.library[0], run: () => st.setUi({ libraryOpen: true }) }]),
+        { id: 'libraryview', label: 'Open library', run: () => st.navigate({ type: 'library' }) },
         { id: 'todos', label: 'Open todos', hint: bindings.todos[0], run: () => st.navigate({ type: 'todos' }) },
         ...(() => {
           const tab = st.tabs.find((t) => t.id === st.activeTab) ?? st.tabs[0]

@@ -17,6 +17,7 @@ import { TodosView } from './components/Todos'
 import { useWorld } from './lib/world'
 import { PageView } from './components/PageView'
 import { SearchDialog } from './components/Search'
+import { LibraryDialog, LibraryView } from './components/Library'
 import { Sidebar } from './components/Sidebar'
 import { HomeView, SettingsView, TagView, TrashView, ZettelView } from './components/Views'
 import { SuggestPopup } from './editor/SuggestPopup'
@@ -65,6 +66,7 @@ function viewTitle(v: View, pages: { id: string; title: string }[]) {
     case 'relations': return 'Relations'
     case 'sessions': return 'Sessions'
     case 'todos': return 'Todos'
+    case 'library': return 'Library'
     case 'templates': return 'Templates'
     case 'template': return useStore.getState().data.templates?.find((t) => t.id === v.id)?.name ?? 'Template'
     case 'pagetypes': return 'Special pages'
@@ -89,6 +91,7 @@ function ViewRouter({ view }: { view: View }) {
     case 'relations': return <RelationsView />
     case 'sessions': return <SessionsView />
     case 'todos': return <TodosView />
+    case 'library': return <LibraryView entryKey={view.key} />
     case 'templates': return <TemplatesView />
     case 'template': return <TemplateEditor id={view.id} />
     case 'pagetypes': return <PageTypesView />
@@ -147,6 +150,7 @@ function Shell() {
         case 'graph': st.navigate({ type: 'graph' }); break
         case 'zettels': st.navigate({ type: 'zettels' }); break
         case 'todos': st.navigate({ type: 'todos' }); break
+        case 'library': if (!readOnly) st.setUi({ libraryOpen: !st.libraryOpen }); break
       }
     }
     const onMouse = (e: MouseEvent) => {
@@ -222,6 +226,7 @@ function Shell() {
       </main>
       <SearchDialog />
       <CaptureDialog />
+      <LibraryDialog />
       <CopyDialog />
       <SuggestPopup />
       <HoverPreview />

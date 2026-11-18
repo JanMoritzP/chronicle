@@ -553,3 +553,30 @@ input[type=color] { width: 34px; height: 24px; padding: 0; border: 1px solid var
 .public-missing { text-align: center; }
 .public-wrap a { color: var(--link); }
 .share-notes { margin: 0; padding-left: 18px; font-size: 13px; }
+/* ---------- library ---------- */
+.lib-dialog { width: 680px; }
+.lib-chips { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 12px 2px; }
+.lib-chip { padding: 2px 10px; border-radius: 99px; border: 1px solid var(--border); font-size: 12.5px; color: var(--muted); }
+.lib-chip:hover { background: var(--bg-hover); }
+.lib-chip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--text); }
+.lib-source { font-size: 11.5px; color: var(--muted); border: 1px solid var(--border); border-radius: 6px; padding: 1px 6px; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: none; }
+.lib-foot { padding: 6px 14px; font-size: 12px; border-top: 1px solid var(--border); }
+.lib-empty { padding: 20px; }
+.lib-view { display: flex; height: 100%; min-height: 0; }
+.lib-side { width: 340px; flex: none; display: flex; flex-direction: column; gap: 8px; padding: 16px 12px 0; border-right: 1px solid var(--border); min-height: 0; }
+.lib-side .results { flex: 1; padding: 0; }
+.lib-side .lib-chips { padding: 0; }
+.lib-side .lib-foot { margin: 0 -12px; }
+.lib-main { flex: 1; min-width: 0; overflow: auto; padding: 24px 32px 80px; }
+.lib-detail { max-width: 720px; display: flex; flex-direction: column; gap: 12px; }
+.lib-detail h3 { margin: 14px 0 4px; font-size: 1.05rem; }
+.lib-detail p, .lib-detail ul { margin: 4px 0; }
+.lib-facts { display: grid; grid-template-columns: max-content 1fr; gap: 2px 14px; margin: 0; }
+.lib-facts dt { font-weight: 600; }
+.lib-facts dd { margin: 0; }
+.lib-credit { font-size: 12.5px; margin-top: 16px; }
+@media (max-width: 900px) {
+  .lib-view { flex-direction: column; height: auto; }
+  .lib-side { width: auto; border-right: 0; border-bottom: 1px solid var(--border); max-height: 50vh; }
+  .lib-main { padding: 16px 16px 80px; }
+}

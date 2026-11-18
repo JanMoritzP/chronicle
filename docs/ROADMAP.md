@@ -144,6 +144,28 @@ A World Anvil-style worldbuilding notebook. Self-hosted, React frontend, Node + 
 - Rides in the bootstrap (and the IndexedDB cache) and in `world.json` / backup restore. Copying between worlds does not carry custom page types: their pages become plain pages, while stat block forms are matched by name.
 - API: `POST /api/workspaces/:ws/page-types`, `PATCH|DELETE /api/page-types/:id` (editors and owners; viewers read only). Tests: `scripts/smoke-pagetypes.mjs` (11 checks), `scripts/test-layout.ts` (parse/serialize round trip, key handling; 16 checks).
 
+## Library (Open5e, phase 1 built)
+
+A read-only reference library of everything Open5e publishes (api.open5e.com/v2): creatures, magic items, equipment (weapons and armor are part of it), spells, classes and subclasses, species, backgrounds, feats and conditions. It belongs to the server, not to a world, and is opened at any time from the sidebar ("Library") or the command list.
+
+**Decisions.**
+- Own SQLite file `DATA_DIR/library.db`. It is reference data that can be downloaded again, so backups, restore, export and world copies leave it out.
+- The owner downloads it once with a button ("Download the library", about a minute, 20 MB) and can refresh it later. Nothing is downloaded automatically.
+- Each entry exists once. When several books have the same name, the newest edition of the rules wins (2024, then 2014, then others), then the official SRD over third-party books, then the newest publication date. Older versions cannot be picked. Classes and species also compare their parent, so subclasses of different classes stay apart.
+- Entry ids are `<category>:<open5e key>` because Open5e keys repeat across categories (`srd-2024_camel` is both a creature and a mount).
+- Every refresh appends `CREATED`, `UPDATED` and `DELETED` lines (timestamp, category, id, name) to `DATA_DIR/library.log`. There is no screen for it.
+
+**Quick add.** Alt+L (or "Add from the library" in the command list) opens a palette. Names are matched with the same fuzzy search as the page search, in the browser, over a compact index (about 6,300 rows) that is cached in IndexedDB per library version. Enter adds the entry to the current world and opens it, Shift+Enter opens it in the Library view. Creatures become a Monster page with the stat block filled in, everything else becomes a normal page with the text as the body and the source and license at the end.
+
+**Mapping.** `web/src/lib/open5e.ts`. Creatures fill the built-in 5e monster form (classic or 2024 layout, by the source book's ruleset). Action text is taken from each action's `desc` and not from Open5e's structured attack data, which has mistakes (a goblin's scimitar listed as thunder damage). Speed uses the printed values, not the padded `speed_all`. Everything else goes through `entryText`: a subtitle, labelled facts and titled sections.
+
+**API.** `GET /api/library/status`, `GET /api/library/index`, `GET /api/library/entries/:id` (any signed-in user), `POST /api/library/refresh` (owner, runs in the background, the client polls the status). Tests: `node scripts/smoke-library.mjs <url> gm <password>` (needs internet).
+
+**Planned.**
+- Phase 2: link to library entries from pages (`{{Fireball}}` autocomplete shows library entries next to pages, with the source as a badge), backlinks on library entries, and "Import to this world" that offers to repoint existing links at the new page. Public shared pages show a linked library entry as a read-only page, served only for entries linked from the shared page.
+- Phase 3: a linked-field type for special pages (class, species, background as one link, spells and feats as several) so character sheets autocomplete from the library.
+- Items and spells have no stat block form yet; they import as plain text.
+
 ## Operations
 - Password change: `POST /api/auth/password` (own), owner can set another user's.
 - Docker: health check on `/api/health`, graceful shutdown on SIGTERM (WAL checkpoint), `/data` owned by uid 1000, compose uses a named volume. Session cookie `Secure` follows `req.protocol` (behind cloudflared it is https).

@@ -1,5 +1,5 @@
 export type Action =
-  | 'search' | 'newPage' | 'capture' | 'zen' | 'back' | 'forward' | 'closeTab' | 'toggleSidebar' | 'graph' | 'zettels' | 'todos'
+  | 'search' | 'newPage' | 'capture' | 'zen' | 'back' | 'forward' | 'closeTab' | 'toggleSidebar' | 'graph' | 'zettels' | 'todos' | 'library'
 
 export const ACTION_LABELS: Record<Action, string> = {
   search: 'Quick search / commands',
@@ -13,6 +13,7 @@ export const ACTION_LABELS: Record<Action, string> = {
   graph: 'Open graph',
   zettels: 'Open zettelkasten',
   todos: 'Open todos',
+  library: 'Add from the library',
 }
 
 export const DEFAULT_BINDINGS: Record<Action, string[]> = {
@@ -27,6 +28,7 @@ export const DEFAULT_BINDINGS: Record<Action, string[]> = {
   graph: ['Alt+G'],
   zettels: ['Alt+Y'],
   todos: ['Alt+T'],
+  library: ['Alt+L'],
 }
 
 const MODIFIER_KEYS = new Set(['Control', 'Alt', 'Shift', 'Meta', 'AltGraph'])
