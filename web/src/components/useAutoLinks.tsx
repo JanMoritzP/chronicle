@@ -34,7 +34,8 @@ function AutoLink({ links, entryKey, text, preferPage }: { links: AutoLinks; ent
     if (page) st.navigate({ type: 'page', id: page }, how)
     else st.navigate({ type: 'library', key: entryKey }, how)
   }
-  return <button type="button" className="autolink" title={page ? 'Open the page' : 'Open the library entry'} onClick={open}>{text}</button>
+  // the hover card reads data-page-id / data-lib-key
+  return <button type="button" className="autolink" {...(page ? { 'data-page-id': page } : { 'data-lib-key': entryKey })} onClick={open}>{text}</button>
 }
 
 /**

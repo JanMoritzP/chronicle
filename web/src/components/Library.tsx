@@ -3,20 +3,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../api'
 import { alertDialog, confirmDialog } from '../lib/dialog'
 import { highlight } from '../lib/fuzzy'
-import { LIBRARY_CATEGORIES, searchLibrary, useLibrary, type LibraryHit } from '../lib/library'
+import { LIBRARY_CATEGORIES, fetchLibraryEntry as fetchEntry, searchLibrary, useLibrary, type LibraryHit } from '../lib/library'
 import { importPlan } from '../lib/open5e'
 import { useStore } from '../store'
 import type { LibraryCategory, LibraryEntry } from '../types'
 import { EntryBody } from './LibraryEntry'
-
-const entryCache = new Map<string, LibraryEntry>()
-async function fetchEntry(key: string): Promise<LibraryEntry> {
-  const hit = entryCache.get(key)
-  if (hit) return hit
-  const e = await api.libraryEntry(key)
-  entryCache.set(key, e)
-  return e
-}
 
 /**
  * Every kind becomes its own special page (Monster, Spell, Item, Class...) with the entry's data in its fields and stat block.
@@ -172,7 +163,7 @@ function EntryDetail({ entry }: { entry: LibraryEntry }) {
         <div className="lib-linked">
           <h3>Linked from</h3>
           <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-            {linkedFrom.map((p) => <button key={p.id} className="lib-chip" onClick={() => navigate({ type: 'page', id: p.id })}>{p.title || 'Untitled'}</button>)}
+            {linkedFrom.map((p) => <button key={p.id} className="lib-chip" data-page-id={p.id} onClick={() => navigate({ type: 'page', id: p.id })}>{p.title || 'Untitled'}</button>)}
           </div>
         </div>
       )}

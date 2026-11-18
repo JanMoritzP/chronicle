@@ -3,9 +3,11 @@ import { api } from '../api'
 import { StatBlockBody } from '../editor/StatBlock'
 import { findTemplate, TEMPLATES } from '../editor/templates'
 import { currentTemplates } from '../editor/useTemplates'
+import { fetchLibraryEntry } from '../lib/library'
 import { sliceSection } from '../lib/linkSearch'
 import { useStore } from '../store'
-import type { FullPage } from '../types'
+import type { FullPage, LibraryEntry } from '../types'
+import { EntryPreview } from './LibraryEntry'
 
 function firstParagraph(doc: any): string {
   for (const n of doc?.content ?? []) {
@@ -48,9 +50,13 @@ export function PreviewBody({ page, anchor }: { page: FullPage; anchor?: string 
   )
 }
 
+type Shown = { kind: 'page' | 'lib'; id: string; anchor: string | null; x: number; y: number }
+
+/** Preview card for a page link (data-page-id) or a library entry (data-lib-key) while the mouse rests on it. */
 export function HoverPreview() {
-  const [state, setState] = useState<{ id: string; anchor: string | null; x: number; y: number } | null>(null)
+  const [state, setState] = useState<Shown | null>(null)
   const [page, setPage] = useState<FullPage | null>(null)
+  const [entry, setEntry] = useState<LibraryEntry | null>(null)
   const card = useRef<HTMLDivElement>(null)
   const showT = useRef<number | undefined>(undefined)
   const hideT = useRef<number | undefined>(undefined)
@@ -59,22 +65,34 @@ export function HoverPreview() {
 
   useEffect(() => {
     if (window.matchMedia('(hover: none)').matches) return
-    const find = (t: EventTarget | null) => (t as HTMLElement | null)?.closest?.('[data-page-id]') as HTMLElement | null
+    const find = (t: EventTarget | null) => (t as HTMLElement | null)?.closest?.('[data-page-id], [data-lib-key]') as HTMLElement | null
+    const hideNow = () => { clearTimeout(showT.current); setState(null); current.current = null }
     const scheduleHide = () => {
       clearTimeout(hideT.current)
-      hideT.current = window.setTimeout(() => { if (!overCard.current) { setState(null); current.current = null } }, 180)
+      hideT.current = window.setTimeout(() => { if (!overCard.current) hideNow() }, 180)
     }
     const over = (e: MouseEvent) => {
-      const el = find(e.target)
-      if (!el || !el.dataset.pageId) return
+      const target = e.target as HTMLElement | null
+      // links inside the card itself do not open further cards
+      if (target?.closest?.('.hover-card')) return
+      const el = find(target)
+      const id = el?.dataset.pageId || el?.dataset.libKey
+      if (!el || !id) {
+        // moving over something else also ends a card whose link has disappeared, so no "mouse left" event will come for it
+        if (current.current) scheduleHide()
+        return
+      }
       if (el === current.current) { clearTimeout(hideT.current); return }
       clearTimeout(showT.current)
       clearTimeout(hideT.current)
       showT.current = window.setTimeout(() => {
+        // the list may have been redrawn in the meantime (a page opened, links refreshed); a detached element has no position
         const r = el.getBoundingClientRect()
+        if (!el.isConnected || (r.width === 0 && r.height === 0)) return
         current.current = el
         setPage(null)
-        setState({ id: el.dataset.pageId!, anchor: el.dataset.anchor || null, x: r.left, y: r.bottom })
+        setEntry(null)
+        setState({ kind: el.dataset.pageId ? 'page' : 'lib', id, anchor: el.dataset.anchor || null, x: r.left, y: r.bottom })
       }, 350)
     }
     const out = (e: MouseEvent) => {
@@ -91,28 +109,44 @@ export function HoverPreview() {
   useEffect(() => {
     if (!state) return
     let alive = true
-    api.getPage(state.id).then((p) => alive && setPage(p)).catch(() => alive && setState(null))
+    if (state.kind === 'page') api.getPage(state.id).then((p) => alive && setPage(p)).catch(() => alive && setState(null))
+    else fetchLibraryEntry(state.id).then((e) => alive && setEntry(e)).catch(() => alive && setState(null))
     return () => { alive = false }
-  }, [state?.id])
+  }, [state?.kind, state?.id])
 
   useEffect(() => {
-    const hide = () => { setState(null); current.current = null }
+    const hide = () => { clearTimeout(showT.current); setState(null); current.current = null }
     window.addEventListener('scroll', hide, true)
     window.addEventListener('keydown', hide)
     return () => { window.removeEventListener('scroll', hide, true); window.removeEventListener('keydown', hide) }
   }, [])
 
-  if (!state || !page) return null
+  // a card whose link was removed from the page (the list redrew under it) goes away on its own
+  useEffect(() => {
+    if (!state) return
+    const t = window.setInterval(() => {
+      if (current.current && !current.current.isConnected && !overCard.current) { setState(null); current.current = null }
+    }, 400)
+    return () => clearInterval(t)
+  }, [state])
+
+  if (!state || (state.kind === 'page' ? !page : !entry)) return null
   const w = 360
   const left = Math.max(8, Math.min(state.x, window.innerWidth - w - 8))
   const h = card.current?.offsetHeight ?? 200
   const top = state.y + 8 + h > window.innerHeight ? Math.max(8, state.y - h - 30) : state.y + 6
+  const open = () => {
+    const st = useStore.getState()
+    if (state.kind === 'page') st.navigate({ type: 'page', id: state.id, anchor: state.anchor ?? undefined })
+    else st.navigate({ type: 'library', key: state.id })
+    setState(null)
+  }
   return (
     <div ref={card} className="hover-card" style={{ left, top }}
       onMouseEnter={() => { overCard.current = true; clearTimeout(hideT.current) }}
       onMouseLeave={() => { overCard.current = false; setState(null); current.current = null }}
-      onClick={() => { useStore.getState().navigate({ type: 'page', id: page.id, anchor: state.anchor ?? undefined }); setState(null) }}>
-      <PreviewBody page={page} anchor={state.anchor} />
+      onClick={open}>
+      {state.kind === 'page' ? <PreviewBody page={page!} anchor={state.anchor} /> : <EntryPreview entry={entry!} />}
     </div>
   )
 }

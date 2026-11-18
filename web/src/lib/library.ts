@@ -1,7 +1,7 @@
 import { get as idbGet, set as idbSet } from 'idb-keyval'
 import { create } from 'zustand'
 import { api } from '../api'
-import type { LibraryCategory, LibraryIndex, LibraryRow, LibraryStatus } from '../types'
+import type { LibraryCategory, LibraryEntry, LibraryIndex, LibraryRow, LibraryStatus } from '../types'
 import { fuzzy } from './fuzzy'
 
 export const LIBRARY_CATEGORIES: { id: LibraryCategory; label: string; plural: string }[] = [
@@ -25,6 +25,17 @@ export const LIBRARY_CATEGORIES: { id: LibraryCategory; label: string; plural: s
   { id: 'size', label: 'Size', plural: 'Sizes' },
   { id: 'rule', label: 'Rule', plural: 'Rules' },
 ]
+const entries = new Map<string, LibraryEntry>()
+
+/** A full entry, fetched once and kept: the Library view and the hover cards share it. */
+export async function fetchLibraryEntry(key: string): Promise<LibraryEntry> {
+  const hit = entries.get(key)
+  if (hit) return hit
+  const e = await api.libraryEntry(key)
+  entries.set(key, e)
+  return e
+}
+
 export const categoryLabel = (c: LibraryCategory) => LIBRARY_CATEGORIES.find((x) => x.id === c)?.label ?? c
 
 interface LibraryState {

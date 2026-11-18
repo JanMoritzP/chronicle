@@ -44,7 +44,7 @@ function Chip({ r, readOnly, onRemove }: { r: LibRef; readOnly: boolean; onRemov
   return (
     <span className={`lf-chip${linked ? ' linked' : ''}`}>
       {linked
-        ? <button type="button" className="lf-name" title={page ? 'Open the page' : 'Open the library entry'} onClick={open}>{label}</button>
+        ? <button type="button" className="lf-name" {...(page ? { 'data-page-id': page.id } : { 'data-lib-key': r.libKey })} onClick={open}>{label}</button>
         : <span className="lf-name">{label}</span>}
       {!readOnly && <button type="button" className="lf-x" title={`Remove ${label}`} aria-label={`Remove ${label}`} onClick={onRemove}><X size={12} /></button>}
     </span>

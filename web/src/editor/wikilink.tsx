@@ -26,7 +26,7 @@ function WikilinkView({ node }: NodeViewProps) {
       useStore.getState().navigate({ type: 'library', key: libKey }, openNav(e))
     }
     return (
-      <NodeViewWrapper as="span" className="wikilink lib" contentEditable={false} data-lib-key={libKey} title="Library entry" onClick={go}
+      <NodeViewWrapper as="span" className="wikilink lib" contentEditable={false} data-lib-key={libKey} onClick={go}
         onAuxClick={(e: React.MouseEvent) => { if (e.button === 1) go({ preventDefault: () => e.preventDefault(), ctrlKey: true, metaKey: false, shiftKey: false }) }}>
         {alias || name || 'link'}
       </NodeViewWrapper>

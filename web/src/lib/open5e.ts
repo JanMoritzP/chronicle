@@ -292,7 +292,7 @@ export function entryText(e: LibraryEntry): EntryText {
     }
     case 'ability': {
       subtitle = d.short_desc ? upperFirst(String(d.short_desc)) : 'Ability'
-      fact('Skills', (d.skills ?? []).map((s: any) => upperFirst(String(s.key).replace(/[-_]+/g, ' '))).join(', '))
+      fact('Skills', (d.skills ?? []).map((s: any) => upperFirst(String(s.key).replace(/^[^_]+_/, '').replace(/[-_]+/g, ' '))).join(', '))
       section('', ownText(d.descriptions, e.source))
       break
     }

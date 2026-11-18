@@ -52,3 +52,38 @@ export function EntryBody({ entry }: { entry: LibraryEntry }) {
     </>
   )
 }
+
+/** The card shown when the mouse rests on a link to an entry: the stat block for creatures, spells and items, else the facts and the start of the text. */
+export function EntryPreview({ entry }: { entry: LibraryEntry }) {
+  const index = useLibrary((s) => s.index)
+  const t = useMemo(() => entryText(entry), [entry])
+  const sb = useMemo(() => statBlockFor(entry, index), [entry, index])
+  const template = sb ? templateById(sb.template) : undefined
+  const excerpt = useMemo(() => {
+    const blocks = textBlocks(t.sections.map((s) => s.text).join('\n\n')).filter((b) => b.kind !== 'table')
+    const out: typeof blocks = []
+    let chars = 0
+    for (const b of blocks) {
+      if (chars > 450) return { blocks: out, more: true }
+      out.push(b)
+      chars += b.kind === 'p' ? b.text.length : b.kind === 'ul' ? b.items.join('').length : 0
+    }
+    return { blocks: out, more: false }
+  }, [t])
+  return (
+    <>
+      {sb && template ? <StatBlockBody template={template} data={sb.data} libraryLinks /> : (
+        <>
+          <h4>{entry.name}</h4>
+          {t.subtitle && <div className="muted"><i>{t.subtitle}</i></div>}
+          {t.facts.length > 0 && <dl className="lib-facts">{t.facts.map(([k, v]) => <Fragment key={k}><dt>{k}</dt><dd>{v}</dd></Fragment>)}</dl>}
+          {excerpt.blocks.map((b, i) => (b.kind === 'ul'
+            ? <ul key={i}>{b.items.map((x, k) => <li key={k}>{richText(x)}</li>)}</ul>
+            : b.kind === 'p' ? <p key={i}>{richText(b.text)}</p> : null))}
+          {excerpt.more && <div className="muted">…</div>}
+        </>
+      )}
+      <div className="muted lib-credit">{entry.sourceName}</div>
+    </>
+  )
+}
