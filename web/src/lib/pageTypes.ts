@@ -146,7 +146,11 @@ const BUILTIN_LAYOUTS: Record<string, { name: string; icon: string; tag: string;
     name: 'Monster', icon: 'skull', tag: 'monster',
     layout: {
       columns: 'side-right', sideWidth: 380, flow: 'wrap',
-      side: [{ type: 'statblock', key: 'main', template: '5e-monster' }, { type: 'image', key: 'portrait', shape: 'wide' }],
+      side: [
+        { type: 'statblock', key: 'main', template: '5e-monster' },
+        { type: 'fields', title: 'Classification', fields: [f('size', 'Size', { library: 'size' }), f('creature_type', 'Type', { library: 'creaturetype' }), f('alignment', 'Alignment', { library: 'alignment' })] },
+        { type: 'image', key: 'portrait', shape: 'wide' },
+      ],
       main: [{ type: 'body' }],
     },
   },
@@ -174,6 +178,14 @@ const BUILTIN_LAYOUTS: Record<string, { name: string; icon: string; tag: string;
   feat: {
     name: 'Feat', icon: 'star', tag: 'feat',
     layout: { columns: 'side-right', flow: 'wrap', side: [{ type: 'fields', title: 'Feat', fields: [f('kind', 'Kind'), f('prerequisite', 'Prerequisite')] }], main: [{ type: 'body' }] },
+  },
+  rule: {
+    name: 'Rule', icon: 'scroll', tag: 'rule',
+    layout: {
+      columns: 'side-right', flow: 'wrap',
+      side: [{ type: 'fields', title: 'Details', fields: [f('kind', 'Kind'), f('section', 'Section'), f('ability', 'Ability', { library: 'ability' }), f('script', 'Script'), f('space', 'Space'), f('hit_die', 'Hit die')] }],
+      main: [{ type: 'body' }],
+    },
   },
   condition: { name: 'Condition', icon: 'flame', tag: 'condition', layout: { columns: 'single', main: [{ type: 'body' }] } },
   location: {

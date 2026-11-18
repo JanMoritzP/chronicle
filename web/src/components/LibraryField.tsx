@@ -6,7 +6,10 @@ import type { FieldDef } from '../lib/pageTypes'
 import { useStore } from '../store'
 
 /** One entry of a linked field: a library entry, a page of the world (usually an imported entry), or just text. */
-export interface LibRef { name: string; libKey?: string; pageId?: string }
+export interface LibRef { name: string; note?: string; libKey?: string; pageId?: string }
+
+/** What a field shows for one entry: the name, then the note that belongs to it ("Versatile (1d10)"). */
+export const refText = (r: LibRef) => (r.note ? `${r.name} ${r.note}` : r.name)
 
 /** Field values from before the field was linked are plain text; they show up as one unlinked entry. */
 export function refsOf(v: unknown): LibRef[] {
@@ -29,7 +32,7 @@ function Chip({ r, readOnly, onRemove }: { r: LibRef; readOnly: boolean; onRemov
   const pages = useStore((s) => s.data.pages)
   const navigate = useStore((s) => s.navigate)
   const page = r.pageId ? pages.find((p) => p.id === r.pageId) : undefined
-  const label = page?.title || r.name
+  const label = refText({ ...r, name: page?.title || r.name })
   const open = (e: React.MouseEvent) => {
     const how = e.ctrlKey || e.metaKey ? { newTab: true } : e.shiftKey ? { split: true } : {}
     if (page) navigate({ type: 'page', id: page.id }, how)

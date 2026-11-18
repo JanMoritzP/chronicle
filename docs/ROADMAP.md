@@ -179,7 +179,14 @@ A read-only reference library of everything Open5e publishes (api.open5e.com/v2)
 - Text from the data set keeps its structure: bullet lists, tables, bold and italic become real editor content.
 - Stat block forms can hold links. A field of type `link` (designer: "Link: class" and so on, "Allow several entries"; source: `{ key: classes, label: Class, type: link, library: class, multi: true }`) works like a linked page field. The stat block data stays plain strings: the shown text lives under the field's key, the links as JSON under `<key>:refs`. The server reads these (`server/src/refs.ts`) for the link index, the repoint after an import and copying between worlds; shared pages keep the text and drop the links; Markdown export leaves the `:refs` lines out.
 - The 5e Spell form links its classes. The 5e Player Character form got Species, Class, Background, Feats and Spells as links.
-- Not done: a class page does not list its spells (Open5e stores the classes on each spell, not the spells on each class), and weapon properties on items are plain text.
+- Not done: a class page does not list its spells (Open5e stores the classes on each spell, not the spells on each class).
+
+**Terms and properties (phase 5).**
+- Open5e publishes what other entries refer to as entries of their own, and the library holds them: weapon properties (`weaponproperties`, with the full explanation), damage types, skills, abilities, spell schools, languages, creature types, alignments, sizes and the rules text (`rules`, about 280 entries). They are searched, opened and linked like everything else, and importing one makes a Rule page (kind, section and a few details as fields, the text as the body).
+- Links: an item's damage type and weapon properties, a spell's school, and a creature's size, type and alignment are links. Weapon properties keep their detail next to the link ("Versatile (1d10)"): an entry has a `note` besides its name, so the detail survives when the link is moved to an imported page. A Monster page has a "Classification" block for size, type and alignment.
+- Rules that share a name (Ability Checks appears in several sections) are separate entries; the section shows next to the name. Alignments have no name in Open5e and get one from their key.
+- Not linked: a creature's skills, languages, resistances and condition immunities stay text, because they carry numbers or qualifiers ("Stealth +6", "nonmagical attacks") that a linked entry cannot hold when typed by hand. Item categories, rarities and environments have no explanation text in Open5e and stay text.
+- Existing libraries have to be refreshed once (Library, Refresh) to download the new kinds.
 
 ## Operations
 - Password change: `POST /api/auth/password` (own), owner can set another user's.

@@ -14,6 +14,16 @@ export const LIBRARY_CATEGORIES: { id: LibraryCategory; label: string; plural: s
   { id: 'background', label: 'Background', plural: 'Backgrounds' },
   { id: 'feat', label: 'Feat', plural: 'Feats' },
   { id: 'condition', label: 'Condition', plural: 'Conditions' },
+  { id: 'weaponproperty', label: 'Weapon property', plural: 'Weapon properties' },
+  { id: 'damagetype', label: 'Damage type', plural: 'Damage types' },
+  { id: 'skill', label: 'Skill', plural: 'Skills' },
+  { id: 'ability', label: 'Ability', plural: 'Abilities' },
+  { id: 'school', label: 'Spell school', plural: 'Spell schools' },
+  { id: 'language', label: 'Language', plural: 'Languages' },
+  { id: 'creaturetype', label: 'Creature type', plural: 'Creature types' },
+  { id: 'alignment', label: 'Alignment', plural: 'Alignments' },
+  { id: 'size', label: 'Size', plural: 'Sizes' },
+  { id: 'rule', label: 'Rule', plural: 'Rules' },
 ]
 export const categoryLabel = (c: LibraryCategory) => LIBRARY_CATEGORIES.find((x) => x.id === c)?.label ?? c
 

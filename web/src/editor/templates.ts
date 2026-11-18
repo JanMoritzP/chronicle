@@ -123,6 +123,7 @@ export const TEMPLATES: StatTemplate[] = [
           { key: 'range', label: 'Range', placeholder: '150 feet' },
           { key: 'components', label: 'Components', placeholder: 'V, S, M (a ball of bat guano and sulfur)' },
           { key: 'duration', label: 'Duration', placeholder: 'Instantaneous' },
+          { key: 'school', label: 'School', type: 'link', library: 'school' },
           { key: 'classes', label: 'Classes', type: 'link', library: 'class', multi: true },
         ],
       },
@@ -143,7 +144,9 @@ export const TEMPLATES: StatTemplate[] = [
       {
         kind: 'rows',
         fields: [
-          { key: 'ac', label: 'Armor Class' }, { key: 'damage', label: 'Damage', placeholder: '1d8 slashing' }, { key: 'properties', label: 'Properties' },
+          { key: 'ac', label: 'Armor Class' }, { key: 'damage', label: 'Damage', placeholder: '1d8' },
+          { key: 'damage_type', label: 'Damage type', type: 'link', library: 'damagetype' },
+          { key: 'properties', label: 'Properties', type: 'link', library: 'weaponproperty', multi: true },
           { key: 'strength', label: 'Strength' }, { key: 'stealth', label: 'Stealth' }, { key: 'cost', label: 'Cost' }, { key: 'weight', label: 'Weight' },
         ],
       },

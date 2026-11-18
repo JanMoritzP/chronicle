@@ -7,6 +7,7 @@ const UNIT: Record<string, string> = { feet: 'ft.', meters: 'm' }
 const signed = (n: number) => (n >= 0 ? `+${n}` : `−${Math.abs(n)}`)
 const title = (s: string) => s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 const upperFirst = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
+const upperFirstWords = (s: string) => s.replace(/w/g, (c) => c.toUpperCase())
 const ABILITIES = [['str', 'strength'], ['dex', 'dexterity'], ['con', 'constitution'], ['int', 'intelligence'], ['wis', 'wisdom'], ['cha', 'charisma']] as const
 
 export const crText = (cr: unknown): string => {
@@ -175,6 +176,19 @@ const mdTable = (head: string[], rows: string[][]) => [`| ${head.join(' | ')} |`
 /** Text that goes into a stat block field: list items become bullets, which the stat block text shows as they are. */
 const statText = (s: unknown) => clean(s).replace(/^\s*[*-] /gm, '• ').replace(/\n{3,}/g, '\n\n')
 
+/** Descriptions of terms come once per rules version; the entry's own book is the one that counts. */
+function ownText(list: any[] | undefined, source: string): string {
+  const all = list ?? []
+  const own = all.filter((x) => x.document === source)
+  return (own.length ? own : all.slice(0, 1)).map((x) => clean(x.desc)).filter(Boolean).join('\n\n')
+}
+
+/** "srd-2024_d20-tests" becomes "D20 tests". */
+const ruleSection = (d: any) => {
+  const key = String(d.ruleset ?? '').replace(/^[^_]+_/, '')
+  return key ? upperFirst(key.replace(/[-_]+/g, ' ')) : 'Rule'
+}
+
 // ---------- classes: the level table and the features ----------
 
 function classSections(d: any): { heading: string; text: string }[] {
@@ -259,6 +273,57 @@ export function entryText(e: LibraryEntry): EntryText {
       section('', (own.length ? own : (d.descriptions ?? []).slice(0, 1)).map((x: any) => clean(x.desc)).filter(Boolean).join('\n\n'))
       break
     }
+    case 'weaponproperty': {
+      subtitle = d.type ? `Weapon property (${d.type})` : 'Weapon property'
+      section('', d.desc)
+      break
+    }
+    case 'damagetype': case 'creaturetype': {
+      subtitle = e.category === 'damagetype' ? 'Damage type' : 'Creature type'
+      section('', ownText(d.descriptions, e.source))
+      break
+    }
+    case 'skill': {
+      subtitle = 'Skill'
+      fact('Ability', d.ability ? String(d.ability).toUpperCase() : '')
+      section('', ownText(d.descriptions, e.source))
+      break
+    }
+    case 'ability': {
+      subtitle = d.short_desc ? upperFirst(String(d.short_desc)) : 'Ability'
+      fact('Skills', (d.skills ?? []).map((s: any) => upperFirst(String(s.key).replace(/[-_]+/g, ' '))).join(', '))
+      section('', ownText(d.descriptions, e.source))
+      break
+    }
+    case 'school': {
+      subtitle = 'Spell school'
+      section('', d.desc)
+      break
+    }
+    case 'language': {
+      subtitle = d.is_secret ? 'Secret language' : d.is_exotic ? 'Exotic language' : 'Language'
+      fact('Script', d.script_language ? upperFirst(String(d.script_language)) : '')
+      section('', d.desc)
+      break
+    }
+    case 'alignment': {
+      subtitle = d.short_name ? `Alignment (${d.short_name})` : 'Alignment'
+      fact('Attitude', d.societal_attitude ? upperFirst(String(d.societal_attitude)) : '')
+      fact('Morality', d.morality ? upperFirst(String(d.morality)) : '')
+      section('', ownText(d.descriptions, e.source))
+      break
+    }
+    case 'size': {
+      subtitle = 'Size category'
+      fact('Space', d.space_diameter ? `${d.space_diameter} ${d.distance_unit === 'feet' ? 'ft.' : d.distance_unit ?? ''}`.trim() : '')
+      fact('Suggested hit dice', d.suggested_hit_dice)
+      break
+    }
+    case 'rule': {
+      subtitle = ruleSection(d)
+      section('', d.desc)
+      break
+    }
     default:
       break
   }
@@ -267,11 +332,12 @@ export function entryText(e: LibraryEntry): EntryText {
 
 // ---------- spells and items as stat blocks ----------
 
-export interface Ref { name: string; libKey?: string; pageId?: string }
+export interface Ref { name: string; note?: string; libKey?: string; pageId?: string }
+const refText = (r: Ref) => (r.note ? `${r.name} ${r.note}` : r.name)
 type Index = { rows: [string, string, string, string, string][] } | null
 
 /** The library entry a name or key from another entry points at: by key first, then by name (the same entry may live in another book). */
-export function resolveRef(index: Index, category: string, apiKey: string | undefined, name: string): Ref {
+export function resolveRef(index: Index, category: string, apiKey: string | undefined, name: string, note?: string): Ref {
   if (index) {
     const id = apiKey ? `${category}:${apiKey}` : ''
     let row = id ? index.rows.find((r) => r[0] === id) : undefined
@@ -279,16 +345,17 @@ export function resolveRef(index: Index, category: string, apiKey: string | unde
       const want = name.toLowerCase()
       row = index.rows.find((r) => r[1] === category && r[2].toLowerCase() === want && (category !== 'class' || r[4] === 'Class'))
     }
-    if (row) return { name: row[2], libKey: row[0] }
+    // note: text that goes with the entry but is not part of it ("(1d10)" after Versatile)
+    if (row) return { name: row[2], ...(note ? { note } : {}), libKey: row[0] }
   }
-  return { name }
+  return { name, ...(note ? { note } : {}) }
 }
 
 type StatPart = { template: string; data: Record<string, string> }
 
 function withRefs(data: Record<string, string>, key: string, refs: Ref[]) {
   if (!refs.length) return
-  data[key] = refs.map((r) => r.name).join(', ')
+  data[key] = refs.map(refText).join(', ')
   if (refs.some((r) => r.libKey)) data[`${key}:refs`] = JSON.stringify(refs)
 }
 
@@ -301,6 +368,7 @@ export function spellToStatBlock(e: LibraryEntry, index: Index): StatPart {
   out.range = d.range_text ?? ''
   out.components = [d.verbal && 'V', d.somatic && 'S', d.material && `M${d.material_specified ? ` (${d.material_specified})` : ''}`].filter(Boolean).join(', ')
   out.duration = `${d.concentration ? 'Concentration, ' : ''}${d.duration ?? ''}`.replace(/, $/, '')
+  if (d.school?.name) withRefs(out, 'school', [resolveRef(index, 'school', d.school.key, d.school.name)])
   withRefs(out, 'classes', (d.classes ?? []).map((c: any) => resolveRef(index, 'class', c.key, c.name ?? String(c))))
   out.desc = statText(d.desc)
   out.higher = statText(d.higher_level)
@@ -308,14 +376,16 @@ export function spellToStatBlock(e: LibraryEntry, index: Index): StatPart {
   return { template: '5e-spell', data: out }
 }
 
-export function itemToStatBlock(e: LibraryEntry): StatPart {
+export function itemToStatBlock(e: LibraryEntry, index: Index): StatPart {
   const d = e.data
   const out: Record<string, string> = { name: e.name }
   if (e.category === 'magicitem') {
     out.sub = [d.category?.name, String(d.rarity?.name ?? '').toLowerCase()].filter(Boolean).join(', ') + (d.requires_attunement ? ` (requires attunement${d.attunement_detail ? ` ${d.attunement_detail}` : ''})` : '')
   } else out.sub = d.category?.name ?? ''
-  if (d.weapon?.damage_dice) out.damage = `${d.weapon.damage_dice} ${String(d.weapon.damage_type?.name ?? '').toLowerCase()}`.trim()
-  if (d.weapon?.properties?.length) out.properties = d.weapon.properties.map((p: any) => `${p.property?.name ?? ''}${p.detail ? ` (${p.detail})` : ''}`).filter(Boolean).join(', ')
+  if (d.weapon?.damage_dice) out.damage = String(d.weapon.damage_dice)
+  if (d.weapon?.damage_type?.name) withRefs(out, 'damage_type', [resolveRef(index, 'damagetype', d.weapon.damage_type.key, d.weapon.damage_type.name)])
+  // each property keeps its detail in the shown name ("Versatile (1d10)") and links to the property's own entry
+  withRefs(out, 'properties', (d.weapon?.properties ?? []).filter((p: any) => p.property?.name).map((p: any) => resolveRef(index, 'weaponproperty', p.property.key, p.property.name, p.detail ? `(${p.detail})` : undefined)))
   if (d.armor) {
     out.ac = d.armor.ac_display ?? ''
     if (d.armor.strength_score_required) out.strength = `Str ${d.armor.strength_score_required}`
@@ -333,7 +403,7 @@ export function statBlockFor(e: LibraryEntry, index: Index): StatPart | null {
   switch (e.category) {
     case 'creature': return creatureToStatBlock(e)
     case 'spell': return spellToStatBlock(e, index)
-    case 'item': case 'magicitem': return itemToStatBlock(e)
+    case 'item': case 'magicitem': return itemToStatBlock(e, index)
     default: return null
   }
 }
@@ -375,13 +445,30 @@ export interface ImportPlan {
   content: any
 }
 
-const PAGE_TYPE: Record<string, string> = { creature: 'monster', spell: 'spell', item: 'item', magicitem: 'item', class: 'class', species: 'species', background: 'background', feat: 'feat', condition: 'condition' }
+const PAGE_TYPE: Record<string, string> = {
+  creature: 'monster', spell: 'spell', item: 'item', magicitem: 'item', class: 'class', species: 'species', background: 'background', feat: 'feat', condition: 'condition',
+  // terms (weapon properties, damage types, skills, rules...) share one page type
+  weaponproperty: 'rule', damagetype: 'rule', skill: 'rule', ability: 'rule', school: 'rule', language: 'rule', creaturetype: 'rule', alignment: 'rule', size: 'rule', rule: 'rule',
+}
+const KIND: Record<string, string> = {
+  weaponproperty: 'Weapon property', damagetype: 'Damage type', skill: 'Skill', ability: 'Ability', school: 'Spell school', language: 'Language',
+  creaturetype: 'Creature type', alignment: 'Alignment', size: 'Size', rule: 'Rule',
+}
 
 /** What becomes of a library entry when it is added to a world: its special page type, field values and body text. */
 export function importPlan(e: LibraryEntry, index: Index): ImportPlan {
   const type = PAGE_TYPE[e.category]
   const stat = statBlockFor(e, index)
-  if (stat) return { type, props: { library: e.key, data: { main: stat } }, content: textDoc([], e) }
+  if (stat) {
+    const data: Record<string, any> = { main: stat }
+    if (e.category === 'creature') {
+      const d = e.data
+      if (d.size?.name) data.size = [resolveRef(index, 'size', d.size.key, d.size.name)]
+      if (d.type?.name) data.creature_type = [resolveRef(index, 'creaturetype', d.type.key, d.type.name)]
+      if (d.alignment) data.alignment = [resolveRef(index, 'alignment', String(d.alignment).toLowerCase().replace(/s+/g, '-'), upperFirstWords(String(d.alignment)))]
+    }
+    return { type, props: { library: e.key, data }, content: textDoc([], e) }
+  }
 
   const t = entryText(e)
   const d = e.data
@@ -398,6 +485,16 @@ export function importPlan(e: LibraryEntry, index: Index): ImportPlan {
   } else if (e.category === 'feat') {
     if (d.prerequisite) data.prerequisite = String(d.prerequisite)
     if (d.type) data.kind = upperFirst(String(d.type).toLowerCase())
+  } else if (type === 'rule') {
+    data.kind = KIND[e.category]
+    if (e.category === 'rule') data.section = ruleSection(d)
+    if (e.category === 'skill' && d.ability) data.ability = [resolveRef(index, 'ability', String(d.ability), String(d.ability))]
+    if (e.category === 'language' && d.script_language) data.script = upperFirst(String(d.script_language))
+    if (e.category === 'size') {
+      const space = t.facts.find((f) => f[0] === 'Space')?.[1]
+      if (space) data.space = space
+      if (d.suggested_hit_dice) data.hit_die = String(d.suggested_hit_dice)
+    }
   }
   return { type, props: { library: e.key, data }, content: textDoc(t.sections, e) }
 }

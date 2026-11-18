@@ -2,7 +2,7 @@ import { Node, mergeAttributes } from '@tiptap/core'
 import { NodeViewWrapper, ReactNodeViewRenderer, type NodeViewProps } from '@tiptap/react'
 import { Eye, Pencil } from 'lucide-react'
 import { Fragment, useState, type CSSProperties, type ReactNode } from 'react'
-import { LibraryField, refsOfData, type LibRef } from '../components/LibraryField'
+import { LibraryField, refText, refsOfData, type LibRef } from '../components/LibraryField'
 import { Select } from '../components/Select'
 import { ABILITY_KEYS, findTemplate, TEMPLATES, type Field, type StatTemplate } from './templates'
 import { useTemplates } from './useTemplates'
@@ -105,7 +105,7 @@ export function StatBlockBody({ template, data, onChange }: { template: StatTemp
   // a linked field keeps its shown text under its key and its links as JSON under "<key>:refs"
   const linkProps = (f: Field) => f.type !== 'link' ? {} : {
     refs: refsOfData(data, f.key),
-    onRefs: ro ? undefined : (r: LibRef[] | null) => onChange!(f.key, r ? r.map((x) => x.name).join(', ') : '', { [`${f.key}:refs`]: r ? JSON.stringify(r) : '' }),
+    onRefs: ro ? undefined : (r: LibRef[] | null) => onChange!(f.key, r ? r.map(refText).join(', ') : '', { [`${f.key}:refs`]: r ? JSON.stringify(r) : '' }),
   }
   const val = (k: string) => (data[k] == null ? '' : String(data[k]))
   const look = template.look

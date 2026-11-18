@@ -29,15 +29,20 @@ for (;;) {
 }
 check('download finished without error', !r.data.running && !r.data.error, r.data.error ?? '')
 const status = r.data
-check('every category has entries', ['creature', 'magicitem', 'item', 'spell', 'class', 'species', 'background', 'feat', 'condition'].every((c) => status.byCategory[c] > 0), JSON.stringify(status.byCategory))
+check('every category has entries', ['creature', 'magicitem', 'item', 'spell', 'class', 'species', 'background', 'feat', 'condition', 'weaponproperty', 'damagetype', 'skill', 'ability', 'school', 'language', 'creaturetype', 'alignment', 'size', 'rule'].every((c) => status.byCategory[c] > 0), JSON.stringify(status.byCategory))
 
 r = await call('GET', '/api/library/index')
 const idx = r.data
 check('index has rows and sources', r.status === 200 && idx.rows.length === status.count && Object.keys(idx.sources).length > 5)
+const byName = (cat, name) => idx.rows.filter((x) => x[1] === cat && x[2] === name)
+check('weapon properties are entries, one per name', byName('weaponproperty', 'Versatile').length === 1 && byName('weaponproperty', 'Finesse').length === 1)
+check('damage types, skills and schools are entries', byName('damagetype', 'Slashing').length === 1 && byName('skill', 'Stealth').length === 1 && byName('school', 'Evocation').length === 1)
+check('alignments get a name from their key', byName('alignment', 'Chaotic Evil').length === 1)
+check('rules with the same name in different sections stay apart', byName('rule', 'Ability Checks').length > 1, byName('rule', 'Ability Checks').map((x) => x[4]).join(' | '))
 const goblins = idx.rows.filter((x) => x[1] === 'creature' && x[2].toLowerCase() === 'goblin')
 check('one Goblin only, from the 5e 2014 SRD', goblins.length === 1 && goblins[0][3] === 'srd-2014', JSON.stringify(goblins))
 const names = idx.rows.map((x) => x[1] + ':' + x[2].toLowerCase().replace(/[^a-z0-9]/g, ''))
-check('no duplicate names within a category (parents aside)', new Set(idx.rows.filter((x) => x[1] !== 'class' && x[1] !== 'species').map((x) => x[1] + ':' + x[2].toLowerCase().replace(/[^a-z0-9]/g, ''))).size === idx.rows.filter((x) => x[1] !== 'class' && x[1] !== 'species').length, names.length + ' rows')
+check('no duplicate names within a category (parents aside)', new Set(idx.rows.filter((x) => x[1] !== 'class' && x[1] !== 'species' && x[1] !== 'rule').map((x) => x[1] + ':' + x[2].toLowerCase().replace(/[^a-z0-9]/g, ''))).size === idx.rows.filter((x) => x[1] !== 'class' && x[1] !== 'species' && x[1] !== 'rule').length, names.length + ' rows')
 
 r = await call('GET', '/api/library/entries/' + encodeURIComponent(goblins[0][0]))
 check('creature entry has full data', r.status === 200 && r.data.data.armor_class > 0 && Array.isArray(r.data.data.actions) && r.data.sourceName, r.data.sourceName)
@@ -159,6 +164,17 @@ check('in the slot the entry names the page', JSON.parse(slot['classes:refs'])[0
 check('in the text the entry names the page', JSON.parse(node['classes:refs'])[0].pageId === clericPage.id && node.classes === 'Cleric (library)')
 r = await call('GET', `/api/workspaces/${ws}/links`)
 check('and the link index follows', r.data.filter((l) => l.sourceId === bless.id).every((l) => l.targetId === clericPage.id))
+
+// ---- an entry with a note ("Versatile (1d10)") keeps the note when it moves to a page ----
+const versatile = byName('weaponproperty', 'Versatile')[0][0]
+const sword = (await call('POST', `/api/workspaces/${ws}/pages`, { title: 'Sword', props: { type: 'item', data: { main: { template: '5e-item', data: { name: 'Longsword', properties: 'Sap, Versatile (1d10)', 'properties:refs': JSON.stringify([{ name: 'Sap' }, { name: 'Versatile', note: '(1d10)', libKey: versatile }]) } } } } })).data
+const versatilePage = (await call('POST', `/api/workspaces/${ws}/pages`, { title: 'Versatile (rule)', props: { library: versatile } })).data
+r = await call('POST', `/api/workspaces/${ws}/library-links/repoint`, { libKey: versatile, pageId: versatilePage.id })
+check('repoint touches the stat block with the note', r.status === 200 && r.data.changed === 1, JSON.stringify(r.data))
+r = await call('GET', '/api/pages/' + sword.id)
+const sd = r.data.props.data.main.data
+const sref = JSON.parse(sd['properties:refs'])[1]
+check('the note stays with the entry and the rest of the text is untouched', sref.pageId === versatilePage.id && sref.note === '(1d10)' && sd.properties === 'Sap, Versatile (rule) (1d10)', JSON.stringify(sd))
 
 const anon = await fetch(base + '/api/library/index')
 check('library needs a login', anon.status === 401)

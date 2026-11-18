@@ -69,6 +69,7 @@ export interface Bootstrap { pages: PageMeta[]; folders: Folder[]; links: LinkRo
 export interface BackupInfo { name: string; size: number; createdAt: number; kind: 'daily' | 'pre-restore' | 'other' }
 
 export type LibraryCategory = 'creature' | 'magicitem' | 'item' | 'spell' | 'class' | 'species' | 'background' | 'feat' | 'condition'
+  | 'weaponproperty' | 'damagetype' | 'skill' | 'ability' | 'school' | 'language' | 'creaturetype' | 'alignment' | 'size' | 'rule'
 export interface LibraryStatus { count: number; byCategory: Record<string, number>; updatedAt: number | null; running: boolean; phase: string; error: string | null }
 /** One row per entry: key, category, name, source key, short description. */
 export type LibraryRow = [string, LibraryCategory, string, string, string]

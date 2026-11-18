@@ -52,7 +52,7 @@ export async function libraryRoutes(app: FastifyInstance) {
         }
       }
       // stat block slots of special pages
-      const moveRef = (r: { libKey?: string }) => (r.libKey === b.data.libKey ? { name: target.title, pageId: target.id } : null)
+      const moveRef = (r: { libKey?: string; note?: string }) => (r.libKey === b.data.libKey ? { name: target.title, pageId: target.id, ...(r.note ? { note: r.note } : {}) } : null)
       for (const d of propsStatData(props)) fieldHit += rewriteDataRefs(d, moveRef)
       if (fieldHit) db.prepare('UPDATE pages SET props = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(props), now(), p.id)
       const walk = (n: DocNode) => {

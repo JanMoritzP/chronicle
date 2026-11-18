@@ -18,6 +18,17 @@ export const CATEGORIES = [
   { id: 'background', endpoint: 'backgrounds' },
   { id: 'feat', endpoint: 'feats' },
   { id: 'condition', endpoint: 'conditions' },
+  // terms that other entries refer to, so that weapon properties, damage types, skills... can be linked
+  { id: 'weaponproperty', endpoint: 'weaponproperties' },
+  { id: 'damagetype', endpoint: 'damagetypes' },
+  { id: 'skill', endpoint: 'skills' },
+  { id: 'ability', endpoint: 'abilities' },
+  { id: 'school', endpoint: 'spellschools' },
+  { id: 'language', endpoint: 'languages' },
+  { id: 'creaturetype', endpoint: 'creaturetypes' },
+  { id: 'alignment', endpoint: 'alignments' },
+  { id: 'size', endpoint: 'sizes' },
+  { id: 'rule', endpoint: 'rules' },
 ] as const
 export type CategoryId = (typeof CATEGORIES)[number]['id']
 
@@ -124,8 +135,27 @@ function subOf(category: CategoryId, d: any): string {
     case 'class': return d.subclass_of?.name ? `Subclass of ${d.subclass_of.name}` : 'Class'
     case 'species': return d.is_subspecies ? 'Subspecies' : 'Species'
     case 'feat': return d.type ? String(d.type).toLowerCase().replace(/^./, (c: string) => c.toUpperCase()) : 'Feat'
+    case 'weaponproperty': return d.type ? `Weapon property · ${d.type}` : 'Weapon property'
+    case 'damagetype': return 'Damage type'
+    case 'skill': return d.ability ? `Skill · ${String(d.ability).toUpperCase()}` : 'Skill'
+    case 'ability': return d.short_desc ? upperFirst(String(d.short_desc)) : 'Ability'
+    case 'school': return 'Spell school'
+    case 'language': return d.is_secret ? 'Secret language' : d.is_exotic ? 'Exotic language' : 'Language'
+    case 'creaturetype': return 'Creature type'
+    case 'alignment': return d.short_name ? `Alignment · ${d.short_name}` : 'Alignment'
+    case 'size': return d.space_diameter ? `Size · ${d.space_diameter} ${d.distance_unit === 'feet' ? 'ft.' : d.distance_unit ?? ''} space`.trim() : 'Size'
+    case 'rule': return sectionOf(d)
     default: return ''
   }
+}
+
+const upperFirst = (t: string) => t.charAt(0).toUpperCase() + t.slice(1)
+const titleCase = (key: string) => key.split(/[-_s]+/).filter(Boolean).map(upperFirst).join(' ')
+
+/** The section of the rules a rule belongs to, without the book prefix: "srd-2024_d20-tests" becomes "D20 tests". */
+function sectionOf(d: any): string {
+  const key = String(d.ruleset ?? '').replace(/^[^_]+_/, '')
+  return key ? upperFirst(key.replace(/[-_]+/g, ' ')) : 'Rule'
 }
 
 export function crText(cr: unknown): string {
@@ -139,7 +169,8 @@ export function crText(cr: unknown): string {
 
 /** Subclasses and subspecies share names across books, so the parent is part of what makes an entry the same. */
 function identity(category: CategoryId, d: any): string {
-  const parent = category === 'class' ? d.subclass_of?.name : category === 'species' ? d.subspecies_of : ''
+  // the same rule name appears in several sections, so the section (without its book prefix) belongs to the identity
+  const parent = category === 'class' ? d.subclass_of?.name : category === 'species' ? d.subspecies_of : category === 'rule' ? String(d.ruleset ?? '').replace(/^[^_]+_/, '') : ''
   return `${category}:${norm(d.name ?? '')}:${norm(String(parent ?? ''))}`
 }
 
@@ -175,9 +206,12 @@ export async function refreshLibrary(): Promise<void> {
     for (const cat of CATEGORIES) {
       state.phase = `Downloading ${cat.endpoint}`
       for (const d of await fetchAll(cat.endpoint)) {
-        const source = d.document?.key as string
+        // most glossaries give the book as a plain key, the older endpoints as an object
+        const source = (typeof d.document === 'string' ? d.document : d.document?.key) as string
+        // alignments have no name, only a key such as chaotic-evil
+        if (!d.name && d.key) d.name = titleCase(String(d.key))
         if (!source || !d.key || !d.name) continue
-        const rank = sourceRank(d.document, String(docInfo.get(source)?.publication_date ?? ''))
+        const rank = sourceRank(docInfo.get(source) ?? d.document, String(docInfo.get(source)?.publication_date ?? ''))
         const id = identity(cat.id, d)
         const cur = winners.get(id)
         if (!cur || rank > cur.rank || (rank === cur.rank && d.key < cur.d.key)) winners.set(id, { category: cat.id, d, rank })
@@ -187,9 +221,12 @@ export async function refreshLibrary(): Promise<void> {
     state.phase = 'Saving'
     const rows = [...winners.values()].map(({ category, d }) => {
       const { document: _doc, crossreferences: _x, illustration: _i, ...rest } = d
-      const data = JSON.stringify({ ...rest, ruleset: d.document?.gamesystem?.key ?? '' })
+      const src = (typeof d.document === 'string' ? d.document : d.document?.key) as string
+      const system = docInfo.get(src)?.gamesystem?.key ?? d.document?.gamesystem?.key ?? ''
+      // rules keep their own "ruleset" (the section); everything else gets the game system there
+      const data = JSON.stringify({ ...rest, system, ruleset: category === 'rule' ? rest.ruleset : system })
       // Open5e keys are only unique within one endpoint (srd-2024_camel is both a mount and a creature)
-      return { key: `${category}:${d.key}`, category, name: d.name as string, source: d.document.key as string, sub: subOf(category, d), data, hash: crypto.createHash('md5').update(data).digest('hex') }
+      return { key: `${category}:${d.key}`, category, name: d.name as string, source: src, sub: subOf(category, d), data, hash: crypto.createHash('md5').update(data).digest('hex') }
     })
 
     const old = new Map((db.prepare('SELECT key, category, name, hash FROM entries').all() as { key: string; category: string; name: string; hash: string }[]).map((r) => [r.key, r]))

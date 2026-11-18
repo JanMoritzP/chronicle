@@ -146,7 +146,7 @@ export async function copyRoutes(app: FastifyInstance) {
     // linked stat block fields: pages that were copied follow, a page that stays behind leaves only its name
     const carryRef = (r: Ref): Ref | null => {
       if (!r.pageId) return null
-      return idMap.has(r.pageId) ? { ...r, pageId: idMap.get(r.pageId)! } : { name: r.name, ...(r.libKey ? { libKey: r.libKey } : {}) }
+      return idMap.has(r.pageId) ? { ...r, pageId: idMap.get(r.pageId)! } : { name: r.name, ...(r.note ? { note: r.note } : {}), ...(r.libKey ? { libKey: r.libKey } : {}) }
     }
     const rewrite = (n: DocNode) => {
       if (n.type === 'statblock' && n.attrs) {

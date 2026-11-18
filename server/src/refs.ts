@@ -1,7 +1,10 @@
 // Linked fields of stat blocks. A stat block keeps plain strings, so a linked field stores its shown text under
 // its own key ("Wizard, Sorcerer") and the links as JSON under "<key>:refs". Text-only consumers (search, export,
 // old clients) keep working, and the links can be indexed, moved and copied here.
-export interface Ref { name: string; libKey?: string; pageId?: string }
+/** note: text that belongs to the entry but not to its name, e.g. "(1d10)" after Versatile */
+export interface Ref { name: string; note?: string; libKey?: string; pageId?: string }
+
+export const refText = (r: Ref) => (r.note ? `${r.name} ${r.note}` : r.name)
 
 const SUFFIX = ':refs'
 
@@ -39,7 +42,13 @@ export function rewriteDataRefs(data: unknown, fn: (r: Ref) => Ref | null): numb
     const next = refs.map((r) => { const n = fn(r); if (n) hit = true; return n ?? r })
     if (!hit) continue
     d[k] = JSON.stringify(next)
-    d[k.slice(0, -SUFFIX.length)] = next.map((r) => r.name).join(', ')
+    // Only the changed names are swapped inside the shown text: it may carry more than the names ("Stealth +6", "fire; nonmagical ...")
+    const base = k.slice(0, -SUFFIX.length)
+    let text = typeof d[base] === 'string' ? (d[base] as string) : next.map(refText).join(', ')
+    refs.forEach((old, i) => {
+      if (refText(next[i]) !== refText(old)) text = text.replace(new RegExp(refText(old).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'), () => refText(next[i]))
+    })
+    d[base] = text
     changed++
   }
   return changed
