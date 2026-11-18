@@ -259,6 +259,9 @@ const migrations: string[] = [
   );
   CREATE INDEX stat_templates_ws ON stat_templates(workspace_id);
   `,
+  `
+  ALTER TABLE workspaces ADD COLUMN settings TEXT NOT NULL DEFAULT '{}';
+  `,
 ]
 
 export const SCHEMA_VERSION = migrations.length

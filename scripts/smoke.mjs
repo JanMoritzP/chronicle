@@ -21,6 +21,7 @@ cookie = login.set.split(';')[0]
 check('cookie is HttpOnly', /httponly/i.test(login.set))
 
 const ws = (await call('POST', '/api/workspaces', { name: 'World' })).data
+await call('PATCH', `/api/workspaces/${ws.id}`, { settings: { newPageTodo: '' } }) // word counts below assume pages start empty
 const doc = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Meets ' }, { type: 'wikilink', attrs: { name: 'Bob' } }] }] }
 const alice = (await call('POST', `/api/workspaces/${ws.id}/pages`, { title: 'Alice', content: doc })).data
 let boot = (await call('GET', `/api/workspaces/${ws.id}/bootstrap`)).data

@@ -24,7 +24,8 @@ export interface TodoItem {
 export interface Folder { id: string; parentId: string | null; name: string; sort: number }
 export interface LinkRow { sourceId: string; targetId: string | null; targetName: string; anchor: string | null; embed: number }
 export interface Zettel { id: string; body: string; tags: string[]; createdAt: number; pageId: string | null; processedAt: number | null }
-export interface Workspace { id: string; name: string }
+export interface WorldSettings { newPageTodo: string }
+export interface Workspace { id: string; name: string; settings?: WorldSettings }
 export interface User { id: string; username: string; role: 'owner' | 'editor' | 'viewer' }
 export interface FullPage extends PageMeta { content: any; props: Record<string, any> }
 export type Pt = [number, number]
@@ -60,7 +61,7 @@ export interface Relation { id: string; sourceId: string; targetId: string; kind
 export interface EventRow { id: string; pageId: string | null; title: string; tStart: number; tEnd: number | null }
 export interface Template { id: string; name: string; slug: string; description: string; content: any; updatedAt: number }
 export interface PageType { id: string; name: string; icon: string; tag: string; source: string; definition: Record<string, any>; updatedAt: number }
-export interface StatTemplateRow { id: string; name: string; sections: any[]; updatedAt: number }
+export interface StatTemplateRow { id: string; name: string; sections: any[]; look?: Record<string, any>; updatedAt: number }
 export interface Bootstrap { pages: PageMeta[]; folders: Folder[]; links: LinkRow[]; zettels: Zettel[]; templates?: Template[]; pageTypes?: PageType[]; statTemplates?: StatTemplateRow[] }
 
 export interface BackupInfo { name: string; size: number; createdAt: number; kind: 'daily' | 'pre-restore' | 'other' }

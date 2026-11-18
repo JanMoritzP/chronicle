@@ -209,6 +209,20 @@ function PageTypeBody({ type }: { type: ResolvedType }) {
                         <option value="side-left">Side on the left</option>
                       </Select>
                     </label>
+                    <label className="field" style={{ width: 230 }}>
+                      <span>Text beside the side</span>
+                      <Select className="input" disabled={layout.columns === 'single'} value={layout.flow} onChange={(v) => editLayout({ ...layout, flow: v as Layout['flow'], sticky: v === 'wrap' ? false : layout.sticky })}>
+                        <option value="columns">Stays in its own column</option>
+                        <option value="wrap">Runs on underneath the side</option>
+                      </Select>
+                    </label>
+                    <label className="field" style={{ width: 230 }}>
+                      <span>Side while scrolling</span>
+                      <Select className="input" disabled={layout.columns === 'single' || layout.flow === 'wrap'} value={layout.sticky ? 'follow' : 'still'} onChange={(v) => editLayout({ ...layout, sticky: v === 'follow' })}>
+                        <option value="still">Scrolls with the page</option>
+                        <option value="follow">Stays in view</option>
+                      </Select>
+                    </label>
                     <label className="field" style={{ width: 140 }}>
                       <span>Side width (px)</span>
                       <input className="input" type="number" min={160} max={520} disabled={layout.columns === 'single'} value={layout.sideWidth} onChange={(e) => editLayout({ ...layout, sideWidth: Math.min(520, Math.max(160, Math.round(Number(e.target.value) || 280))) })} />

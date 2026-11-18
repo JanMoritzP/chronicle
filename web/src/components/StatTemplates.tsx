@@ -2,7 +2,7 @@ import { ArrowDown, ArrowUp, Copy, Plus, ScrollText, Trash2, X } from 'lucide-re
 import { useMemo, useState } from 'react'
 import { api } from '../api'
 import { StatBlockBody } from '../editor/StatBlock'
-import { parseTemplateSource, resolveTemplates, sectionsToSource, type Field, type FieldType, type Section, type StatTemplate } from '../editor/templates'
+import { ABILITY_KEYS, CLASSIC_LOOK, DEFAULT_LOOK, normalizeLook, parseTemplateSource, resolveTemplates, sectionsToSource, type Field, type FieldType, type Look, type Section, type StatTemplate } from '../editor/templates'
 import { askText, confirmDialog } from '../lib/dialog'
 import { useStore } from '../store'
 import { Select } from './Select'
@@ -23,6 +23,7 @@ function withKeys(sections: Section[]): Section[] {
       case 'title': case 'subtitle': return { ...s, key: unique(s.key || slug(s.kind)) }
       case 'long': case 'list': return { ...s, key: unique(s.key || slug(s.heading ?? '') || s.kind) }
       case 'rows': case 'group': return { ...s, fields: s.fields.map((f) => ({ ...f, key: unique(f.key || slug(f.label)) })) }
+      case 'abilities': ABILITY_KEYS.forEach((k) => { used.add(k); if (s.saves) used.add(`${k}_save`) }); return s
       default: return s
     }
   })
@@ -33,6 +34,7 @@ function duplicateKeys(sections: Section[]): string[] {
   const seen = new Set<string>(), dup = new Set<string>()
   const add = (k: string) => { if (!k) return; if (seen.has(k)) dup.add(k); seen.add(k) }
   for (const s of sections) {
+    if (s.kind === 'abilities') ABILITY_KEYS.forEach((k) => { add(k); if (s.saves) add(`${k}_save`) })
     if ('key' in s) add(s.key)
     if ('fields' in s) s.fields.forEach((f) => add(f.key))
   }
@@ -40,12 +42,13 @@ function duplicateKeys(sections: Section[]): string[] {
 }
 
 const KIND_LABEL: Record<Section['kind'], string> = {
-  title: 'Title', subtitle: 'Subtitle', rule: 'Divider line', heading: 'Heading', rows: 'Labelled fields', group: 'Grid of small fields', long: 'Text area', list: 'Bullet list',
+  title: 'Title', subtitle: 'Subtitle', rule: 'Divider line', heading: 'Heading', rows: 'Labelled fields', group: 'Grid of small fields', abilities: 'Ability scores', long: 'Text area', list: 'Bullet list',
 }
 const ADD: { kind: Section['kind']; make: () => Section }[] = [
   { kind: 'title', make: () => ({ kind: 'title', key: '', placeholder: 'Name' }) },
   { kind: 'subtitle', make: () => ({ kind: 'subtitle', key: '', placeholder: 'Subtitle' }) },
   { kind: 'rows', make: () => ({ kind: 'rows', fields: [{ key: '', label: 'New field' }] }) },
+  { kind: 'abilities', make: () => ({ kind: 'abilities', layout: 'row' }) },
   { kind: 'group', make: () => ({ kind: 'group', fields: [{ key: '', label: 'A', type: 'number' }, { key: '', label: 'B', type: 'number' }, { key: '', label: 'C', type: 'number' }] }) },
   { kind: 'long', make: () => ({ kind: 'long', key: '', heading: 'Notes' }) },
   { kind: 'list', make: () => ({ kind: 'list', key: '', heading: 'Items' }) },
@@ -119,8 +122,74 @@ function SectionEditor({ s, onChange, onRemove, onMove }: { s: Section; onChange
         </div>
       )}
       {s.kind === 'heading' && <input className="input" value={s.text} placeholder="Heading text" onChange={(e) => onChange({ ...s, text: e.target.value })} />}
+      {s.kind === 'abilities' && (
+        <div className="row" style={{ flexWrap: 'wrap', gap: 10 }}>
+          <Select className="input" style={{ width: 230 }} value={s.layout} onChange={(v) => onChange({ kind: 'abilities', layout: v === 'table' ? 'table' : 'row' })}>
+            <option value="row">One row of six (classic)</option>
+            <option value="table">Three columns (2024 style)</option>
+          </Select>
+          {s.layout === 'table' && <label className="row" style={{ fontSize: 13 }}><input type="checkbox" checked={!!s.saves} onChange={(e) => onChange({ ...s, saves: e.target.checked || undefined })} /> Saving throw column</label>}
+          <small className="muted">Strength to Charisma with their modifiers. Values are stored as str, dex, con, int, wis, cha.</small>
+        </div>
+      )}
+      {s.kind === 'rows' && (
+        <label className="row" style={{ fontSize: 13 }}><input type="checkbox" checked={s.columns === 2} onChange={(e) => onChange({ ...s, columns: e.target.checked ? 2 : undefined })} /> Two fields side by side</label>
+      )}
       {(s.kind === 'rows' || s.kind === 'group') && fieldsOf(s)}
     </div>
+  )
+}
+
+const ACCENTS = [
+  { name: 'Dragon red', value: '#7a200d' }, { name: 'Ink blue', value: '#1f4e79' }, { name: 'Forest green', value: '#2f5d27' },
+  { name: 'Violet', value: '#5b2d82' }, { name: 'Bronze', value: '#8a5a12' }, { name: 'Slate', value: '#3b4252' },
+]
+
+/** Style, colour, font, width and columns of the whole form. */
+function LookEditor({ look, onChange, readOnly }: { look: Look; onChange: (l: Look) => void; readOnly: boolean }) {
+  const set = (p: Partial<Look>) => onChange(normalizeLook({ ...look, ...p }))
+  return (
+    <fieldset className="sd-set" disabled={readOnly}>
+      <div className="sd-card">
+        <div className="sd-head"><b className="grow">Look</b>
+          {!readOnly && <button className="btn sm ghost" title="Use the printed monster stat block look" onClick={() => onChange(CLASSIC_LOOK)}>Use classic look</button>}
+        </div>
+        <div className="row" style={{ flexWrap: 'wrap', gap: 12, alignItems: 'flex-end' }}>
+          <label className="field" style={{ width: 190 }}><span>Style</span>
+            <Select className="input" value={look.style} onChange={(v) => set({ style: v as Look['style'] })}>
+              <option value="classic">Classic (parchment)</option>
+              <option value="card">Card (follows the theme)</option>
+              <option value="plain">Plain (no frame)</option>
+            </Select>
+          </label>
+          <label className="field" style={{ width: 150 }}><span>Font</span>
+            <Select className="input" value={look.font} onChange={(v) => set({ font: v as Look['font'] })}>
+              <option value="serif">Serif</option>
+              <option value="sans">Sans-serif</option>
+              <option value="page">Same as page</option>
+            </Select>
+          </label>
+          <label className="field" style={{ width: 110 }}><span>Width (px)</span>
+            <input className="input" type="number" min={260} max={760} value={look.width} onChange={(e) => set({ width: Number(e.target.value) })} />
+          </label>
+          <label className="field" style={{ width: 130 }}><span>Columns</span>
+            <Select className="input" value={String(look.columns)} onChange={(v) => set({ columns: v === '2' ? 2 : 1 })}>
+              <option value="1">One</option>
+              <option value="2">Two</option>
+            </Select>
+          </label>
+        </div>
+        <div className="row" style={{ flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+          <span className="muted" style={{ fontSize: 13 }}>Accent colour</span>
+          <button className={`btn sm ${look.accent ? '' : 'primary'}`} onClick={() => set({ accent: '' })}>Style default</button>
+          {ACCENTS.map((a) => (
+            <button key={a.value} className="icon-btn" title={a.name} aria-label={a.name} aria-pressed={look.accent === a.value} onClick={() => set({ accent: a.value })}
+              style={{ background: a.value, width: 22, height: 22, borderRadius: '50%', outline: look.accent === a.value ? '2px solid var(--text)' : 'none', outlineOffset: 2 }} />
+          ))}
+          <input type="color" title="Custom colour" aria-label="Custom accent colour" value={/^#[0-9a-f]{6}$/i.test(look.accent) ? look.accent : '#7a200d'} onChange={(e) => set({ accent: e.target.value })} />
+        </div>
+      </div>
+    </fieldset>
   )
 }
 
@@ -137,8 +206,9 @@ export function StatTemplatesView() {
     try {
       const wsId = await useStore.getState().ensureWorkspace()
       if (!wsId) return
+      const look = from ? from.look : DEFAULT_LOOK
       const sections = from ? structuredClone(from.sections) : [{ kind: 'title', key: 'name', placeholder: 'Name' }, { kind: 'rule' }, { kind: 'rows', fields: [{ key: 'field_1', label: 'First field' }] }]
-      const t = await api.createStatTemplate(wsId, { name, sections })
+      const t = await api.createStatTemplate(wsId, { name, sections, look })
       useStore.getState().upsertStatTemplate(t)
       navigate({ type: 'stattemplate', id: t.id })
     } catch (e: any) { setError(e.message) }
@@ -181,7 +251,8 @@ function TemplateBody({ template }: { template: StatTemplate }) {
   const wsId = useStore((s) => s.wsId)!
   const [name, setName] = useState(template.name)
   const [sections, setSections] = useState<Section[]>(template.sections)
-  const [saved, setSaved] = useState(() => JSON.stringify({ name: template.name, sections: template.sections }))
+  const [look, setLook] = useState<Look>(template.look)
+  const [saved, setSaved] = useState(() => JSON.stringify({ name: template.name, sections: template.sections, look: template.look }))
   const [mode, setMode] = useState<'visual' | 'source'>('visual')
   const [source, setSource] = useState('')
   const [srcErr, setSrcErr] = useState('')
@@ -190,42 +261,42 @@ function TemplateBody({ template }: { template: StatTemplate }) {
 
   const keyed = useMemo(() => withKeys(sections), [sections])
   const dups = useMemo(() => duplicateKeys(keyed), [keyed])
-  const dirty = JSON.stringify({ name, sections: keyed }) !== saved
+  const dirty = JSON.stringify({ name, sections: keyed, look }) !== saved
   const canSave = dirty && !dups.length && !srcErr && name.trim().length > 0
 
   const update = (i: number, s: Section) => setSections((l) => l.map((x, j) => (j === i ? s : x)))
 
   const save = async () => {
     try {
-      const t = await api.patchStatTemplate(template.id, { name: name.trim(), sections: keyed })
+      const t = await api.patchStatTemplate(template.id, { name: name.trim(), sections: keyed, look })
       useStore.getState().upsertStatTemplate(t)
       setSections(keyed)
-      setSaved(JSON.stringify({ name: name.trim(), sections: keyed }))
+      setSaved(JSON.stringify({ name: name.trim(), sections: keyed, look }))
       setError('')
     } catch (e: any) { setError(e.message) }
   }
 
   const switchMode = (m: 'visual' | 'source') => {
-    if (m === 'source') { setSource(sectionsToSource(keyed)); setSrcErr('') }
+    if (m === 'source') { setSource(sectionsToSource(keyed, look)); setSrcErr('') }
     setMode(m)
   }
 
   const onSource = (text: string) => {
     setSource(text)
-    try { setSections(parseTemplateSource(text)); setSrcErr('') } catch (e: any) { setSrcErr(e.message) }
+    try { const p = parseTemplateSource(text); setSections(p.sections); setLook(p.look); setSrcErr('') } catch (e: any) { setSrcErr(e.message) }
   }
 
   const duplicate = async () => {
     const n = (await askText('Copy this form', { label: 'Name', initial: `${name} copy`, okLabel: 'Create' }))?.trim()
     if (!n) return
     try {
-      const t = await api.createStatTemplate(wsId, { name: n, sections: structuredClone(keyed) })
+      const t = await api.createStatTemplate(wsId, { name: n, sections: structuredClone(keyed), look })
       useStore.getState().upsertStatTemplate(t)
       navigate({ type: 'stattemplate', id: t.id })
     } catch (e: any) { setError(e.message) }
   }
 
-  const previewTemplate: StatTemplate = { id: template.id, name, sections: keyed }
+  const previewTemplate: StatTemplate = { id: template.id, name, sections: keyed, look }
 
   return (
     <div>
@@ -257,6 +328,7 @@ function TemplateBody({ template }: { template: StatTemplate }) {
             </div>
             {mode === 'visual' ? (
               <>
+                <LookEditor look={look} onChange={setLook} readOnly={readOnly} />
                 {keyed.length === 0 && <div className="muted">Nothing here yet. Add a first section below.</div>}
                 {sections.map((s, i) => (
                   <fieldset key={i} disabled={readOnly} className="sd-set">
@@ -275,7 +347,7 @@ function TemplateBody({ template }: { template: StatTemplate }) {
                 <textarea className="input pt-source" spellCheck={false} value={source} readOnly={readOnly} onChange={(e) => onSource(e.target.value)} />
                 {srcErr
                   ? <div className="error">{srcErr}</div>
-                  : <small className="muted">YAML or JSON. Kinds: title, subtitle, rule, heading, rows, group, long, list. Field types: text, number, checkbox, select, long.</small>}
+                  : <small className="muted">YAML or JSON. Kinds: title, subtitle, rule, heading, rows, group, abilities, long, list. Field types: text, number, checkbox, select, long. The look: block sets style, accent, font, width and columns.</small>}
               </>
             )}
             {dups.length > 0 && <div className="error">Each field needs its own key. Used twice: {dups.join(', ')}.</div>}

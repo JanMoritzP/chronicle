@@ -12,6 +12,10 @@ export interface Layout {
   columns: 'single' | 'side-right' | 'side-left'
   /** width of the side column in px */
   sideWidth: number
+  /** columns: the text stays in its own column beside the side; wrap: the text runs on underneath the side once it ends */
+  flow: 'columns' | 'wrap'
+  /** columns flow only: the side stays in view while a long text scrolls past */
+  sticky: boolean
   top: Block[]
   side: Block[]
   main: Block[]
@@ -66,11 +70,13 @@ export function normalizeLayout(raw: any): Layout {
   const l: Layout = {
     columns,
     sideWidth: Math.min(520, Math.max(160, Number(raw.sideWidth) || 280)),
+    flow: raw.flow === 'wrap' ? 'wrap' : 'columns',
+    sticky: raw.sticky === true,
     top: zone(raw.top, 'top'), side: zone(raw.side, 'side'), main: zone(raw.main, 'main'), bottom: zone(raw.bottom, 'bottom'),
   }
   const has = (b: Block[]) => b.some((x) => x.type === 'body')
   if (![l.top, l.side, l.main, l.bottom].some(has)) l.main.push({ type: 'body' })
-  if (l.columns === 'single') { l.main = [...l.side, ...l.main]; l.side = [] }
+  if (l.columns === 'single') { l.main = [...l.side, ...l.main]; l.side = []; l.flow = 'columns'; l.sticky = false }
   return l
 }
 
@@ -125,7 +131,7 @@ const BUILTIN_LAYOUTS: Record<string, { name: string; icon: string; tag: string;
   person: {
     name: 'Person', icon: 'user', tag: 'person',
     layout: {
-      columns: 'side-right',
+      columns: 'side-right', flow: 'wrap',
       side: [
         { type: 'image', key: 'portrait', shape: 'square' },
         { type: 'fields', title: 'Details', fields: [f('race', 'Race'), f('class', 'Class / Role'), f('age', 'Age'), f('alignment', 'Alignment'), f('affiliation', 'Affiliation'), f('home', 'Home')] },
@@ -136,7 +142,7 @@ const BUILTIN_LAYOUTS: Record<string, { name: string; icon: string; tag: string;
   monster: {
     name: 'Monster', icon: 'skull', tag: 'monster',
     layout: {
-      columns: 'side-right', sideWidth: 380,
+      columns: 'side-right', sideWidth: 380, flow: 'wrap',
       side: [{ type: 'statblock', key: 'main', template: '5e-monster' }, { type: 'image', key: 'portrait', shape: 'wide' }],
       main: [{ type: 'body' }],
     },
@@ -144,7 +150,7 @@ const BUILTIN_LAYOUTS: Record<string, { name: string; icon: string; tag: string;
   location: {
     name: 'Location', icon: 'map-pin', tag: 'location',
     layout: {
-      columns: 'side-right',
+      columns: 'side-right', flow: 'wrap',
       top: [{ type: 'image', key: 'portrait', shape: 'wide', label: 'Banner' }],
       side: [{ type: 'fields', title: 'Overview', fields: [f('kind', 'Kind'), f('region', 'Region'), f('population', 'Population'), f('ruler', 'Ruler'), f('danger', 'Danger')] }],
       main: [{ type: 'body' }],
@@ -161,6 +167,8 @@ export const SAMPLE_SOURCE = `# Layout of a special page. JSON works too (start 
 # Blocks: image, statblock, fields, body (the normal text editor).
 columns: side-left        # side-left | side-right | single
 sideWidth: 300            # px
+flow: wrap                # columns (text stays beside the side) | wrap (text runs on underneath it)
+sticky: false             # columns flow only: keep the side in view while scrolling
 top: []
 side:
   - type: image

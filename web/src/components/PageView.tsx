@@ -267,7 +267,7 @@ function PageEditor({ page, anchor }: { page: FullPage; anchor?: string }) {
           <button className="icon-btn" title="Version history" onClick={() => setShowHistory(true)}><Clock size={16} /></button>
           {!readOnly && (
             <div style={{ position: 'relative' }}>
-              <button className="icon-btn" onClick={() => setShowMenu(!showMenu)}><MoreHorizontal size={16} /></button>
+            <button className="icon-btn" title="More actions" onClick={() => setShowMenu(!showMenu)}><MoreHorizontal size={16} /></button>
               {showMenu && (
                 <div className="menu" style={{ position: 'absolute', right: 0, top: 30 }} onMouseLeave={() => setShowMenu(false)}>
                   <button onClick={async () => { setShowMenu(false); await flush(); useStore.getState().setUi({ copyPages: [page.id] }) }}><Copy size={15} /> Copy to another world…</button>
@@ -300,6 +300,7 @@ function PageEditor({ page, anchor }: { page: FullPage; anchor?: string }) {
         <input
           ref={titleRef}
           className="page-title"
+          aria-label="Page title"
           value={title}
           placeholder="Untitled"
           readOnly={readOnly}
@@ -326,7 +327,7 @@ function PageEditor({ page, anchor }: { page: FullPage; anchor?: string }) {
           ))}
           {!readOnly && (
             <input
-              className="tag-input" placeholder="+ tag (nested: npc/villain)" value={tagDraft}
+              className="tag-input" aria-label="Add tags" placeholder="+ tag (nested: npc/villain)" value={tagDraft}
               onChange={(e) => setTagDraft(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag(tagDraft) }
@@ -415,7 +416,7 @@ function EmbedPicker({ onClose, onPick }: { onClose: () => void; onPick: (p: { i
   return (
     <div className="overlay" onMouseDown={onClose}>
       <div className="dialog" onMouseDown={(e) => e.stopPropagation()}>
-        <input className="big" autoFocus placeholder={chosen ? `Embed from “${chosen.title}”: whole page or a section` : 'Embed which page?'} value={chosen ? '' : q} readOnly={!!chosen}
+        <input className="big" autoFocus aria-label={chosen ? `Embed from ${chosen.title}: whole page or a section` : 'Embed which page?'} placeholder={chosen ? `Embed from "${chosen.title}": whole page or a section` : 'Embed which page?'} value={chosen ? '' : q} readOnly={!!chosen}
           onChange={(e) => { setQ(e.target.value); setIdx(0) }}
           onKeyDown={(e) => {
             if (e.key === 'Escape') onClose()
@@ -423,8 +424,8 @@ function EmbedPicker({ onClose, onPick }: { onClose: () => void; onPick: (p: { i
             if (e.key === 'ArrowUp') { e.preventDefault(); setIdx((i) => Math.max(0, i - 1)) }
             if (e.key === 'Enter') rows[idx]?.run()
           }} />
-        <div className="results">
-          {rows.map((r, i) => <div key={r.key} className={`result ${i === idx ? 'sel' : ''}`} onMouseEnter={() => setIdx(i)} onClick={r.run} style={{ whiteSpace: 'pre' }}>{r.label}</div>)}
+        <div className="results" aria-live="polite">
+          {rows.map((r, i) => <div key={r.key} className={`result ${i === idx ? 'sel' : ''}`} role="option" aria-selected={i === idx} onMouseEnter={() => setIdx(i)} onClick={r.run} style={{ whiteSpace: 'pre' }}>{r.label}</div>)}
         </div>
       </div>
     </div>
@@ -436,22 +437,22 @@ function History({ pageId, readOnly, onClose, onRestore }: { pageId: string; rea
   const [sel, setSel] = useState<{ id: string; content: any; title: string } | null>(null)
   useEffect(() => { api.versions(pageId).then(setVersions) }, [pageId])
   return (
-    <div className="overlay" onMouseDown={onClose}>
+    <div className="overlay" onMouseDown={onClose} role="dialog" aria-modal="true" aria-label="Version history">
       <div className="dialog" style={{ width: 860 }} onMouseDown={(e) => e.stopPropagation()}>
         <div className="row" style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
           <b className="grow">Version history</b>
-          <button className="btn sm" onClick={onClose}>Close</button>
+          <button className="btn sm" onClick={onClose} aria-label="Close">Close</button>
         </div>
         <div className="row" style={{ alignItems: 'stretch', minHeight: 0, flex: 1 }}>
-          <div className="results" style={{ width: 230, borderRight: '1px solid var(--border)', flex: 'none' }}>
+          <div className="results" style={{ width: 230, borderRight: '1px solid var(--border)', flex: 'none' }} role="listbox" aria-label="Versions">
             {!versions.length && <div className="muted" style={{ padding: 10 }}>No earlier versions yet. Snapshots are taken while you edit.</div>}
             {versions.map((v) => (
-              <div key={v.id} className={`result ${sel?.id === v.id ? 'sel' : ''}`} onClick={() => api.version(v.id).then((d) => setSel({ id: v.id, ...d }))}>
+              <div key={v.id} className={`result ${sel?.id === v.id ? 'sel' : ''}`} role="option" aria-selected={sel?.id === v.id} tabIndex={0} onClick={() => api.version(v.id).then((d) => setSel({ id: v.id, ...d }))}>
                 <div><div>{new Date(v.createdAt).toLocaleString()}</div><div className="sub">{v.wordCount} words</div></div>
               </div>
             ))}
           </div>
-          <div className="grow" style={{ overflow: 'auto', padding: 16 }}>
+          <div className="grow" style={{ overflow: 'auto', padding: 16 }} role="region" aria-label="Version preview">
             {sel ? (
               <>
                 {!readOnly && <button className="btn primary sm" style={{ marginBottom: 10 }} onClick={() => onRestore(sel.content, sel.title)}>Restore this version</button>}

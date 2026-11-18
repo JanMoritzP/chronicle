@@ -1,9 +1,8 @@
 import { ImagePlus, X } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { StatBlockBody } from '../editor/StatBlock'
+import { StatBlockBody, StatBlockEditor } from '../editor/StatBlock'
 import { findTemplate, TEMPLATES } from '../editor/templates'
 import { useTemplates } from '../editor/useTemplates'
-import { Select } from './Select'
 import type { Block, Layout } from '../lib/pageTypes'
 
 export type TypeData = Record<string, any>
@@ -46,14 +45,9 @@ function StatBlockSlot({ b, value, readOnly, set }: { b: Extract<Block, { type: 
   const data = value?.data ?? {}
   return (
     <div className="tl-statblock">
-      <StatBlockBody template={template} data={data} onChange={readOnly ? undefined : (k, v) => set({ template: template.id, data: { ...data, [k]: v } })} />
-      {!readOnly && (
-        <div className="sb-toolbar">
-          <Select className="input" style={{ width: 'auto', padding: '2px 6px' }} value={template.id} onChange={(v) => set({ template: v, data })}>
-            {all.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-          </Select>
-        </div>
-      )}
+      {readOnly
+        ? <StatBlockBody template={template} data={data} />
+        : <StatBlockEditor template={template} data={data} onChange={(k, v) => set({ template: template.id, data: { ...data, [k]: v } })} onTemplate={(id) => set({ template: id, data })} />}
     </div>
   )
 }
@@ -92,7 +86,7 @@ export function TypeLayout({ layout, data, readOnly, setValue, pickImage, body }
     <div className="tl">
       {layout.top.length > 0 && <div className="tl-top">{render(layout.top, 'top')}</div>}
       {columns ? (
-        <div className={`tl-cols ${layout.columns}`} style={{ ['--side' as any]: `${layout.sideWidth}px` }}>
+        <div className={`tl-cols ${layout.columns} ${layout.flow}${layout.flow === 'columns' && layout.sticky ? ' sticky' : ''}`} style={{ ['--side' as any]: `${layout.sideWidth}px` }}>
           <div className="tl-side">{render(layout.side, 'side')}</div>
           <div className="tl-main">{render(layout.main, 'main')}</div>
         </div>

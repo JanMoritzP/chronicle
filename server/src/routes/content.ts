@@ -35,25 +35,51 @@ function wsExists(id: string) {
   return !!db.prepare('SELECT 1 FROM workspaces WHERE id = ? AND deleted_at IS NULL').get(id)
 }
 
+const settingsSchema = z.object({
+  /** Text of the todo every new page starts with; empty turns it off. */
+  newPageTodo: z.string().max(200),
+})
+
+export const DEFAULT_WORLD_SETTINGS = { newPageTodo: 'Fill me' }
+
+export function worldSettings(raw: string | null | undefined) {
+  let saved: any = {}
+  try { saved = JSON.parse(raw || '{}') } catch { /* keep the defaults */ }
+  return { ...DEFAULT_WORLD_SETTINGS, ...(typeof saved.newPageTodo === 'string' ? { newPageTodo: saved.newPageTodo } : {}) }
+}
+
+/** A new page starts with the world's default todo: alone in a blank page, after the content when a template or capture supplied some. */
+function withStarterTodo(doc: DocNode, ws: string, hasContent: boolean): DocNode {
+  const row = db.prepare('SELECT settings FROM workspaces WHERE id = ?').get(ws) as { settings: string } | undefined
+  const text = worldSettings(row?.settings).newPageTodo.trim()
+  if (!text) return doc
+  const todo = { type: 'paragraph', content: [{ type: 'todo', attrs: { message: text, done: false } }] }
+  return { ...doc, content: hasContent ? [...(doc.content ?? []), todo] : [todo] }
+}
+
 export async function contentRoutes(app: FastifyInstance) {
   // ---------- workspaces ----------
   app.get('/api/workspaces', { preHandler: requireUser }, async () =>
-    db.prepare('SELECT id, name, created_at AS createdAt FROM workspaces WHERE deleted_at IS NULL ORDER BY created_at').all())
+    (db.prepare('SELECT id, name, settings, created_at AS createdAt FROM workspaces WHERE deleted_at IS NULL ORDER BY created_at').all() as { id: string; name: string; settings: string; createdAt: number }[])
+      .map((w) => ({ ...w, settings: worldSettings(w.settings) })))
 
   app.post('/api/workspaces', { preHandler: requireEditor }, async (req, reply) => {
     const b = z.object({ name: z.string().min(1).max(100) }).safeParse(req.body)
     if (!b.success) return reply.code(400).send({ error: 'name required' })
     const id = uid()
     db.prepare('INSERT INTO workspaces(id,name,created_at) VALUES(?,?,?)').run(id, b.data.name, now())
-    return { id, name: b.data.name }
+    return { id, name: b.data.name, settings: worldSettings('{}') }
   })
 
   app.patch('/api/workspaces/:id', { preHandler: requireEditor }, async (req, reply) => {
     const { id } = req.params as { id: string }
-    const b = z.object({ name: z.string().min(1).max(100) }).safeParse(req.body)
-    if (!b.success) return reply.code(400).send({ error: 'name required' })
-    db.prepare('UPDATE workspaces SET name = ? WHERE id = ?').run(b.data.name, id)
-    return { ok: true }
+    const b = z.object({ name: z.string().min(1).max(100).optional(), settings: settingsSchema.optional() }).safeParse(req.body)
+    if (!b.success) return reply.code(400).send({ error: 'bad request' })
+    const row = db.prepare('SELECT settings FROM workspaces WHERE id = ? AND deleted_at IS NULL').get(id) as { settings: string } | undefined
+    if (!row) return reply.code(404).send({ error: 'world not found' })
+    if (b.data.name) db.prepare('UPDATE workspaces SET name = ? WHERE id = ?').run(b.data.name, id)
+    if (b.data.settings) db.prepare('UPDATE workspaces SET settings = ? WHERE id = ?').run(JSON.stringify({ ...worldSettings(row.settings), ...b.data.settings }), id)
+    return { ok: true, settings: worldSettings((db.prepare('SELECT settings FROM workspaces WHERE id = ?').get(id) as { settings: string }).settings) }
   })
 
   app.delete('/api/workspaces/:id', { preHandler: requireEditor }, async (req) => {
@@ -166,7 +192,7 @@ export async function contentRoutes(app: FastifyInstance) {
     }).safeParse(req.body)
     if (!b.success) return reply.code(400).send({ error: 'bad request' })
     const id = uid()
-    const doc = ensureHeadingIds(b.data.content ?? emptyDoc())
+    const doc = ensureHeadingIds(withStarterTodo(b.data.content ?? emptyDoc(), ws, !!b.data.content))
     const t = now()
     db.transaction(() => {
       db.prepare(

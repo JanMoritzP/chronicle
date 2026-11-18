@@ -16,6 +16,8 @@ function PageCard({ p }: { p: PageMeta }) {
   const navigate = useStore((s) => s.navigate)
   return (
     <div className="card" data-page-id={p.id} onClick={() => navigate({ type: 'page', id: p.id })}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate({ type: 'page', id: p.id }) } }}
+      tabIndex={0} role="button" aria-label={p.title || 'Untitled'}
       onAuxClick={(e) => { if (e.button === 1) navigate({ type: 'page', id: p.id }, { newTab: true }) }}>
       <div className="title row" style={{ gap: 6 }}><PageIcon page={p} /> {p.title || 'Untitled'}</div>
       <p>{p.text.slice(0, 160) || 'Empty'}</p>
@@ -103,7 +105,7 @@ export function ZettelView() {
       <h1>Zettelkasten</h1>
       {!readOnly && (
         <div className="row" style={{ marginBottom: 16, alignItems: 'flex-start' }}>
-          <textarea className="input" rows={2} placeholder="Capture a thought… (Ctrl+Enter to save)" value={draft} onChange={(e) => setDraft(e.target.value)}
+          <textarea className="input" rows={2} placeholder="Capture a thought… (Ctrl+Enter to save)" aria-label="Capture a thought" value={draft} onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && draft.trim()) { useStore.getState().addZettel(draft.trim(), []); setDraft('') } }} />
           <button className="btn primary" disabled={!draft.trim()} onClick={() => { useStore.getState().addZettel(draft.trim(), []); setDraft('') }}>Add</button>
         </div>
@@ -230,9 +232,9 @@ function PasswordForm() {
     <>
       <h3 className="muted" style={{ marginTop: 28 }}>Change my password</h3>
       <form className="row" style={{ flexWrap: 'wrap' }} onSubmit={(e) => { e.preventDefault(); submit() }}>
-        <input className="input" style={{ width: 170 }} type="password" autoComplete="current-password" placeholder="current password" value={f.current} onChange={(e) => setF({ ...f, current: e.target.value })} />
-        <input className="input" style={{ width: 170 }} type="password" autoComplete="new-password" placeholder="new (8+)" value={f.next} onChange={(e) => setF({ ...f, next: e.target.value })} />
-        <input className="input" style={{ width: 170 }} type="password" autoComplete="new-password" placeholder="new again" value={f.again} onChange={(e) => setF({ ...f, again: e.target.value })} />
+        <input className="input" style={{ width: 170 }} type="password" autoComplete="current-password" placeholder="current password" aria-label="Current password" value={f.current} onChange={(e) => setF({ ...f, current: e.target.value })} />
+        <input className="input" style={{ width: 170 }} type="password" autoComplete="new-password" placeholder="new (8+)" aria-label="New password" value={f.next} onChange={(e) => setF({ ...f, next: e.target.value })} />
+        <input className="input" style={{ width: 170 }} type="password" autoComplete="new-password" placeholder="new again" aria-label="New password confirmation" value={f.again} onChange={(e) => setF({ ...f, again: e.target.value })} />
         <button className="btn" disabled={!f.current || !f.next}>Change</button>
       </form>
       {msg && <div className={msg.ok ? 'muted' : 'error'} style={{ marginTop: 6 }}>{msg.text}</div>}
@@ -248,7 +250,7 @@ function FontPicker({ label, value, extra, onChange }: { label: string; value: s
       <span>{label}</span>
       <Select className="input" value={custom ? '__custom' : value} onChange={(v) => {
         if (v === '__custom') { setCustom(true); onChange(known ? '' : value) } else { setCustom(false); onChange(v) }
-      }}>
+      }} aria-label={label} title={label}>
         {extra?.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
         {FONTS.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
         <option value="__custom">Custom font name…</option>
@@ -278,6 +280,36 @@ function FontSettings() {
   )
 }
 
+function WorldOptions({ id }: { id: string }) {
+  const world = useStore((s) => s.workspaces.find((w) => w.id === id))
+  const readOnly = useStore((s) => s.user?.role === 'viewer')
+  const saved = world?.settings?.newPageTodo ?? 'Fill me'
+  const [text, setText] = useState(saved)
+  useEffect(() => setText(saved), [id, saved])
+  if (!world) return null
+  const save = () => {
+    if (text === saved) return
+    useStore.getState().setWorldSettings(id, { newPageTodo: text.trim() }).catch((e) => alertDialog(e.message))
+  }
+  return (
+    <div style={{ marginTop: 14 }}>
+      <label className="field" style={{ maxWidth: 420 }}>
+        <span>Todo every new page starts with</span>
+        <input className="input" value={text} disabled={readOnly} placeholder="Fill me" onChange={(e) => setText(e.target.value)} onBlur={save} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }} />
+      </label>
+      <p className="muted" style={{ fontSize: 13, margin: '4px 0 0' }}>Added to each new page in “{world.name}”. Leave it empty to start pages without one.</p>
+      {!readOnly && (
+        <p style={{ marginTop: 14 }}>
+          <button className="btn sm danger" onClick={async () => {
+            if (!(await confirmDialog(`Delete the world “${world.name}”? Its pages, maps, templates and everything else in it disappear from the app. Export it first if you may want it back.`, { okLabel: 'Delete world', danger: true }))) return
+            useStore.getState().deleteWorkspace(id).catch((e) => alertDialog(e.message))
+          }}>Delete this world</button>
+        </p>
+      )}
+    </div>
+  )
+}
+
 export function SettingsView() {
   const { user, workspaces, wsId } = useStore()
   const [theme, setTheme] = useState(document.documentElement.dataset.theme)
@@ -294,7 +326,7 @@ export function SettingsView() {
       <h3 className="muted">Theme</h3>
       <div className="swatches">
         {THEMES.map((t) => (
-          <button key={t.id} className={`theme-card ${theme === t.id ? 'on' : ''}`} onClick={() => { applyTheme(t.id); setTheme(t.id) }}>
+          <button key={t.id} className={`theme-card ${theme === t.id ? 'on' : ''}`} onClick={() => { applyTheme(t.id); setTheme(t.id) }} aria-label={theme === t.id ? `Selected: ${t.name}` : `Switch to ${t.name} theme`} aria-pressed={theme === t.id}>
             <div className="bars" style={{ background: t.swatch[0] }}><i style={{ background: t.swatch[0] }} /><i style={{ background: t.swatch[1] }} /><i style={{ background: t.swatch[2] }} /></div>
             <span>{t.name}</span>
           </button>
@@ -308,6 +340,7 @@ export function SettingsView() {
         {workspaces.map((w) => <button key={w.id} className={`btn ${w.id === wsId ? 'primary' : ''}`} onClick={() => useStore.getState().selectWorkspace(w.id)}>{w.name}</button>)}
         {user?.role !== 'viewer' && <button className="btn ghost" onClick={async () => { const n = await askText('New world', { label: 'World name', okLabel: 'Create' }); if (n?.trim()) useStore.getState().createWorkspace(n.trim()) }}>+ New world</button>}
       </div>
+      {wsId && <WorldOptions id={wsId} />}
       {wsId && (
         <p style={{ marginTop: 10 }}>
           <a className="btn sm" href={`/api/workspaces/${wsId}/export`} download><Download size={13} style={{ verticalAlign: -2 }} /> Export this world (.zip)</a>
@@ -331,9 +364,9 @@ export function SettingsView() {
             ))}
           </tbody></table>
           <div className="row" style={{ marginTop: 10, flexWrap: 'wrap' }}>
-            <input className="input" style={{ width: 150 }} placeholder="username" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} />
-            <input className="input" style={{ width: 170 }} type="password" placeholder="password (8+)" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
-            <Select className="input" style={{ width: 120 }} value={form.role} onChange={(v) => setForm({ ...form, role: v })}><option value="viewer">Viewer</option><option value="editor">Editor</option></Select>
+            <input className="input" style={{ width: 150 }} placeholder="username" aria-label="Username" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} />
+            <input className="input" style={{ width: 170 }} type="password" placeholder="password (8+)" aria-label="Password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+            <Select className="input" style={{ width: 120 }} value={form.role} onChange={(v) => setForm({ ...form, role: v })} aria-label="User role" title="User role"><option value="viewer">Viewer</option><option value="editor">Editor</option></Select>
             <button className="btn primary" onClick={async () => { try { await api.createUser(form); setForm({ username: '', password: '', role: 'viewer' }); setMsg(''); loadUsers() } catch (e: any) { setMsg(e.message) } }}>Add account</button>
           </div>
           {msg && <div className="error">{msg}</div>}

@@ -150,16 +150,17 @@ export function GraphView() {
 
   const allTags = [...new Set(pages.flatMap((p) => p.tags))].sort()
   return (
-    <div className="graph-wrap">
+    <div className="graph-wrap" aria-label="Graph view showing page connections">
       <div className="graph-panel">
-        <label className="row"><input type="checkbox" checked={hideOrphans} onChange={(e) => setHideOrphans(e.target.checked)} /> Hide unlinked pages</label>
-        <Select className="input" value={tagFilter} onChange={setTagFilter}>
+        <label className="row"><input type="checkbox" checked={hideOrphans} onChange={(e) => setHideOrphans(e.target.checked)} aria-label="Hide unlinked pages" /> Hide unlinked pages</label>
+        <Select className="input" value={tagFilter} onChange={setTagFilter} aria-label="Filter by tag">
           <option value="">All tags</option>
           {allTags.map((t) => <option key={t} value={t}>#{t}</option>)}
         </Select>
-        <span className="muted" style={{ fontSize: 12 }}>{hover ? pages.find((p) => p.id === hover)?.title : 'Scroll to zoom, drag to pan, click a node to open'}</span>
+        <span className="muted" style={{ fontSize: 12 }} aria-live="polite">{hover ? pages.find((p) => p.id === hover)?.title : 'Scroll to zoom, drag to pan, click a node to open'}</span>
       </div>
-      <canvas ref={canvas} style={{ cursor: 'grab' }} />
+      <canvas ref={canvas} style={{ cursor: 'grab' }} role="img" aria-label="Graph showing page connections" />
+      <div className="sr-only" aria-hidden="false" style={{ position: 'absolute', width: '1px', height: '1px', overflow: 'hidden', clip: 'rect(0,0,0,0)' }}>{pages.length} pages connected</div>
     </div>
   )
 }

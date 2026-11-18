@@ -26,7 +26,7 @@ export function MapsView() {
   const canEdit = useStore((s) => s.user?.role) !== 'viewer'
   const nav = useStore.getState().navigate
   if (err) return <div className="view error">{err}</div>
-  if (!ready) return <div className="view muted">Loadingâ€¦</div>
+  if (!ready) return <div className="view muted">Loading…</div>
 
   const tree = (parent: string | null, depth: number): React.ReactNode =>
     maps.filter((m) => (m.parentMapId && maps.some((x) => x.id === m.parentMapId) ? m.parentMapId : null) === parent).map((m) => (
@@ -34,9 +34,9 @@ export function MapsView() {
         <div className="side-item map-row" style={{ paddingLeft: 10 + depth * 22 }} onClick={() => nav({ type: 'map', id: m.id })}>
           <MapIcon size={16} className="muted" />
           <span className="grow ellipsis">{m.name}</span>
-          {m.status === 'processing' && <span className="chip">preparingâ€¦</span>}
+          {m.status === 'processing' && <span className="chip">preparing…</span>}
           {m.status === 'error' && <span className="chip" style={{ color: 'var(--danger)' }}>failed</span>}
-          {m.width && <span className="muted" style={{ fontSize: 12 }}>{m.width} Ã— {m.height}</span>}
+          {m.width && <span className="muted" style={{ fontSize: 12 }}>{m.width} × {m.height}</span>}
         </div>
         {tree(m.id, depth + 1)}
       </div>
@@ -50,7 +50,7 @@ export function MapsView() {
       </div>
       {!maps.length && <p className="muted">No maps yet. Upload a PNG, JPEG, WebP or AVIF of your world. Very large images are cut into tiles, so they stay smooth to zoom.</p>}
       {tree(null, 0)}
-      {maps.length > 0 && <p className="muted" style={{ fontSize: 13 }}>Maps can sit inside other maps: open a map, then use Layers â†’ â€œAdd a map inside this oneâ€.</p>}
+      {maps.length > 0 && <p className="muted" style={{ fontSize: 13 }}>Maps can sit inside other maps: open a map, then use Layers → “Add a map inside this one”.</p>}
     </div>
   )
 }
@@ -151,7 +151,7 @@ function CalendarEditor({ initial, onSave, onCancel }: { initial: Calendar; onSa
           try { await onSave(c) } catch (e: any) { setErr(e.message) } finally { setBusy(false) }
         }}>Save calendar</button>
         <button className="btn" onClick={onCancel}>Cancel</button>
-        <button className="btn ghost" onClick={() => setC(structuredClone(DEFAULT_CALENDAR))}>Reset to 12 Ã— 30</button>
+        <button className="btn ghost" onClick={() => setC(structuredClone(DEFAULT_CALENDAR))}>Reset to 12 × 30</button>
       </div>
       <small className="muted">Changing the calendar keeps every date as a day count, so existing events stay in place but may read differently.</small>
     </div>
@@ -192,7 +192,7 @@ export function TimelineView() {
   }, [shown, cal])
 
   if (err) return <div className="view error">{err}</div>
-  if (!ready) return <div className="view muted">Loadingâ€¦</div>
+  if (!ready) return <div className="view muted">Loading…</div>
 
   return (
     <div className="view">
@@ -203,7 +203,7 @@ export function TimelineView() {
       </div>
 
       {editCal && <CalendarEditor initial={cal} onCancel={() => setEditCal(false)} onSave={async (c) => { await useWorld.getState().setCalendar(c); setEditCal(false) }} />}
-      {!customCalendar && !editCal && <p className="muted">Using a plain 12 Ã— 30 day calendar. Set up your own (seasons, month names, days per month) before you add many events; dates are stored as day counts, so they survive later changes.</p>}
+      {!customCalendar && !editCal && <p className="muted">Using a plain 12 × 30 day calendar. Set up your own (seasons, month names, days per month) before you add many events; dates are stored as day counts, so they survive later changes.</p>}
 
       {draft && (
         <div className="event-draft">
@@ -213,7 +213,7 @@ export function TimelineView() {
           {draft.end !== null && <DateField cal={cal} value={draft.end} onChange={(end) => setDraft({ ...draft, end: Math.max(end, draft.t) })} />}
           <div className="field"><span>Page (optional)</span>
             {draft.pageId ? <div className="row"><span className="chip">{pageOf(draft.pageId)?.title}</span><button className="btn sm" onClick={() => setDraft({ ...draft, pageId: null })}>Clear</button></div>
-              : <PagePicker placeholder="Attach to a pageâ€¦" onPick={(p) => setDraft({ ...draft, pageId: p.id, title: draft.title || p.title })} />}
+              : <PagePicker placeholder="Attach to a page…" onPick={(p) => setDraft({ ...draft, pageId: p.id, title: draft.title || p.title })} />}
           </div>
           <div className="row">
             <button className="btn primary" disabled={!draft.title.trim()} onClick={async () => {
@@ -227,7 +227,7 @@ export function TimelineView() {
         </div>
       )}
 
-      <input className="input" placeholder="Filter eventsâ€¦" value={q} onChange={(e) => setQ(e.target.value)} style={{ margin: '8px 0 16px' }} />
+      <input className="input" placeholder="Filter events…" value={q} onChange={(e) => setQ(e.target.value)} style={{ margin: '8px 0 16px' }} />
       {!events.length && <p className="muted">No events yet. Add one here, or type <kbd>/teven</kbd> on any page to give it a date.</p>}
 
       {byYear.map(([year, list]) => (
@@ -241,8 +241,8 @@ export function TimelineView() {
                 <div className="tl-date">{formatRange(cal, e.tStart, e.tEnd)}</div>
                 <div className="grow">
                   <b>{e.title}</b>
-                  {pg && <> Â· <a data-page-id={pg.id} onClick={() => nav({ type: 'page', id: pg.id })}>{pg.title || 'Untitled'}</a></>}
-                  {pin && <> Â· <a title={pin.mapName} onClick={() => { localStorage.setItem(`mapT:${pin.mapId}`, String(e.tStart)); localStorage.setItem(`mapTimeOn:${pin.mapId}`, '1'); nav({ type: 'map', id: pin.mapId }) }}>on map â€œ{pin.mapName}â€</a></>}
+                  {pg && <> · <a data-page-id={pg.id} onClick={() => nav({ type: 'page', id: pg.id })}>{pg.title || 'Untitled'}</a></>}
+                  {pin && <> · <a title={pin.mapName} onClick={() => { localStorage.setItem(`mapT:${pin.mapId}`, String(e.tStart)); localStorage.setItem(`mapTimeOn:${pin.mapId}`, '1'); nav({ type: 'map', id: pin.mapId }) }}>on map “{pin.mapName}”</a></>}
                 </div>
                 {canEdit && <button className="icon-btn" title="Edit" onClick={() => { setDraft({ id: e.id, title: e.title, pageId: e.pageId, t: e.tStart, end: e.tEnd }); window.scrollTo?.(0, 0); document.querySelector('.view')?.scrollTo?.(0, 0) }}><Pencil size={14} /></button>}
                 {canEdit && <button className="icon-btn" title="Delete" onClick={async () => { if (await confirmDialog('Delete this event?', { okLabel: 'Delete', danger: true })) { await api.deleteEvent(e.id); useWorld.getState().reloadEvents() } }}><Trash2 size={14} /></button>}
@@ -251,7 +251,7 @@ export function TimelineView() {
           })}
         </section>
       ))}
-      {maps.length === 0 && events.length > 0 && <p className="muted" style={{ fontSize: 13 }}>Events attached to a page that is pinned on a map get a â€œshow on mapâ€ link.</p>}
+      {maps.length === 0 && events.length > 0 && <p className="muted" style={{ fontSize: 13 }}>Events attached to a page that is pinned on a map get a “show on map” link.</p>}
     </div>
   )
 }

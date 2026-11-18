@@ -18,40 +18,85 @@ export type Section =
   | { kind: 'subtitle'; key: string; placeholder?: string }
   | { kind: 'rule' }
   | { kind: 'heading'; text: string }
-  | { kind: 'rows'; fields: Field[] }
+  | { kind: 'rows'; fields: Field[]; columns?: 1 | 2 }
+  | { kind: 'abilities'; layout: 'row' | 'table'; saves?: boolean }
   | { kind: 'group'; fields: Field[] }
   | { kind: 'long'; key: string; heading?: string; placeholder?: string }
   | { kind: 'list'; key: string; heading?: string; placeholder?: string }
 
-export interface StatTemplate { id: string; name: string; sections: Section[]; builtin?: boolean }
+/** How a form is drawn: classic is the printed monster stat block, card follows the app theme, plain has no frame. */
+export interface Look {
+  style: 'classic' | 'card' | 'plain'
+  /** CSS colour for names, labels and rules; empty uses the style's own */
+  accent: string
+  font: 'serif' | 'sans' | 'page'
+  /** px, for the stat block when it has room (page layouts may make it fill their column) */
+  width: number
+  columns: 1 | 2
+}
+export const DEFAULT_LOOK: Look = { style: 'card', accent: '', font: 'page', width: 520, columns: 1 }
+export const CLASSIC_LOOK: Look = { style: 'classic', accent: '', font: 'serif', width: 440, columns: 1 }
 
-const abilities: Field[] = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'].map((a) => ({ key: a.toLowerCase(), label: a }))
+export interface StatTemplate { id: string; name: string; sections: Section[]; look: Look; builtin?: boolean }
+
+export const ABILITY_KEYS = ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const
+const abilitySection: Section = { kind: 'abilities', layout: 'row' }
 
 export const TEMPLATES: StatTemplate[] = [
   {
     id: '5e-monster',
     name: '5e Monster / NPC',
     builtin: true,
+    look: CLASSIC_LOOK,
     sections: [
       { kind: 'title', key: 'name', placeholder: 'Creature name' },
       { kind: 'subtitle', key: 'type', placeholder: 'Medium humanoid, neutral' },
       { kind: 'rule' },
-      { kind: 'rows', fields: [{ key: 'ac', label: 'Armor Class' }, { key: 'hp', label: 'Hit Points' }, { key: 'speed', label: 'Speed' }] },
+      { kind: 'rows', fields: [{ key: 'ac', label: 'Armor Class', placeholder: '15 (natural armor)' }, { key: 'hp', label: 'Hit Points', placeholder: '45 (6d8 + 18)' }, { key: 'speed', label: 'Speed', placeholder: '30 ft., fly 60 ft.' }] },
       { kind: 'rule' },
-      { kind: 'group', fields: abilities },
+      abilitySection,
       { kind: 'rule' },
       {
         kind: 'rows',
         fields: [
           { key: 'saves', label: 'Saving Throws' }, { key: 'skills', label: 'Skills' },
-          { key: 'resist', label: 'Damage Resistances' }, { key: 'immune', label: 'Damage Immunities' },
+          { key: 'vuln', label: 'Damage Vulnerabilities' }, { key: 'resist', label: 'Damage Resistances' }, { key: 'immune', label: 'Damage Immunities' },
           { key: 'condImmune', label: 'Condition Immunities' }, { key: 'senses', label: 'Senses' },
-          { key: 'languages', label: 'Languages' }, { key: 'cr', label: 'Challenge' },
+          { key: 'languages', label: 'Languages' },
         ],
       },
+      { kind: 'rows', columns: 2, fields: [{ key: 'cr', label: 'Challenge', placeholder: '3 (700 XP)' }, { key: 'prof', label: 'Proficiency Bonus', placeholder: '+2' }] },
       { kind: 'rule' },
-      { kind: 'long', key: 'traits', placeholder: 'Special traits…' },
-      { kind: 'long', key: 'actions', heading: 'Actions', placeholder: 'Actions…' },
+      { kind: 'long', key: 'traits', placeholder: '***Pack Tactics.*** The wolf has advantage on attack rolls…' },
+      { kind: 'long', key: 'actions', heading: 'Actions', placeholder: '***Bite.*** *Melee Weapon Attack:* +4 to hit, reach 5 ft., one target. *Hit:* 7 (2d4 + 2) piercing damage.' },
+      { kind: 'long', key: 'bonus', heading: 'Bonus Actions' },
+      { kind: 'long', key: 'reactions', heading: 'Reactions' },
+      { kind: 'long', key: 'legendary', heading: 'Legendary Actions' },
+    ],
+  },
+  {
+    id: '5e-monster-2024',
+    name: '5e Monster (2024 layout)',
+    builtin: true,
+    look: { ...CLASSIC_LOOK, width: 480 },
+    sections: [
+      { kind: 'title', key: 'name', placeholder: 'Creature name' },
+      { kind: 'subtitle', key: 'type', placeholder: 'Medium Humanoid, Neutral' },
+      { kind: 'rule' },
+      { kind: 'rows', columns: 2, fields: [{ key: 'ac', label: 'AC', placeholder: '15' }, { key: 'init', label: 'Initiative', placeholder: '+2 (12)' }] },
+      { kind: 'rows', fields: [{ key: 'hp', label: 'HP', placeholder: '45 (6d8 + 18)' }, { key: 'speed', label: 'Speed', placeholder: '30 ft.' }] },
+      { kind: 'rule' },
+      { kind: 'abilities', layout: 'table', saves: true },
+      { kind: 'rule' },
+      {
+        kind: 'rows',
+        fields: [
+          { key: 'skills', label: 'Skills' }, { key: 'vuln', label: 'Vulnerabilities' }, { key: 'resist', label: 'Resistances' }, { key: 'immune', label: 'Immunities' },
+          { key: 'senses', label: 'Senses' }, { key: 'languages', label: 'Languages' }, { key: 'cr', label: 'CR', placeholder: '3 (XP 700; PB +2)' },
+        ],
+      },
+      { kind: 'long', key: 'traits', heading: 'Traits' },
+      { kind: 'long', key: 'actions', heading: 'Actions' },
       { kind: 'long', key: 'bonus', heading: 'Bonus Actions' },
       { kind: 'long', key: 'reactions', heading: 'Reactions' },
       { kind: 'long', key: 'legendary', heading: 'Legendary Actions' },
@@ -61,6 +106,7 @@ export const TEMPLATES: StatTemplate[] = [
     id: '5e-character',
     name: '5e Player Character',
     builtin: true,
+    look: CLASSIC_LOOK,
     sections: [
       { kind: 'title', key: 'name', placeholder: 'Character name' },
       { kind: 'subtitle', key: 'class', placeholder: 'Level 5 Half-Elf Rogue' },
@@ -73,7 +119,7 @@ export const TEMPLATES: StatTemplate[] = [
         ],
       },
       { kind: 'rule' },
-      { kind: 'group', fields: abilities },
+      abilitySection,
       { kind: 'rule' },
       { kind: 'rows', fields: [{ key: 'saves', label: 'Saving Throws' }, { key: 'skills', label: 'Skills' }, { key: 'languages', label: 'Languages' }, { key: 'tools', label: 'Tools' }] },
       { kind: 'rule' },
@@ -86,6 +132,7 @@ export const TEMPLATES: StatTemplate[] = [
     id: 'blank',
     name: 'Blank (name + notes)',
     builtin: true,
+    look: DEFAULT_LOOK,
     sections: [
       { kind: 'title', key: 'name', placeholder: 'Name' },
       { kind: 'subtitle', key: 'sub', placeholder: 'Subtitle' },
@@ -114,6 +161,23 @@ function field(raw: any, where: string): Field {
   return f
 }
 
+const STYLES: Look['style'][] = ['classic', 'card', 'plain']
+const FONTS: Look['font'][] = ['serif', 'sans', 'page']
+
+/** Anything that is not a plain CSS colour is dropped, so a stored look can never inject styles. */
+const colour = (v: any) => (typeof v === 'string' && /^(#[0-9a-f]{3,8}|[a-z]{3,20})$/i.test(v.trim()) ? v.trim() : '')
+
+export function normalizeLook(raw: any): Look {
+  const r = raw && typeof raw === 'object' ? raw : {}
+  return {
+    style: STYLES.includes(r.style) ? r.style : DEFAULT_LOOK.style,
+    accent: colour(r.accent),
+    font: FONTS.includes(r.font) ? r.font : DEFAULT_LOOK.font,
+    width: Math.min(760, Math.max(260, Math.round(Number(r.width)) || DEFAULT_LOOK.width)),
+    columns: Number(r.columns) === 2 ? 2 : 1,
+  }
+}
+
 /** Turns loosely typed JSON/YAML into well-formed sections; throws a readable Error when a section is unusable. */
 export function normalizeSections(raw: any): Section[] {
   if (!Array.isArray(raw)) throw new Error('"sections" must be a list.')
@@ -127,33 +191,39 @@ export function normalizeSections(raw: any): Section[] {
       case 'heading': return { kind: 'heading', text: str(s.text ?? s.heading) }
       case 'title': case 'subtitle': return { kind: s.kind, key: key(), placeholder: opt(s.placeholder) }
       case 'long': case 'list': return { kind: s.kind, key: key(), heading: opt(s.heading), placeholder: opt(s.placeholder) }
-      case 'rows': case 'group':
+      case 'rows': case 'group': {
         if (!Array.isArray(s.fields)) throw new Error(`${where} (${s.kind}) needs a fields: list`)
-        return { kind: s.kind, fields: s.fields.map((f: any, j: number) => field(f, `${where}, field ${j + 1}`)) }
-      default: throw new Error(`${where}: unknown kind "${s.kind}" (title, subtitle, rule, heading, rows, group, long, list)`)
+        const fields = s.fields.map((f: any, j: number) => field(f, `${where}, field ${j + 1}`))
+        return s.kind === 'rows' && Number(s.columns) === 2 ? { kind: 'rows', fields, columns: 2 } : { kind: s.kind, fields }
+      }
+      case 'abilities': {
+        const layout = s.layout === 'table' ? 'table' : 'row'
+        return layout === 'table' && s.saves ? { kind: 'abilities', layout, saves: true } : { kind: 'abilities', layout }
+      }
+      default: throw new Error(`${where}: unknown kind "${s.kind}" (title, subtitle, rule, heading, rows, group, abilities, long, list)`)
     }
   })
 }
 
-/** Template source may be JSON or YAML: a list of sections, or an object with "sections". */
-export function parseTemplateSource(source: string): Section[] {
+/** Template source may be JSON or YAML: a list of sections, or an object with "sections" and an optional "look". */
+export function parseTemplateSource(source: string): { sections: Section[]; look: Look } {
   const text = source.trim()
   if (!text) throw new Error('The template is empty.')
   let data: any
   try { data = text.startsWith('{') || text.startsWith('[') ? JSON.parse(text) : parseYaml(text) } catch (e: any) {
     throw new Error(`Could not read the template: ${String(e.message ?? e).split('\n')[0]}`)
   }
-  return normalizeSections(Array.isArray(data) ? data : data?.sections)
+  return { sections: normalizeSections(Array.isArray(data) ? data : data?.sections), look: normalizeLook(Array.isArray(data) ? null : data?.look) }
 }
 
-export const sectionsToSource = (sections: Section[]) => toYaml({ sections }, { indent: 2 })
+export const sectionsToSource = (sections: Section[], look: Look) => toYaml({ look: { ...look, accent: look.accent || undefined }, sections }, { indent: 2 })
 
 export function resolveTemplates(custom: StatTemplateRow[] | undefined): StatTemplate[] {
   const out = [...TEMPLATES]
   for (const t of custom ?? []) {
     let sections: Section[]
     try { sections = normalizeSections(t.sections) } catch { sections = [] }
-    out.push({ id: t.id, name: t.name, sections })
+    out.push({ id: t.id, name: t.name, sections, look: normalizeLook(t.look) })
   }
   return out
 }

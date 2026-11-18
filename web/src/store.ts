@@ -1,9 +1,9 @@
 import { create } from 'zustand'
-import { get as idbGet, set as idbSet } from 'idb-keyval'
+import { get as idbGet, set as idbSet, del as idbDel } from 'idb-keyval'
 import { api, ApiError } from './api'
 import { resolveTypes } from './lib/pageTypes'
 import { askText } from './lib/dialog'
-import type { Bootstrap, Folder, LinkRow, PageMeta, PageType, StatTemplateRow, Template, User, Workspace, Zettel } from './types'
+import type { Bootstrap, WorldSettings, Folder, LinkRow, PageMeta, PageType, StatTemplateRow, Template, User, Workspace, Zettel } from './types'
 import { findPageByName } from './lib/data'
 import { loadBindings, saveBindings, type Action } from './lib/keys'
 
@@ -59,6 +59,8 @@ interface State {
   logout: () => Promise<void>
   selectWorkspace: (id: string) => Promise<void>
   createWorkspace: (name: string) => Promise<void>
+  deleteWorkspace: (id: string) => Promise<void>
+  setWorldSettings: (id: string, patch: Partial<WorldSettings>) => Promise<void>
   ensureWorkspace: () => Promise<string | null>
   refresh: () => Promise<void>
 
@@ -174,6 +176,26 @@ export const useStore = create<State>((set, get) => ({
     const ws = await api.createWorkspace(name)
     set((s) => ({ workspaces: [...s.workspaces, ws] }))
     await get().selectWorkspace(ws.id)
+  },
+
+  async deleteWorkspace(id) {
+    await api.deleteWorkspace(id)
+    const workspaces = get().workspaces.filter((w) => w.id !== id)
+    idbDel(`bootstrap:${id}`).catch(() => {})
+    try { localStorage.removeItem(`tabs:${id}`) } catch { /* private mode */ }
+    set({ workspaces })
+    if (get().wsId !== id) return
+    if (workspaces.length) await get().selectWorkspace(workspaces[0].id)
+    else {
+      localStorage.removeItem('workspace')
+      set({ wsId: null, data: emptyData, loaded: false, tabs: [initialTab()] })
+      set((s) => ({ activeTab: s.tabs[0].id, splitTab: null }))
+    }
+  },
+
+  async setWorldSettings(id, patch) {
+    const res = await api.updateWorkspace(id, { settings: patch })
+    set((s) => ({ workspaces: s.workspaces.map((w) => (w.id === id ? { ...w, settings: res.settings } : w)) }))
   },
 
   async refresh() {

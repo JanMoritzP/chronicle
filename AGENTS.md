@@ -41,7 +41,7 @@ Never test against the owner's real data directory.
 5. Stop it afterwards (`Get-Process node | Stop-Process`) and delete the temp data dir.
 
 ### Tests (all plain Node scripts; each prints PASS/FAIL and exits non-zero on failure)
-- API smoke tests against a running throwaway server: `node scripts/smoke-<area>.mjs http://localhost:3222 gm testpass123`. Areas: `auth`, `copy`, `export`, `maps`, `pagetypes`, `relations`, `sessions`, `share`, `stattemplates`, `templates`, `todos`, plus `smoke.mjs` (core).
+- API smoke tests against a running throwaway server: `node scripts/smoke-<area>.mjs http://localhost:3222 gm testpass123`. Areas: `auth`, `copy`, `export`, `maps`, `pagetypes`, `relations`, `sessions`, `share`, `stattemplates`, `templates`, `todos`, `worlds`, plus `smoke.mjs` (core).
 - Pure logic: `scripts/test-family.ts`, `scripts/test-time.ts` (bundle with esbuild, run with node).
 - Updater: `node scripts/test-update-logic.mjs` (no Electron), `node scripts/test-update-flow.mjs` (real Electron, fake GitHub; **unset `ELECTRON_RUN_AS_NODE` first**).
 - Desktop app: `node scripts/test-electron.mjs <server-url>`.

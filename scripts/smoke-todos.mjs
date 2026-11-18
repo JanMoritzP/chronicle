@@ -14,6 +14,8 @@ const check = (name, ok, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'}  
 const login = await fetch(base + '/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: user, password: pass }) })
 cookie = login.headers.get('set-cookie')?.split(';')[0] ?? ''
 const ws = (await call('POST', '/api/workspaces', { name: 'todo-test-' + Math.floor(Math.random() * 1e6) })).data.id
+// these checks count todos, so keep the per-world starter todo out of the way
+await call('PATCH', `/api/workspaces/${ws}`, { settings: { newPageTodo: '' } })
 
 const todo = (message, done = false, id) => ({ type: 'todo', attrs: { ...(id ? { id } : {}), message, done } })
 const p = (...c) => ({ type: 'paragraph', content: c })

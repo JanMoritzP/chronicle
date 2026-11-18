@@ -14,9 +14,9 @@ function TagItem({ node, depth }: { node: TagNode; depth: number }) {
   const navigate = useStore((s) => s.navigate)
   return (
     <>
-      <div className="side-item" style={{ paddingLeft: 8 + depth * 14 }} onClick={() => navigate({ type: 'tag', tag: node.full })}>
+      <div className="side-item" style={{ paddingLeft: 8 + depth * 14 }} tabIndex={0} role="button" aria-label={`Tag ${node.name}`} onClick={() => navigate({ type: 'tag', tag: node.full })} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate({ type: 'tag', tag: node.full }) } }}>
         {node.children.length ? (
-          <span onClick={(e) => { e.stopPropagation(); setOpen(!open) }}>{open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</span>
+          <button type="button" onClick={(e) => { e.stopPropagation(); setOpen(!open) }} aria-label={open ? `Collapse ${node.name}` : `Expand ${node.name}`} style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer', color: 'var(--muted)', display: 'inline-flex', alignItems: 'center' }}>{open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</button>
         ) : <Hash size={13} className="muted" />}
         <span className="grow ellipsis">{node.name}</span>
         <span className="muted" style={{ fontSize: 12 }}>{node.count}</span>
@@ -114,10 +114,12 @@ export function Sidebar() {
           <div
             className={`side-item ${dropFolder === f.id ? 'drop' : ''}`}
             style={{ paddingLeft: 8 + depth * 14 }}
+            tabIndex={0} role="button" aria-label={f.name}
             draggable={!readOnly}
             onDragStart={startDrag('folder', f.id)}
             onDragEnd={endDrag}
             onClick={() => toggle(f.id)}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(f.id) } }}
             onContextMenu={(e) => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY, folderId: f.id }) }}
             {...dragProps(f.id)}
           >
@@ -143,6 +145,7 @@ export function Sidebar() {
     <div
       key={p.id}
       className={`side-item ${activeId === p.id ? 'active' : ''}`}
+      tabIndex={0} role="button" aria-label={p.title || 'Untitled'} aria-current={activeId === p.id ? 'page' : undefined}
       style={{ paddingLeft: 22 + depth * 14 }}
       data-page-id={p.id}
       draggable={!readOnly}
@@ -150,6 +153,7 @@ export function Sidebar() {
       onDragEnd={endDrag}
       {...dragProps(p.folderId && data.folders.some((f) => f.id === p.folderId) ? p.folderId : null)}
       onClick={() => navigate({ type: 'page', id: p.id })}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate({ type: 'page', id: p.id }) } }}
       onAuxClick={(e) => { if (e.button === 1) navigate({ type: 'page', id: p.id }, { newTab: true }) }}
     >
       <PageIcon page={p} />
@@ -178,22 +182,22 @@ export function Sidebar() {
         )}
       </div>
       <div className="scroll">
-        <div className="side-item" onClick={() => navigate({ type: 'zettels' })}>
+        <div className="side-item" tabIndex={0} role="button" aria-label="Zettelkasten" onClick={() => navigate({ type: 'zettels' })} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate({ type: 'zettels' }) } }}>
           <Inbox size={15} /> <span className="grow">Zettelkasten</span>
           {unprocessed > 0 && <span className="chip">{unprocessed}</span>}
         </div>
-        <div className="side-item" onClick={() => navigate({ type: 'graph' })}><Network size={15} /> <span className="grow">Graph</span></div>
-        <div className="side-item" onClick={() => navigate({ type: 'maps' })}><MapIcon size={15} /> <span className="grow">Maps</span></div>
-        <div className="side-item" onClick={() => navigate({ type: 'timeline' })}><CalendarDays size={15} /> <span className="grow">Timeline</span></div>
-        <div className="side-item" onClick={() => navigate({ type: 'relations' })}><Users size={15} /> <span className="grow">Relations</span></div>
-        <div className="side-item" onClick={() => navigate({ type: 'sessions' })}><BookOpen size={15} /> <span className="grow">Sessions</span></div>
-        <div className="side-item" onClick={() => navigate({ type: 'todos' })}>
+        <div className="side-item" tabIndex={0} role="button" aria-label="Graph" onClick={() => navigate({ type: 'graph' })} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate({ type: 'graph' }) } }}><Network size={15} /> <span className="grow">Graph</span></div>
+        <div className="side-item" tabIndex={0} role="button" aria-label="Maps" onClick={() => navigate({ type: 'maps' })} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate({ type: 'maps' }) } }}><MapIcon size={15} /> <span className="grow">Maps</span></div>
+        <div className="side-item" tabIndex={0} role="button" aria-label="Timeline" onClick={() => navigate({ type: 'timeline' })} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate({ type: 'timeline' }) } }}><CalendarDays size={15} /> <span className="grow">Timeline</span></div>
+        <div className="side-item" tabIndex={0} role="button" aria-label="Relations" onClick={() => navigate({ type: 'relations' })} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate({ type: 'relations' }) } }}><Users size={15} /> <span className="grow">Relations</span></div>
+        <div className="side-item" tabIndex={0} role="button" aria-label="Sessions" onClick={() => navigate({ type: 'sessions' })} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate({ type: 'sessions' }) } }}><BookOpen size={15} /> <span className="grow">Sessions</span></div>
+        <div className="side-item" tabIndex={0} role="button" aria-label="Todos" onClick={() => navigate({ type: 'todos' })} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate({ type: 'todos' }) } }}>
           <ListTodo size={15} /> <span className="grow">Todos</span>
           {openTodos > 0 && <span className="chip">{openTodos}</span>}
         </div>
-        <div className="side-item" onClick={() => navigate({ type: 'templates' })}><LayoutTemplate size={15} /> <span className="grow">Templates</span></div>
-        <div className="side-item" onClick={() => navigate({ type: 'pagetypes' })}><Shapes size={15} /> <span className="grow">Special pages</span></div>
-        <div className="side-item" onClick={() => navigate({ type: 'stattemplates' })}><ScrollText size={15} /> <span className="grow">Stat block forms</span></div>
+        <div className="side-item" tabIndex={0} role="button" aria-label="Templates" onClick={() => navigate({ type: 'templates' })} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate({ type: 'templates' }) } }}><LayoutTemplate size={15} /> <span className="grow">Templates</span></div>
+        <div className="side-item" tabIndex={0} role="button" aria-label="Special pages" onClick={() => navigate({ type: 'pagetypes' })} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate({ type: 'pagetypes' }) } }}><Shapes size={15} /> <span className="grow">Special pages</span></div>
+        <div className="side-item" tabIndex={0} role="button" aria-label="Stat block forms" onClick={() => navigate({ type: 'stattemplates' })} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate({ type: 'stattemplates' }) } }}><ScrollText size={15} /> <span className="grow">Stat block forms</span></div>
 
         <div className="side-label">Pages</div>
         <div {...dragProps(null)} className={dropFolder === null ? 'side-item drop' : ''} style={{ display: 'block', padding: 0, minHeight: 40 }}>
@@ -210,8 +214,8 @@ export function Sidebar() {
         )}
       </div>
       <div className="foot">
-        <button className="icon-btn" title="Trash" onClick={() => navigate({ type: 'trash' })}><Trash2 size={16} /></button>
-        <button className="icon-btn" title="Settings" onClick={() => navigate({ type: 'settings' })}><Settings size={16} /></button>
+        <button className="icon-btn" title="Trash" aria-label="Trash" onClick={() => navigate({ type: 'trash' })}><Trash2 size={16} /></button>
+        <button className="icon-btn" title="Settings" aria-label="Settings" onClick={() => navigate({ type: 'settings' })}><Settings size={16} /></button>
       </div>
       {typeMenu && (
         <div className="overlay" style={{ background: 'transparent', padding: 0 }} onMouseDown={() => setTypeMenu(null)}>

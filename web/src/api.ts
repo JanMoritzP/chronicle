@@ -1,8 +1,8 @@
 import { get, set } from 'idb-keyval'
 import type { Calendar } from './lib/calendar'
-import type { BackupInfo, Bootstrap, EventRow, FullPage, MapFull, MapItem, MapLayer, CopyPreview, CopyResult, GameSession, MapMeta, PageType, Relation, StatsResult, StatTemplateRow, Template, TodoItem, User, Workspace } from './types'
+import type { BackupInfo, Bootstrap, EventRow, FullPage, MapFull, MapItem, MapLayer, CopyPreview, CopyResult, GameSession, MapMeta, PageType, Relation, StatsResult, StatTemplateRow, Template, TodoItem, User, Workspace, WorldSettings } from './types'
 
-export interface StatTemplateBody { name: string; sections: any[] }
+export interface StatTemplateBody { name: string; sections: any[]; look?: Record<string, any> }
 export interface PageTypeBody { name: string; icon: string; tag: string; source: string; definition: Record<string, any> }
 
 export class ApiError extends Error {
@@ -34,6 +34,8 @@ export const api = {
   logout: () => req('POST', '/api/auth/logout', {}),
   workspaces: () => req<Workspace[]>('GET', '/api/workspaces'),
   createWorkspace: (name: string) => req<Workspace>('POST', '/api/workspaces', { name }),
+  updateWorkspace: (id: string, b: { name?: string; settings?: Partial<WorldSettings> }) => req<{ ok: true; settings: WorldSettings }>('PATCH', `/api/workspaces/${id}`, b),
+  deleteWorkspace: (id: string) => req('DELETE', `/api/workspaces/${id}`),
   bootstrap: (ws: string) => req<Bootstrap>('GET', `/api/workspaces/${ws}/bootstrap`),
   createPage: (ws: string, b: any) => req<any>('POST', `/api/workspaces/${ws}/pages`, b),
   patchPage: async (id: string, b: any) => {

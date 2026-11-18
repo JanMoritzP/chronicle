@@ -212,7 +212,8 @@ export function MapInspector(p: Props) {
               let leg = ''
               if (i > 0) {
                 const px = dist(all[i - 1], pt)
-                leg = formatDistance(px, p.scale)
+                // No scale means no real distance: don't show raw pixels to the user.
+                leg = p.scale ? formatDistance(px, p.scale) : ''
                 if (p.scale && jt) {
                   const days = jt.arr[i] - jt.dep[i - 1]
                   if (days > 0) leg += ` · ${formatMeters((px * p.scale) / days)}/${cal.dayLabel.toLowerCase()}`

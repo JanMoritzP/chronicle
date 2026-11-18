@@ -36,8 +36,14 @@ function Login() {
         try { await useStore.getState().login(u, p) } catch (x: any) { setErr(x.message) } finally { setBusy(false) }
       }}>
         <h1>Chronicle</h1>
-        <input className="input" placeholder="Username" autoFocus autoComplete="username" value={u} onChange={(e) => setU(e.target.value)} />
-        <input className="input" type="password" placeholder="Password" autoComplete="current-password" value={p} onChange={(e) => setP(e.target.value)} />
+        <label className="field">
+          <span>Username</span>
+          <input className="input" placeholder="Username" autoFocus autoComplete="username" value={u} onChange={(e) => setU(e.target.value)} aria-label="Username" />
+        </label>
+        <label className="field">
+          <span>Password</span>
+          <input className="input" type="password" placeholder="Password" autoComplete="current-password" value={p} onChange={(e) => setP(e.target.value)} aria-label="Password" />
+        </label>
         {err && <div className="error">{err}</div>}
         <button className="btn primary" disabled={busy || !u || !p}>Sign in</button>
       </form>
@@ -186,14 +192,14 @@ function Shell() {
         {offline && <div className="offline">Offline. Showing cached data; edits to open pages will sync when you reconnect.</div>}
         {!zen && (
           <div className="tabbar">
-            <button className="icon-btn" onClick={() => useStore.getState().setUi({ sidebarOpen: !sidebarOpen })}><Menu size={17} /></button>
+            <button className="icon-btn" title="Toggle sidebar" onClick={() => useStore.getState().setUi({ sidebarOpen: !sidebarOpen })}><Menu size={17} /></button>
             <button className="icon-btn" disabled={!canBack} title="Back (Ctrl+Alt+←)" onClick={() => useStore.getState().back()}><ArrowLeft size={16} /></button>
             <button className="icon-btn" disabled={!canFwd} title="Forward (Ctrl+Alt+→)" onClick={() => useStore.getState().forward()}><ArrowRight size={16} /></button>
             {tabs.map((t) => (
               <div key={t.id} className={`tab ${t.id === current.id ? 'active' : ''}`} onClick={() => useStore.getState().setActiveTab(t.id)}
                 onAuxClick={(e) => { if (e.button === 1) useStore.getState().closeTab(t.id) }}>
                 <span className="grow ellipsis">{viewTitle(currentView(t), data.pages)}{t.id === splitTab ? ' ◧' : ''}</span>
-                <button className="icon-btn" style={{ width: 20, height: 20 }} onClick={(e) => { e.stopPropagation(); useStore.getState().closeTab(t.id) }}><X size={13} /></button>
+                <button className="icon-btn" title="Close tab" style={{ width: 20, height: 20 }} onClick={(e) => { e.stopPropagation(); useStore.getState().closeTab(t.id) }}><X size={13} /></button>
               </div>
             ))}
             <button className="icon-btn" title="New tab" onClick={() => useStore.getState().navigate({ type: 'home' }, { newTab: true })}><Plus size={16} /></button>

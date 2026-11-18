@@ -117,6 +117,7 @@ export function Select({ value, onChange, children, className = '', style, disab
         role="combobox"
         aria-expanded={open}
         aria-haspopup="listbox"
+        aria-label={title}
         className={`select ${className}`}
         style={style}
         disabled={disabled}

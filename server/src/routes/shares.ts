@@ -17,7 +17,7 @@ const tokenOf = (pageId: string) => (db.prepare('SELECT token FROM shares WHERE 
 
 function sharedPage(token: string): PageRow | undefined {
   return db.prepare(
-    `SELECT p.* FROM shares s JOIN pages p ON p.id = s.page_id WHERE s.token = ? AND p.deleted_at IS NULL`,
+    `SELECT p.* FROM shares s JOIN pages p ON p.id = s.page_id JOIN workspaces w ON w.id = p.workspace_id WHERE s.token = ? AND p.deleted_at IS NULL AND w.deleted_at IS NULL`,
   ).get(token) as PageRow | undefined
 }
 
@@ -114,7 +114,7 @@ export async function shareRoutes(app: FastifyInstance) {
     if (!/^[0-9a-f-]{36}$/.test(id)) return reply.code(404).send({ error: 'not found' })
     const row = db.prepare('SELECT mime FROM uploads WHERE id = ?').get(id) as { mime: string } | undefined
     const used = db.prepare(
-      `SELECT 1 FROM shares s JOIN pages p ON p.id = s.page_id WHERE p.deleted_at IS NULL AND (p.content LIKE ? OR p.props LIKE ?) LIMIT 1`,
+      `SELECT 1 FROM shares s JOIN pages p ON p.id = s.page_id JOIN workspaces w ON w.id = p.workspace_id WHERE p.deleted_at IS NULL AND w.deleted_at IS NULL AND (p.content LIKE ? OR p.props LIKE ?) LIMIT 1`,
     ).get(`%${id}%`, `%${id}%`)
     if (!row || !EXT[row.mime] || !used) return reply.code(404).send({ error: 'not found' })
     const file = path.join(config.dataDir, 'uploads', id + EXT[row.mime])

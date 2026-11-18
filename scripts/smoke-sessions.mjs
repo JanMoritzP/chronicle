@@ -10,6 +10,7 @@ const check = (name, ok, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'}  
 
 cookie = (await call('POST', '/api/auth/login', { username: user, password: pass })).set.split(';')[0]
 const W = (await call('POST', '/api/workspaces', { name: 'SessWorld' })).data
+await call('PATCH', `/api/workspaces/${W.id}`, { settings: { newPageTodo: '' } }) // word counts below assume pages start empty
 const doc = (text) => ({ type: 'doc', content: [{ type: 'paragraph', content: text ? [{ type: 'text', text }] : [] }] })
 const words = (n) => Array.from({ length: n }, (_, i) => 'word' + i).join(' ')
 const today = new Date(); const pad = (n) => String(n).padStart(2, '0')

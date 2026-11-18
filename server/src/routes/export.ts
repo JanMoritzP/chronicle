@@ -102,7 +102,7 @@ function* worldArchive(ws: string): Generator<ZipEntry> {
     zettels: all('SELECT id, body, tags, created_at AS createdAt, page_id AS pageId, processed_at AS processedAt FROM zettels WHERE workspace_id = ? AND deleted_at IS NULL'),
     templates: all('SELECT id, name, slug, description, content FROM templates WHERE workspace_id = ?').map((t: any) => ({ ...t, content: JSON.parse(t.content) })),
     pageTypes: all('SELECT id, name, icon, tag, source, definition FROM page_types WHERE workspace_id = ?').map((t: any) => ({ ...t, definition: JSON.parse(t.definition) })),
-    statTemplates: all('SELECT id, name, definition FROM stat_templates WHERE workspace_id = ?').map((t: any) => ({ id: t.id, name: t.name, sections: JSON.parse(t.definition).sections })),
+    statTemplates: all('SELECT id, name, definition FROM stat_templates WHERE workspace_id = ?').map((t: any) => ({ id: t.id, name: t.name, sections: JSON.parse(t.definition).sections, look: JSON.parse(t.definition).look ?? {} })),
     calendar: calendar ? JSON.parse(calendar.definition) : null,
     maps: maps.map((m) => ({ ...m, layers: (mapRows('map_layers') as any[]).filter((l) => l.map_id === m.id), items: (mapRows('map_items') as any[]).filter((i) => i.map_id === m.id) })),
     uploads: uploads.filter((u) => images.has(u.id)).map((u) => ({ ...u, file: `images/${images.get(u.id)}` })),

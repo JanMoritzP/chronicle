@@ -49,7 +49,7 @@ export function SearchDialog() {
         { id: 'split', label: 'Close split view', run: () => st.setSplit(null) },
         { id: 'logout', label: 'Log out', run: () => st.logout() },
         ...THEMES.map((t) => ({ id: `theme-${t.id}`, label: `Theme: ${t.name}`, run: () => applyTheme(t.id) })),
-        ...st.workspaces.map((w) => ({ id: `ws-${w.id}`, label: `Switch workspace: ${w.name}`, run: () => st.selectWorkspace(w.id) })),
+        ...st.workspaces.map((w) => ({ id: `ws-${w.id}`, label: `Switch world: ${w.name}`, run: () => st.selectWorkspace(w.id) })),
       ]
       return commands
         .map((c) => ({ c, h: fuzzy(cq, c.label) }))
@@ -105,7 +105,7 @@ export function SearchDialog() {
   return (
     <div className="overlay" onMouseDown={close}>
       <div className="dialog" onMouseDown={(e) => e.stopPropagation()}>
-        <input ref={input} className="big" placeholder="Search pages, text, #tags… or type / for commands" value={q}
+        <input ref={input} className="big" aria-label="Search pages, text, tags, or commands" aria-autocomplete="list" aria-controls="search-results" role="combobox" placeholder="Search pages, text, #tags… or type / for commands" value={q}
           onChange={(e) => { setQ(e.target.value); setIdx(0) }}
           onKeyDown={(e) => {
             if (e.key === 'Escape') close()
@@ -117,14 +117,14 @@ export function SearchDialog() {
               else pick(rows[idx])
             }
           }} />
-        <div className="results">
+        <div className="results" id="search-results" aria-live="polite" role="listbox">
           {rows.map((r, i) => {
             const head = r.group !== last ? r.group : null
             last = r.group
             return (
               <div key={r.key}>
                 {head && <div className="side-label" style={{ padding: '8px 10px 2px' }}>{head}</div>}
-                <div className={`result ${i === idx ? 'sel' : ''}`} onMouseEnter={() => setIdx(i)} onClick={() => pick(r)}>
+                <div className={`result ${i === idx ? 'sel' : ''}`} role="option" aria-selected={i === idx} data-active={i === idx} onMouseEnter={() => setIdx(i)} onClick={() => pick(r)}>
                   <span className="muted row">{r.icon}</span>
                   <div className="grow">
                     <div className="ellipsis">{r.indices?.length ? highlight(r.label, r.indices).map((p, k) => typeof p === 'string' ? p : <mark key={k}>{p.m}</mark>) : r.label}</div>
