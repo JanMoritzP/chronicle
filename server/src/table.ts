@@ -13,6 +13,7 @@ import { ALLOWED } from './routes/uploads.js'
 import { parseChat, readable, type Kind, type Part } from './chat.js'
 import { advance, emptyCombat, end as endCombat, start as startCombat, visible as visibleCombat, withList, type Combat } from './combat.js'
 import { parseRoll } from './dice.js'
+import { encounterRow } from './routes/encounters.js'
 import {
   canCreateToken, canEditStats, canMoveToken, canPing, canRuler, canSeeToken, clientMessage, makeLimiter, parseSettings, redact, roleAt, settingsSchema,
   type ClientMessage, type TableRole, type TableSettings, type TokenRow,
@@ -137,7 +138,15 @@ function postChat(ws: string, userId: string, name: string, kind: Kind, to: stri
   for (const x of inWorld(ws)) if (readable(msg, x.user.id, x.role === 'gm')) send(x, { t: 'chat.msg', msg: { ...msg } })
 }
 
-const sceneState = (c: Conn) => ({ walls: wallsFor(c, c.scene), lights: lightsOf(c.ws, c.scene), fog: fogOf(c, c.scene) })
+interface DrawingDb { id: string; scene_id: string; user_id: string; kind: string; points: string; color: string; width: number; fill: string; text: string; gm_only: number }
+const drawingJson = (r: DrawingDb) => ({
+  id: r.id, sceneId: r.scene_id, userId: r.user_id, kind: r.kind, points: parse<{ x: number; y: number }[]>(r.points, []), color: r.color, width: r.width, fill: r.fill, text: r.text, gmOnly: !!r.gm_only,
+})
+const drawingRow = (id: string) => { const r = db.prepare('SELECT * FROM drawings WHERE id = ?').get(id) as DrawingDb | undefined; return r ? drawingJson(r) : undefined }
+/** Drawings the GM keeps to themselves are left out for everyone else. */
+const drawingsFor = (c: Conn, scene: string | null) => !scene ? [] : (db.prepare('SELECT * FROM drawings WHERE scene_id = ? AND workspace_id = ? ORDER BY created_at').all(scene, c.ws) as DrawingDb[]).filter((r) => c.role === 'gm' || !r.gm_only).map(drawingJson)
+
+const sceneState = (c: Conn) => ({ walls: wallsFor(c, c.scene), lights: lightsOf(c.ws, c.scene), fog: fogOf(c, c.scene), drawings: drawingsFor(c, c.scene) })
 
 function sendView(c: Conn) {
   send(c, { t: 'view', sceneId: c.scene, tokens: tokensFor(c, c.scene), ...sceneState(c) })
@@ -397,6 +406,78 @@ async function handle(c: Conn, m: ClientMessage) {
       if (!sceneRow(m.sceneId, ws)) return nack(c, m, 'no such scene')
       db.prepare('DELETE FROM scene_fog WHERE scene_id = ?').run(m.sceneId)
       for (const x of inWorld(ws)) if (x.scene === m.sceneId) send(x, { t: 'fog.reset', sceneId: m.sceneId })
+      return
+    }
+    case 'encounter.stage': {
+      if (!gm) return nack(c, m, 'only the GM can do that')
+      const enc = encounterRow(m.id, ws)
+      const scene = sceneRow(m.sceneId, ws)
+      if (!enc || !scene) return nack(c, m, 'no such encounter or scene')
+      const SIZE: Record<string, number> = { tiny: 0.5, small: 1, medium: 1, large: 2, huge: 3, gargantuan: 4 }
+      const COLORS = ['#c0392b', '#8e44ad', '#d35400', '#16a085', '#7f8c8d', '#2e86c1']
+      const created: string[] = []
+      let slot = 0, col = 0
+      for (const mon of enc.monsters) {
+        const page = db.prepare('SELECT title, props FROM pages WHERE id = ? AND workspace_id = ? AND deleted_at IS NULL').get(mon.pageId, ws) as { title: string; props: string } | undefined
+        if (!page) continue
+        const props = parse<{ sheet?: { size?: string; hp?: { max?: number }; ac?: { value?: number } }; portrait?: string }>(page.props, {})
+        const sheet = props.sheet
+        const size = SIZE[String(sheet?.size ?? '').toLowerCase()] ?? 1
+        const image = typeof props.portrait === 'string' && /^\/api\/uploads\/[A-Za-z0-9-]+$/.test(props.portrait) ? props.portrait : ''
+        const data: Record<string, unknown> = { hpPrivate: true }
+        if (sheet?.hp?.max) data.hp = { value: sheet.hp.max, max: sheet.hp.max }
+        if (sheet?.ac?.value != null) data.ac = sheet.ac.value
+        for (let i = 1; i <= mon.count; i++) {
+          // a row of tokens that wraps after six, each one cell or more apart
+          const x = m.x + (slot % 6) * scene.grid_size * Math.max(1, size)
+          const y = m.y + Math.floor(slot / 6) * scene.grid_size * Math.max(1, size)
+          slot++
+          const id = uid(), t = now()
+          const z = ((db.prepare('SELECT MAX(z) AS z FROM tokens WHERE scene_id = ?').get(m.sceneId) as { z: number | null }).z ?? 0) + 1
+          db.prepare(
+            `INSERT INTO tokens(id,scene_id,workspace_id,name,x,y,size,rotation,image,color,page_id,hidden,locked,owners,z,data,created_at,updated_at)
+             VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          ).run(id, m.sceneId, ws, mon.count > 1 ? `${page.title} ${i}` : page.title, x, y, size, 0, image, COLORS[col % COLORS.length], mon.pageId, m.hidden ? 1 : 0, 0, '[]', z, JSON.stringify(data), t, t)
+          created.push(id)
+          emitToken(ws, null, tokenRow(id, ws)!)
+        }
+        col++
+      }
+      send(c, { t: 'staged', count: created.length })
+      if (m.combat && created.length) {
+        await handle(c, { t: 'combat.add', tokenIds: created })
+        await handle(c, { t: 'combat.roll' })
+      }
+      return
+    }
+    case 'draw.add': {
+      if (!(gm || (c.role === 'player' && settings.playersDraw))) return nack(c, m, 'not allowed')
+      if (!sceneRow(m.sceneId, ws)) return nack(c, m, 'no such scene')
+      const id = uid()
+      db.prepare('INSERT INTO drawings(id,scene_id,workspace_id,user_id,kind,points,color,width,fill,text,gm_only,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)')
+        .run(id, m.sceneId, ws, c.user.id, m.kind, JSON.stringify(m.points), m.color, m.width, m.fill ?? '', m.text ?? '', gm && m.gmOnly ? 1 : 0, now())
+      const d = drawingRow(id)!
+      for (const x of inWorld(ws)) if (x.scene === m.sceneId && (x.role === 'gm' || !d.gmOnly)) send(x, { t: 'draw', drawing: d })
+      return
+    }
+    case 'draw.delete': {
+      const gone: Record<string, string[]> = {}
+      for (const id of m.ids) {
+        const d = drawingRow(id)
+        const scene = d ? sceneRow(d.sceneId, ws) : undefined
+        if (!d || !scene) continue
+        if (!gm && d.userId !== c.user.id) { nack(c, m, 'not allowed'); continue }
+        db.prepare('DELETE FROM drawings WHERE id = ?').run(id)
+        ;(gone[d.sceneId] ??= []).push(id)
+      }
+      for (const [sceneId, ids] of Object.entries(gone)) for (const x of inWorld(ws)) if (x.scene === sceneId) send(x, { t: 'draw.remove', ids })
+      return
+    }
+    case 'draw.clear': {
+      if (!gm) return nack(c, m, 'only the GM can do that')
+      if (!sceneRow(m.sceneId, ws)) return nack(c, m, 'no such scene')
+      db.prepare('DELETE FROM drawings WHERE scene_id = ? AND workspace_id = ?').run(m.sceneId, ws)
+      for (const x of inWorld(ws)) if (x.scene === m.sceneId) send(x, { t: 'draw.cleared', sceneId: m.sceneId })
       return
     }
     case 'combat.add': {

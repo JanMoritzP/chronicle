@@ -74,6 +74,8 @@ export interface Relation { id: string; sourceId: string; targetId: string; kind
 export interface EventRow { id: string; pageId: string | null; title: string; tStart: number; tEnd: number | null }
 export interface Template { id: string; name: string; slug: string; description: string; content: any; updatedAt: number }
 export interface PageType { id: string; name: string; icon: string; tag: string; source: string; definition: Record<string, any>; updatedAt: number }
+export interface EncounterBody { name: string; party: number[]; notes: string; monsters: { pageId: string; count: number }[] }
+export interface Encounter extends EncounterBody { id: string; updatedAt: number }
 export interface StatTemplateRow { id: string; name: string; sections: any[]; look?: Record<string, any>; updatedAt: number }
 export interface Bootstrap { pages: PageMeta[]; folders: Folder[]; links: LinkRow[]; zettels: Zettel[]; templates?: Template[]; pageTypes?: PageType[]; statTemplates?: StatTemplateRow[] }
 

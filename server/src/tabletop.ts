@@ -13,6 +13,7 @@ export const settingsSchema = z.object({
   playersCreateTokens: z.boolean().default(false),
   playersEditOwnStats: z.boolean().default(true),
   playersOpenDoors: z.boolean().default(false),
+  playersDraw: z.boolean().default(true),
   playersPing: z.boolean().default(true),
   playersRuler: z.boolean().default(true),
   /** Players see each other's cursors. */
@@ -21,7 +22,7 @@ export const settingsSchema = z.object({
 /** A change to the settings: only the keys that are present (a partial of the schema above would fill the defaults back in). */
 export const settingsPatch = z.object({
   gms: z.array(z.string().max(64)).max(20),
-  playersMoveOwn: z.boolean(), playersCreateTokens: z.boolean(), playersEditOwnStats: z.boolean(), playersOpenDoors: z.boolean(), playersPing: z.boolean(), playersRuler: z.boolean(), showCursors: z.boolean(),
+  playersMoveOwn: z.boolean(), playersCreateTokens: z.boolean(), playersEditOwnStats: z.boolean(), playersOpenDoors: z.boolean(), playersDraw: z.boolean(), playersPing: z.boolean(), playersRuler: z.boolean(), showCursors: z.boolean(),
 }).partial().strict()
 export type TableSettings = z.infer<typeof settingsSchema>
 export const DEFAULT_SETTINGS: TableSettings = settingsSchema.parse({})
@@ -151,6 +152,14 @@ export const clientMessage = z.discriminatedUnion('t', [
   z.object({ t: z.literal('combat.roll'), ids: z.array(id).max(100).optional() }),
   z.object({ t: z.literal('combat.flag'), id, hidden: z.boolean().optional(), done: z.boolean().optional() }),
   z.object({ t: z.literal('combat.control'), action: z.enum(['start', 'next', 'prev', 'end', 'clear']) }),
+  z.object({ t: z.literal('encounter.stage'), id, sceneId: id, x: coord, y: coord, hidden: z.boolean().default(true), combat: z.boolean().default(false) }),
+  z.object({
+    t: z.literal('draw.add'), sceneId: id, kind: z.enum(['free', 'line', 'rect', 'ellipse', 'text']), points: z.array(point).min(1).max(600),
+    color: z.string().regex(/^#[0-9a-fA-F]{3,8}$/), width: z.number().min(1).max(40), fill: z.string().regex(/^(#[0-9a-fA-F]{3,8}|)$/).optional(),
+    text: z.string().max(200).optional(), gmOnly: z.boolean().optional(),
+  }),
+  z.object({ t: z.literal('draw.delete'), ids: z.array(id).min(1).max(100) }),
+  z.object({ t: z.literal('draw.clear'), sceneId: id }),
   z.object({ t: z.literal('cursor'), x: coord, y: coord }),
   z.object({ t: z.literal('ping'), x: coord, y: coord }),
   z.object({ t: z.literal('ruler'), points: z.array(point).max(50).nullable() }),

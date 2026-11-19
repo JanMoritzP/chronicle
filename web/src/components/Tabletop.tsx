@@ -1,5 +1,5 @@
 import { Color } from 'pixi.js'
-import { BrickWall, Crosshair, Eraser, Eye, MessageSquare, EyeOff, Lock, LockOpen, Maximize, Minus, Plus, Ruler, RotateCw, Swords, Trash2, UserPlus, MousePointer2, Users } from 'lucide-react'
+import { BrickWall, Pencil, Crosshair, Eraser, Eye, MessageSquare, EyeOff, Lock, LockOpen, Maximize, Minus, Plus, Ruler, RotateCw, Swords, Trash2, UserPlus, MousePointer2, Users } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { askText, confirmDialog } from '../lib/dialog'
 import { colorFor } from '../lib/collab'
@@ -8,6 +8,7 @@ import { TableEngine, type Tool } from '../tabletop/engine'
 import { snap } from '../tabletop/grid'
 import { joinTable, leaveTable, onTableMessage, sendTable, useTable, type Scene, type Token } from '../tabletop/state'
 import { pickImage, uploadImage } from '../tabletop/upload'
+import { EncounterPanel } from './TableEncounters'
 import { ChatPanel, CombatPanel, LinkPage, SightLight, TokenSheet, TokenStats } from './TableParts'
 import { Select } from './Select'
 
@@ -23,11 +24,13 @@ export function TableView() {
   const sceneId = useTable((s) => s.sceneId)
   const error = useTable((s) => s.error)
   const [tool, setTool] = useState<Tool>('select')
-  const [panel, setPanel] = useState<'token' | 'scene' | 'table' | 'chat' | 'combat'>('token')
+  const [panel, setPanel] = useState<'token' | 'scene' | 'table' | 'chat' | 'combat' | 'encounters'>('token')
   const combat = useTable((s) => s.combat)
   const unread = useTable((s) => s.unread)
   const [panelOpen, setPanelOpen] = useState(true)
   const host = useRef<HTMLDivElement>(null)
+  const styleRef = useRef({ color: '#ff5252', width: 4 })
+  const gmOnlyRef = useRef(false)
   const engine = useRef<TableEngine | null>(null)
   const scene = scenes.find((s) => s.id === sceneId) ?? null
   const gm = role === 'gm'
@@ -56,6 +59,13 @@ export function TableView() {
       onWallAdd: (walls) => { const id = useTable.getState().sceneId; if (id) sendTable({ t: 'wall.add', sceneId: id, walls }) },
       onWallErase: (id) => { sendTable({ t: 'wall.delete', ids: [id] }) },
       onDoor: (id) => { sendTable({ t: 'door.toggle', id }) },
+      onDraw: (d) => { const id = useTable.getState().sceneId; if (id && d.points.length) sendTable({ t: 'draw.add', sceneId: id, kind: d.kind, points: d.points, color: d.color, width: d.width, ...(d.fill ? { fill: d.fill } : {}), gmOnly: gmOnlyRef.current && useTable.getState().role === 'gm' }) },
+      onText: async (p) => {
+        const id = useTable.getState().sceneId
+        const text = await askText('Write on the map', { label: 'Text', placeholder: 'The cellar door', okLabel: 'Place' })
+        if (id && text?.trim()) sendTable({ t: 'draw.add', sceneId: id, kind: 'text', points: [p], color: styleRef.current.color, width: styleRef.current.width, text: text.trim(), gmOnly: gmOnlyRef.current && useTable.getState().role === 'gm' })
+      },
+      onDrawErase: (id) => { sendTable({ t: 'draw.delete', ids: [id] }) },
       onExplored: (png) => { const id = useTable.getState().sceneId; if (id) sendTable({ t: 'fog.save', sceneId: id, mask: png }) },
       colorOf: colorNum,
     })
@@ -77,12 +87,15 @@ export function TableView() {
       e.setTokens(useTable.getState().tokens)
       e.setSelected(useTable.getState().selected)
       e.setExplored(useTable.getState().fog)
+      e.setDrawings(useTable.getState().drawings)
+      e.setDrawStyle({ kind: 'free', color: '#ff5252', width: 4, fill: '' })
       const turn = () => { const s = useTable.getState(); e.setTurn(s.combat.active ? s.combat.list.find((x) => x.id === s.combat.turn)?.tokenId ?? null : null) }
       turn()
       const unsub = useTable.subscribe((s, prev) => {
         if (s.role !== prev.role || s.you !== prev.you || s.settings.playersOpenDoors !== prev.settings.playersOpenDoors) viewer()
         if (s.scenes !== prev.scenes || s.sceneId !== prev.sceneId) push()
         if (s.combat !== prev.combat || s.tokens !== prev.tokens) turn()
+        if (s.drawings !== prev.drawings) e.setDrawings(s.drawings)
         if (s.walls !== prev.walls) e.setWalls(s.walls)
         if (s.lights !== prev.lights) e.setLights(s.lights)
         if (s.sceneId !== prev.sceneId || s.fog !== prev.fog) e.setExplored(s.fog)
@@ -96,6 +109,14 @@ export function TableView() {
     return () => { off(); e.destroy(); engine.current = null }
   }, [])
 
+  const [draw, setDraw] = useState<{ kind: 'free' | 'line' | 'rect' | 'ellipse' | 'text'; color: string; width: number; fill: boolean }>({ kind: 'free', color: '#ff5252', width: 4, fill: false })
+  const [gmOnly, setGmOnly] = useState(false)
+  const canDraw = useTable((s) => s.role === 'gm' || (s.role === 'player' && s.settings.playersDraw))
+  useEffect(() => {
+    styleRef.current = { color: draw.color, width: draw.width }
+    gmOnlyRef.current = gmOnly
+    engine.current?.setDrawStyle({ kind: draw.kind, color: draw.color, width: draw.width, fill: draw.fill ? draw.color : '' })
+  }, [draw, gmOnly])
   const [wallKind, setWallKind] = useState<'wall' | 'door' | 'secret' | 'window'>('wall')
   useEffect(() => { engine.current?.setTool(tool) }, [tool])
   useEffect(() => { engine.current?.setWallKind(wallKind) }, [wallKind])
@@ -151,8 +172,23 @@ export function TableView() {
         <span className="tt-sep" />
         <button className={`btn sm square${tool === 'select' ? ' on' : ''}`} title="Select and move (Esc)" aria-label="Select" onClick={() => setTool('select')}><MousePointer2 size={14} /></button>
         <button className={`btn sm square${tool === 'ruler' ? ' on' : ''}`} title="Measure distance" aria-label="Ruler" onClick={() => setTool('ruler')}><Ruler size={14} /></button>
+        {canDraw && <button className={`btn sm square${tool === 'draw' ? ' on' : ''}`} title="Draw on the map" aria-label="Draw" onClick={() => setTool(tool === 'draw' ? 'select' : 'draw')}><Pencil size={14} /></button>}
+        {canDraw && tool === 'draw' && (
+          <>
+            <span className="seg tt-kinds" role="group" aria-label="Kind of drawing">
+              {([['free', 'Pen'], ['line', 'Line'], ['rect', 'Box'], ['ellipse', 'Circle'], ['text', 'Text']] as const).map(([k, label]) => <button key={k} className={draw.kind === k ? 'on' : ''} onClick={() => setDraw({ ...draw, kind: k })}>{label}</button>)}
+            </span>
+            <span className="tt-swatches" role="group" aria-label="Colour">
+              {['#ff5252', '#ffb300', '#66bb6a', '#29b6f6', '#ab47bc', '#ffffff', '#212121'].map((c) => <button key={c} className={`tt-swatch${draw.color === c ? ' on' : ''}`} style={{ background: c }} title={c} aria-label={`Colour ${c}`} onClick={() => setDraw({ ...draw, color: c })} />)}
+            </span>
+            <label className="tt-inline" title="Line width">Width<input type="range" min={2} max={16} value={draw.width} onChange={(e) => setDraw({ ...draw, width: Number(e.target.value) })} /></label>
+            {(draw.kind === 'rect' || draw.kind === 'ellipse') && <label className="tt-inline"><input type="checkbox" checked={draw.fill} onChange={(e) => setDraw({ ...draw, fill: e.target.checked })} />Filled</label>}
+            {gm && <label className="tt-inline" title="Only you see it"><input type="checkbox" checked={gmOnly} onChange={(e) => setGmOnly(e.target.checked)} />GM only</label>}
+          </>
+        )}
+        {canDraw && <button className={`btn sm square${tool === 'erase' ? ' on' : ''}`} title="Remove a drawing (or a wall) by clicking it" aria-label="Erase" onClick={() => setTool(tool === 'erase' ? 'select' : 'erase')}><Eraser size={14} /></button>}
+        {gm && scene && <button className="btn sm" title="Remove every drawing on this scene" onClick={async () => { if (await confirmDialog('Every drawing on this scene is removed for everyone.', { title: 'Clear drawings', okLabel: 'Clear', danger: true })) sendTable({ t: 'draw.clear', sceneId: scene.id }) }}>Clear drawings</button>}
         {gm && <button className={`btn sm square${tool === 'wall' ? ' on' : ''}`} title="Draw walls, doors and windows. Click to place points, double-click or Enter to finish." aria-label="Draw walls" onClick={() => setTool(tool === 'wall' ? 'select' : 'wall')}><BrickWall size={14} /></button>}
-        {gm && <button className={`btn sm square${tool === 'erase' ? ' on' : ''}`} title="Remove a wall by clicking it" aria-label="Erase walls" onClick={() => setTool(tool === 'erase' ? 'select' : 'erase')}><Eraser size={14} /></button>}
         {gm && tool === 'wall' && (
           <span className="seg tt-kinds" role="group" aria-label="Kind of wall">
             {(['wall', 'door', 'secret', 'window'] as const).map((k) => <button key={k} className={wallKind === k ? 'on' : ''} onClick={() => setWallKind(k)}>{k === 'wall' ? 'Wall' : k === 'door' ? 'Door' : k === 'secret' ? 'Secret door' : 'Window'}</button>)}
@@ -176,6 +212,7 @@ export function TableView() {
             <div className="seg">
               <button className={panel === 'token' ? 'on' : ''} onClick={() => setPanel('token')}>Token</button>
               {gm && <button className={panel === 'scene' ? 'on' : ''} onClick={() => setPanel('scene')}>Scene</button>}
+              {gm && <button className={panel === 'encounters' ? 'on' : ''} onClick={() => setPanel('encounters')}>Encounters</button>}
               <button className={panel === 'combat' ? 'on' : ''} onClick={() => setPanel('combat')}><Swords size={12} /> Combat{combat.active ? ` (R${combat.round})` : ''}</button>
               <button className={panel === 'chat' ? 'on' : ''} onClick={() => setPanel('chat')}><MessageSquare size={12} /> Chat{unread > 0 && panel !== 'chat' ? ` (${unread})` : ''}</button>
               <button className={panel === 'table' ? 'on' : ''} onClick={() => setPanel('table')}>Table</button>
@@ -185,6 +222,7 @@ export function TableView() {
             {panel === 'table' && <TablePanel />}
             {panel === 'chat' && <ChatPanel />}
             {panel === 'combat' && <CombatPanel />}
+            {panel === 'encounters' && gm && <EncounterPanel />}
           </aside>
         )}
       </div>
@@ -310,6 +348,7 @@ function TablePanel() {
     ['playersCreateTokens', 'Players add tokens'],
     ['playersEditOwnStats', 'Players change their own hit points and conditions'],
     ['playersOpenDoors', 'Players open and close doors'],
+    ['playersDraw', 'Players draw on the map'],
     ['playersPing', 'Players ping the map'],
     ['playersRuler', 'Players share their ruler'],
     ['showCursors', 'Show everyone’s pointer'],

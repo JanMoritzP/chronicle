@@ -50,6 +50,7 @@ const OWNER_OF: [RegExp, string][] = [
   [/^\/api\/page-types\/([^/]+)/, 'SELECT workspace_id AS w FROM page_types WHERE id = ?'],
   [/^\/api\/stat-templates\/([^/]+)/, 'SELECT workspace_id AS w FROM stat_templates WHERE id = ?'],
   [/^\/api\/versions\/([^/]+)/, 'SELECT p.workspace_id AS w FROM page_versions v JOIN pages p ON p.id = v.page_id WHERE v.id = ?'],
+  [/^\/api\/encounters\/([^/]+)/, 'SELECT workspace_id AS w FROM encounters WHERE id = ?'],
   [/^\/api\/uploads\/([^/]+)/, 'SELECT workspace_id AS w FROM uploads WHERE id = ?'],
 ]
 const IN_WORLD = /^\/api\/workspaces\/([^/]+)(?:\/|$)/

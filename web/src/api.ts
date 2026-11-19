@@ -1,6 +1,6 @@
 import { get, set } from 'idb-keyval'
 import type { Calendar } from './lib/calendar'
-import type { CommentItem, Person, LibraryEntry, LibraryIndex, LibraryStatus, BackupInfo, Bootstrap, EventRow, FullPage, MapFull, MapItem, MapLayer, CopyPreview, CopyResult, GameSession, MapMeta, PageType, PageVersion, Relation, StatsResult, StatTemplateRow, Template, TodoItem, User, Workspace, WorldSettings } from './types'
+import type { CommentItem, Encounter, EncounterBody, Person, LibraryEntry, LibraryIndex, LibraryStatus, BackupInfo, Bootstrap, EventRow, FullPage, MapFull, MapItem, MapLayer, CopyPreview, CopyResult, GameSession, MapMeta, PageType, PageVersion, Relation, StatsResult, StatTemplateRow, Template, TodoItem, User, Workspace, WorldSettings } from './types'
 
 export interface StatTemplateBody { name: string; sections: any[]; look?: Record<string, any> }
 export interface PageTypeBody { name: string; icon: string; tag: string; source: string; definition: Record<string, any> }
@@ -100,6 +100,10 @@ export const api = {
   createStatTemplate: (ws: string, b: StatTemplateBody) => req<StatTemplateRow>('POST', `/api/workspaces/${ws}/stat-templates`, b),
   patchStatTemplate: (id: string, b: StatTemplateBody) => req<StatTemplateRow>('PATCH', `/api/stat-templates/${id}`, b),
   deleteStatTemplate: (id: string) => req('DELETE', `/api/stat-templates/${id}`),
+  listEncounters: (ws: string) => req<Encounter[]>('GET', `/api/workspaces/${ws}/encounters`),
+  createEncounter: (ws: string, b: EncounterBody) => req<Encounter>('POST', `/api/workspaces/${ws}/encounters`, b),
+  patchEncounter: (id: string, b: EncounterBody) => req<Encounter>('PATCH', `/api/encounters/${id}`, b),
+  deleteEncounter: (id: string) => req('DELETE', `/api/encounters/${id}`),
   users: () => req<any[]>('GET', '/api/users'),
   createUser: (b: any) => req('POST', '/api/users', b),
   changePassword: (current: string, next: string) => req('POST', '/api/auth/password', { current, next }),

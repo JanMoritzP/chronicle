@@ -12,12 +12,14 @@ export interface Token {
   owners: string[]; z: number; data: Record<string, any>
 }
 export interface Settings {
-  gms: string[]; playersMoveOwn: boolean; playersCreateTokens: boolean; playersEditOwnStats: boolean; playersOpenDoors: boolean; playersPing: boolean; playersRuler: boolean; showCursors: boolean
+  gms: string[]; playersMoveOwn: boolean; playersCreateTokens: boolean; playersEditOwnStats: boolean; playersOpenDoors: boolean; playersDraw: boolean; playersPing: boolean; playersRuler: boolean; showCursors: boolean
 }
 export interface Who { id: string; username: string; role: string }
 export interface Cursor { user: string; name: string; x: number; y: number; at: number }
 export interface Ruler { user: string; name: string; points: { x: number; y: number }[] }
 export type Conn = 'connecting' | 'open' | 'closed'
+export type DrawKind = 'free' | 'line' | 'rect' | 'ellipse' | 'text'
+export interface Drawing { id: string; sceneId: string; userId: string; kind: DrawKind; points: { x: number; y: number }[]; color: string; width: number; fill: string; text: string; gmOnly: boolean }
 export interface Combatant { id: string; tokenId: string | null; name: string; init: number | null; hidden: boolean; done: boolean }
 export interface Combat { active: boolean; round: number; turn: string | null; list: Combatant[] }
 export const NO_COMBAT: Combat = { active: false, round: 0, turn: null, list: [] }
@@ -27,7 +29,7 @@ export interface RollJson { expr: string; label: string; total: number; terms: R
 export type ChatPart = { t: 'text'; text: string } | { t: 'roll'; roll: RollJson }
 export interface ChatMsg { id: string; ts: number; userId: string; name: string; kind: 'say' | 'roll' | 'gmroll' | 'emote' | 'whisper'; to: string[]; parts: ChatPart[] }
 
-export const DEFAULT_SETTINGS: Settings = { gms: [], playersMoveOwn: true, playersCreateTokens: false, playersEditOwnStats: true, playersOpenDoors: false, playersPing: true, playersRuler: true, showCursors: true }
+export const DEFAULT_SETTINGS: Settings = { gms: [], playersMoveOwn: true, playersCreateTokens: false, playersEditOwnStats: true, playersOpenDoors: false, playersDraw: true, playersPing: true, playersRuler: true, showCursors: true }
 
 interface TableState {
   conn: Conn
@@ -46,6 +48,7 @@ interface TableState {
   chat: ChatMsg[]
   unread: number
   combat: Combat
+  drawings: Drawing[]
   walls: Wall[]
   lights: Light[]
   /** The explored area of this scene for this person, as a PNG in base64 */
@@ -55,7 +58,7 @@ interface TableState {
 
 export const useTable = create<TableState>(() => ({
   conn: 'closed', you: null, role: 'spectator', settings: DEFAULT_SETTINGS, scenes: [], active: null, sceneId: null, tokens: [], online: [], members: [],
-  selected: [], cursors: {}, rulers: {}, chat: [], unread: 0, combat: NO_COMBAT, walls: [], lights: [], fog: null, error: '',
+  selected: [], cursors: {}, rulers: {}, chat: [], unread: 0, combat: NO_COMBAT, drawings: [], walls: [], lights: [], fog: null, error: '',
 }))
 
 type Listener = (m: any) => void
@@ -72,10 +75,13 @@ export function applyMessage(m: any) {
     case 'snapshot':
       set({
         you: m.you, role: m.you.role, settings: { ...DEFAULT_SETTINGS, ...m.settings }, scenes: m.scenes, active: m.active, sceneId: m.sceneId,
-        tokens: m.tokens, online: m.online, members: m.members ?? [], chat: m.chat ?? [], unread: 0, combat: m.combat ?? NO_COMBAT, walls: m.walls ?? [], lights: m.lights ?? [], fog: m.fog ?? null, selected: [], cursors: {}, rulers: {},
+        tokens: m.tokens, online: m.online, members: m.members ?? [], chat: m.chat ?? [], unread: 0, combat: m.combat ?? NO_COMBAT, drawings: m.drawings ?? [], walls: m.walls ?? [], lights: m.lights ?? [], fog: m.fog ?? null, selected: [], cursors: {}, rulers: {},
       })
       break
-    case 'view': set({ sceneId: m.sceneId, tokens: m.tokens, walls: m.walls ?? [], lights: m.lights ?? [], fog: m.fog ?? null, selected: [], cursors: {}, rulers: {} }); break
+    case 'view': set({ sceneId: m.sceneId, tokens: m.tokens, walls: m.walls ?? [], lights: m.lights ?? [], drawings: m.drawings ?? [], fog: m.fog ?? null, selected: [], cursors: {}, rulers: {} }); break
+    case 'draw': set((s) => (m.drawing.sceneId === s.sceneId ? { drawings: upsert(s.drawings, m.drawing) } : {})); break
+    case 'draw.remove': set((s) => ({ drawings: s.drawings.filter((d) => !m.ids.includes(d.id)) })); break
+    case 'draw.cleared': set((s) => (m.sceneId === s.sceneId ? { drawings: [] } : {})); break
     case 'combat': set({ combat: m.combat }); break
     case 'walls': set((s) => (m.sceneId === s.sceneId ? { walls: m.walls } : {})); break
     case 'lights': set((s) => (m.sceneId === s.sceneId ? { lights: m.lights } : {})); break
@@ -140,7 +146,7 @@ export function leaveTable() {
   const s = socket
   socket = null
   s?.close()
-  set({ conn: 'closed', you: null, role: 'spectator', scenes: [], tokens: [], sceneId: null, active: null, selected: [], cursors: {}, rulers: {}, online: [], members: [], chat: [], unread: 0, combat: NO_COMBAT, walls: [], lights: [], fog: null, error: '' })
+  set({ conn: 'closed', you: null, role: 'spectator', scenes: [], tokens: [], sceneId: null, active: null, selected: [], cursors: {}, rulers: {}, online: [], members: [], chat: [], unread: 0, combat: NO_COMBAT, drawings: [], walls: [], lights: [], fog: null, error: '' })
 }
 
 /** Sends a message; an operation id comes back with a refusal so the cause can be shown. */

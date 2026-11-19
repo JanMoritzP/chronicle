@@ -814,3 +814,18 @@ input[type=color] { width: 34px; height: 24px; padding: 0; border: 1px solid var
 .tt-row-actions { display: inline-flex; gap: 2px; }
 .tt-row-actions .btn { padding: 2px 6px; }
 .tt-panel > .seg { position: sticky; top: -10px; z-index: 2; flex: none; flex-wrap: wrap; background: var(--panel); padding: 10px 0 6px; margin: -10px 0 0; }
+.tt-enc-monsters { display: flex; flex-direction: column; gap: 4px; }
+.tt-enc-row { display: flex; align-items: center; gap: 4px; }
+.tt-enc-row .btn { padding: 2px 6px; }
+.tt-count { min-width: 20px; text-align: center; font-weight: 600; }
+.tt-meter { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); border-left-width: 5px; background: var(--bg); }
+.tt-meter.trivial { border-left-color: var(--muted); }
+.tt-meter.easy { border-left-color: #4caf50; }
+.tt-meter.medium { border-left-color: #f1c40f; }
+.tt-meter.hard { border-left-color: #e67e22; }
+.tt-meter.deadly { border-left-color: var(--danger); }
+.tt-swatches { display: inline-flex; gap: 3px; align-items: center; }
+.tt-swatch { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--border); cursor: pointer; padding: 0; }
+.tt-swatch.on { border-color: var(--accent); outline: 2px solid var(--accent); outline-offset: 1px; }
+.tt-inline { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; white-space: nowrap; }
+.tt-inline input[type=range] { width: 70px; }

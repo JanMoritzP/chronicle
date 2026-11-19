@@ -413,6 +413,12 @@ areas:
       - id: table.combat
         name: "Combat: initiative, start, next turn and round, shown to players"
         files: [web/src/components/TableParts.tsx]
+      - id: table.encounters
+        name: "Encounter builder: creatures, party, difficulty, placing them on a scene"
+        files: [web/src/components/TableEncounters.tsx, web/src/tabletop/encounter.ts]
+      - id: table.canvas
+        name: "Canvas tools: drag, measure, ping, draw, walls, and a player under fog, without errors"
+        files: [web/src/tabletop/engine.ts, web/src/tabletop/fog.ts, web/src/tabletop/visibility.ts]
       - id: table.panel
         name: "The GM edits a token from the panel"
         files: [web/src/components/Tabletop.tsx]
