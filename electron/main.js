@@ -34,6 +34,11 @@ async function checkServer(url) {
 
 const windows = new Set()
 
+// The server's Settings page shows a "Check for updates" button when it sees this token in the user agent, and the button opens this address.
+// It is not a bridge: nothing is returned to the page, and all it can do is start the update dialog, same as Ctrl+Shift+U.
+const DESKTOP_TOKEN = 'ChronicleDesktop/1'
+const CHECK_UPDATES_URL = 'chronicle-desktop://check-updates'
+
 function bounds() {
   const saved = readSettings().bounds
   const ok = saved && screen.getAllDisplays().some((d) => {
@@ -64,6 +69,7 @@ function openWindow(offset = 0) {
   })
   win.on('closed', () => windows.delete(win))
 
+  win.webContents.setUserAgent(`${win.webContents.getUserAgent()} ${DESKTOP_TOKEN}`)
   const url = serverUrl()
   if (!url) setupPage(win)
   else win.loadURL(url)
@@ -71,6 +77,7 @@ function openWindow(offset = 0) {
   const origin = () => { try { return new URL(serverUrl()).origin } catch { return '' } }
   // Anything that is not the Chronicle server opens in the real browser, never inside this window.
   win.webContents.setWindowOpenHandler(({ url: target }) => {
+    if (target === CHECK_UPDATES_URL) { updater.check(true); return { action: 'deny' } }
     if (target.startsWith(origin() + '/')) { openWindow(30); return { action: 'deny' } }
     if (/^https?:/i.test(target)) shell.openExternal(target)
     return { action: 'deny' }

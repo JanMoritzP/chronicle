@@ -45,7 +45,9 @@ npm run dist:mac     # needs a Mac
 
 ## Updates
 
-The app looks for a newer version on GitHub (`JanMoritzP/chronicle`, latest release) a few seconds after start and every six hours. Nothing is shown unless there is one. The address screen also shows the version and a "Check for updates" link.
+The app looks for a newer version on GitHub (`JanMoritzP/chronicle`, latest release) a few seconds after start and every six hours. Nothing is shown unless there is one. To check on demand there is a "Check for updates" button on the address screen and one in Settings, under "Desktop app" (it only appears inside the desktop app), besides `Ctrl+Shift+U`.
+
+The Settings button is shown by the web app, which has no bridge to the shell. The app adds `ChronicleDesktop/1` to the window's user agent, the web app shows the button when it sees it, and the button opens `chronicle-desktop://check-updates`. The window's open handler (`electron/main.js`) recognises exactly that address and starts the same check as the shortcut; nothing is sent back to the page. Older desktop builds do not add the token, so the button stays hidden until the app has been updated once (use `Ctrl+Shift+U`).
 
 - **Installed build** (`Chronicle-Setup-<version>.exe`): downloads the installer from the release and installs it when you restart, or the next time you quit.
 - **Portable build** (`Chronicle-<version>-portable.exe`): downloads the new portable exe next to the old one, checks its size and SHA-256, and swaps it in after the app quits. The folder must be writable.

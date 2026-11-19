@@ -280,6 +280,22 @@ function FontSettings() {
   )
 }
 
+// The desktop app adds this token to its user agent; its window opens the address below to start an update check (see electron/main.js).
+const IN_DESKTOP_APP = /ChronicleDesktop\//.test(navigator.userAgent)
+
+function DesktopSettings() {
+  if (!IN_DESKTOP_APP) return null
+  return (
+    <>
+      <h3 className="muted" style={{ marginTop: 28 }}>Desktop app</h3>
+      <p>
+        <button className="btn sm" onClick={() => window.open('chronicle-desktop://check-updates')}>Check for updates</button>
+        <span className="muted" style={{ fontSize: 13, marginLeft: 8 }}>The app also looks by itself a few seconds after it starts and every six hours.</span>
+      </p>
+    </>
+  )
+}
+
 function WorldOptions({ id }: { id: string }) {
   const world = useStore((s) => s.workspaces.find((w) => w.id === id))
   const readOnly = useStore((s) => s.user?.role === 'viewer')
@@ -335,6 +351,8 @@ export function SettingsView() {
       </div>
 
       <FontSettings />
+
+      <DesktopSettings />
 
       <h3 className="muted" style={{ marginTop: 28 }}>Worlds</h3>
       <div className="row" style={{ flexWrap: 'wrap' }}>

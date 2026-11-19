@@ -44,7 +44,7 @@ Never test against the owner's real data directory.
 - API smoke tests against a running throwaway server: `node scripts/smoke-<area>.mjs http://localhost:3222 gm testpass123`. Areas: `auth`, `blocks`, `copy`, `export`, `library` (downloads the real Open5e data, needs internet), `maps`, `multiuser` (needs the admin URL and account too), `pagetypes`, `relations`, `sessions`, `share`, `stattemplates`, `templates`, `todos`, `worlds`, plus `smoke.mjs` (core).
 - Pure logic: `scripts/test-ydoc.ts`, `scripts/test-family.ts`, `scripts/test-time.ts`, `scripts/test-autolink.ts`, `scripts/test-chain.ts` (bundle with esbuild, run with node).
 - Updater: `node scripts/test-update-logic.mjs` (no Electron), `node scripts/test-update-flow.mjs` (real Electron, fake GitHub; **unset `ELECTRON_RUN_AS_NODE` first**).
-- Desktop app: `node scripts/test-electron.mjs <server-url>`.
+- Desktop app: `node scripts/test-electron.mjs <server-url>`; the update button in real Electron against a fake server and GitHub: `node scripts/test-update-button.mjs` (**unset `ELECTRON_RUN_AS_NODE` first**).
 - Add a smoke script for every new server route family, in the same style (copy a small one such as `smoke-templates.mjs`).
 
 ## 3. Architecture rules (the important ones)
@@ -84,7 +84,7 @@ Never test against the owner's real data directory.
 
 ### Desktop app and updates
 - `electron/main.js` is the only app code in Electron; the UI always comes from the server, so **server/web changes never need a new desktop build**. Only changes in `electron/` do.
-- The page served by the server gets **no** bridge to the system. The `file:` setup page has `connect`, `version`, `checkUpdates` (`preload.js`); main-process handlers also refuse any sender not on `file:`. Keep it that way: sandbox on, context isolation on, no Node in pages.
+- The page served by the server gets **no** bridge to the system. The one thing it can do is ask for an update check: the window's open handler recognises the exact address `chronicle-desktop://check-updates` (the Settings button opens it) and nothing is returned. Do not add more of this without the owner. The `file:` setup page has `connect`, `version`, `checkUpdates` (`preload.js`); main-process handlers also refuse any sender not on `file:`. Keep it that way: sandbox on, context isolation on, no Node in pages.
 - **Updater** (`electron/update.js`, pure helpers in `electron/update-logic.js`):
   - Source: GitHub Releases of `JanMoritzP/chronicle` (public repo; no token in the app).
   - **Installed (NSIS) build:** `electron-updater` reads `latest.yml` from the release, downloads the installer on "Update now", installs on restart or next quit.
