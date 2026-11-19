@@ -41,7 +41,7 @@ export function PageView({ id, anchor }: { id: string; anchor?: string }) {
   return <PageEditor key={`${id}:${epoch}`} page={page} anchor={anchor} onReload={() => setEpoch((e) => e + 1)} />
 }
 
-type PropsPatch = { data?: Record<string, any>; portrait?: string | null; type?: string | null }
+type PropsPatch = { data?: Record<string, any>; portrait?: string | null; type?: string | null; sheet?: Record<string, unknown> }
 type Pending = { title?: string; tags?: string[]; propsPatch?: PropsPatch }
 
 function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: string; onReload: () => void }) {
@@ -103,7 +103,8 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
     // field changes pile up until the save goes out, so none is lost
     if (patch.propsPatch) {
       const data = cur.propsPatch?.data || patch.propsPatch.data ? { data: { ...cur.propsPatch?.data, ...patch.propsPatch.data } } : {}
-      pending.current.propsPatch = { ...cur.propsPatch, ...patch.propsPatch, ...data }
+      const sheet = cur.propsPatch?.sheet || patch.propsPatch.sheet ? { sheet: { ...cur.propsPatch?.sheet, ...patch.propsPatch.sheet } } : {}
+      pending.current.propsPatch = { ...cur.propsPatch, ...patch.propsPatch, ...data, ...sheet }
     }
     setSave('dirty')
     clearTimeout(timer.current)
@@ -252,6 +253,7 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
     } else {
       next.data = { ...(props.data ?? {}) }
       if (value == null || value === '') delete next.data[key]; else next.data[key] = value
+      if (key === 'main') delete next.sheet
     }
     setProps(next)
     schedule({ propsPatch: key === 'portrait' ? { portrait: value || null } : { data: { [key]: value == null || value === '' ? null : value } } }, 500)

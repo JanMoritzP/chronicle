@@ -4,6 +4,7 @@ import { addMember, visibleWorldIds, worldRole } from '../access.js'
 import { requireEditor, requireOwner, requireUser } from '../auth.js'
 import { db, now } from '../db.js'
 import { emptyDoc, ensureHeadingIds, type DocNode } from '../doc.js'
+import { parseSheet, patchSheet } from '../sheet.js'
 import { templatesOf } from './templates.js'
 import { pageTypesOf } from './pagetypes.js'
 import { statTemplatesOf } from './stattemplates.js'
@@ -18,6 +19,15 @@ function wsExists(id: string) {
 /** True when the row with this id belongs to the given world, so ids sent by a client can never pull in another world's data. */
 function sameWorld(table: 'folders' | 'pages' | 'zettels', id: string, ws: string) {
   return !!db.prepare(`SELECT 1 FROM ${table} WHERE id = ? AND workspace_id = ?`).get(id, ws)
+}
+
+/** Props sent whole may carry a sheet; it must be a valid one, and it is stored as parsed (unknown keys dropped). */
+function validSheetProps(props: Record<string, any>) {
+  if (props.sheet === undefined) return true
+  const sheet = parseSheet(props.sheet)
+  if (!sheet) return false
+  props.sheet = sheet
+  return true
 }
 
 const settingsSchema = z.object({
@@ -187,6 +197,7 @@ export async function contentRoutes(app: FastifyInstance) {
     if (!b.success) return reply.code(400).send({ error: 'bad request' })
     if (b.data.folderId && !sameWorld('folders', b.data.folderId, ws)) return reply.code(400).send({ error: 'bad request' })
     if (b.data.sourceZettelId && !sameWorld('zettels', b.data.sourceZettelId, ws)) return reply.code(400).send({ error: 'bad request' })
+    if (b.data.props && !validSheetProps(b.data.props)) return reply.code(400).send({ error: 'bad request' })
     const id = uid()
     const doc = ensureHeadingIds(withStarterTodo(b.data.content ?? emptyDoc(), ws, !!b.data.content))
     const t = now()
@@ -231,6 +242,8 @@ export async function contentRoutes(app: FastifyInstance) {
         data: z.record(z.string(), z.any()).optional(),
         portrait: z.string().nullable().optional(),
         type: z.string().nullable().optional(),
+        /** Sheet fields by path ("hp.max"); see server/src/sheet.ts. */
+        sheet: z.record(z.string(), z.any()).optional(),
       }).optional(),
     }).safeParse(req.body)
     if (!b.success) return reply.code(400).send({ error: 'bad request' })
@@ -238,12 +251,20 @@ export async function contentRoutes(app: FastifyInstance) {
     if (!p) return reply.code(404).send({ error: 'not found' })
     const d = b.data
     if (d.folderId && !sameWorld('folders', d.folderId, p.workspace_id)) return reply.code(400).send({ error: 'bad request' })
+    if (d.props && !validSheetProps(d.props)) return reply.code(400).send({ error: 'bad request' })
     if (d.propsPatch) {
       const merged: any = { ...(d.props ?? JSON.parse(p.props)) }
       const pp = d.propsPatch
       if (pp.data) {
         merged.data = { ...(merged.data ?? {}) }
         for (const [k, v] of Object.entries(pp.data)) { if (v === null || v === '') delete merged.data[k]; else merged.data[k] = v }
+        // the old stat block is the source until the sheet is edited itself: changing it drops a sheet made from the earlier text
+        if ('main' in pp.data && !pp.sheet) delete merged.sheet
+      }
+      if (pp.sheet) {
+        const sheet = patchSheet(merged.sheet, pp.sheet)
+        if (!sheet) return reply.code(400).send({ error: 'bad request' })
+        merged.sheet = sheet
       }
       for (const k of ['portrait', 'type'] as const) {
         if (pp[k] === undefined) continue

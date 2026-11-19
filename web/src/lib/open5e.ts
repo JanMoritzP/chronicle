@@ -1,5 +1,6 @@
 import type { LibraryEntry } from '../types'
 import { autolinkDoc, buildMatcher } from './autolink'
+import { sheetFromCreature } from './sheet'
 
 // Mappers from Open5e records to Chronicle: creatures become stat block data, everything else becomes
 // a plain description (facts + sections) that is shown in the library and written into a page body.
@@ -484,7 +485,7 @@ export function importPlan(e: LibraryEntry, index: Index): ImportPlan {
       if (d.type?.name) data.creature_type = [resolveRef(index, 'creaturetype', d.type.key, d.type.name)]
       if (d.alignment) data.alignment = [resolveRef(index, 'alignment', String(d.alignment).toLowerCase().replace(/s+/g, '-'), upperFirstWords(String(d.alignment)))]
     }
-    return { type, props: { library: e.key, data }, content: textDoc([], e) }
+    return { type, props: { library: e.key, data, ...(e.category === 'creature' ? { sheet: sheetFromCreature(e) } : {}) }, content: textDoc([], e) }
   }
 
   const t = entryText(e)

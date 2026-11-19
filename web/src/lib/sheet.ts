@@ -1,0 +1,282 @@
+import type { LibraryEntry } from '../types'
+
+// The structured sheet of a creature or character. Numbers stay numbers so a token can read hit points,
+// armor class and speed, and the page, the hover card and the table all draw the same data.
+// It is stored on the page as `props.sheet` and converted from the older string-based stat block data.
+
+export const ABILITIES = ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const
+export type Ability = (typeof ABILITIES)[number]
+export const SPEED_MODES = ['walk', 'burrow', 'climb', 'crawl', 'fly', 'swim'] as const
+export type SpeedMode = (typeof SPEED_MODES)[number]
+export const SENSES = ['blindsight', 'darkvision', 'tremorsense', 'truesight'] as const
+export type Sense = (typeof SENSES)[number]
+export const FEATURE_GROUPS = ['traits', 'actions', 'bonus', 'reactions', 'legendary'] as const
+export type FeatureGroup = (typeof FEATURE_GROUPS)[number]
+
+export type Usage =
+  | { type: 'recharge'; min: number }
+  | { type: 'perDay'; times: number }
+  | { type: 'rest' }
+
+export interface Feature {
+  name: string
+  text: string
+  usage?: Usage
+  /** legendary actions: how many of the creature's actions this one spends */
+  cost?: number
+}
+
+export interface Sheet {
+  v: 1
+  ruleset: '5e' | '5e-2024'
+  name: string
+  size: string
+  /** creature type, lower case ("humanoid") */
+  type: string
+  alignment: string
+  abilities: Record<Ability, number>
+  ac: { value: number; note: string }
+  hp: { max: number; formula: string }
+  speed: Partial<Record<SpeedMode, number>> & { hover?: boolean }
+  /** total bonuses, as printed; a missing entry means "just the ability modifier" */
+  saves: Partial<Record<Ability, number>>
+  skills: Record<string, number>
+  initiative?: number
+  senses: Partial<Record<Sense, number>>
+  passivePerception?: number
+  vulnerabilities: string
+  resistances: string
+  immunities: string
+  conditionImmunities: string
+  languages: string
+  cr?: number
+  xp?: number
+  features: Record<FeatureGroup, Feature[]>
+}
+
+export const emptySheet = (ruleset: Sheet['ruleset'] = '5e'): Sheet => ({
+  v: 1,
+  ruleset,
+  name: '',
+  size: '',
+  type: '',
+  alignment: '',
+  abilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 },
+  ac: { value: 10, note: '' },
+  hp: { max: 1, formula: '' },
+  speed: { walk: 30 },
+  saves: {},
+  skills: {},
+  senses: {},
+  vulnerabilities: '',
+  resistances: '',
+  immunities: '',
+  conditionImmunities: '',
+  languages: '',
+  features: { traits: [], actions: [], bonus: [], reactions: [], legendary: [] },
+})
+
+/**
+ * The sheet of a page: the stored one, else one read from the page's old stat block (`props.data.main`), else null.
+ * The converted sheet is only stored when someone edits it (`wholeSheetPatch`), so reading never writes.
+ */
+export function sheetOf(props: Record<string, any> | null | undefined): Sheet | null {
+  if (props?.sheet && props.sheet.v === 1) return props.sheet as Sheet
+  const main = props?.data?.main
+  if (main && typeof main === 'object' && main.data && typeof main.data === 'object') return sheetFromLegacy(main.data, main.template)
+  return null
+}
+
+/** Every top-level field as a path patch, for `propsPatch.sheet` when a sheet is stored for the first time. */
+export const wholeSheetPatch = (s: Sheet): Record<string, unknown> => ({ ...s })
+
+// ---------- derived values ----------
+
+export const abilityMod = (score: number) => Math.floor((score - 10) / 2)
+export const signed = (n: number) => (n >= 0 ? `+${n}` : `−${Math.abs(n)}`)
+
+/** Proficiency bonus from challenge rating (a challenge rating below 1 counts as 1). */
+export const profBonus = (cr: number) => 2 + Math.floor((Math.max(cr, 1) - 1) / 4)
+
+export const saveBonus = (s: Sheet, a: Ability) => s.saves[a] ?? abilityMod(s.abilities[a])
+
+export const initiativeBonus = (s: Sheet) => s.initiative ?? abilityMod(s.abilities.dex)
+
+export const passivePerception = (s: Sheet) => s.passivePerception ?? 10 + (s.skills.perception ?? abilityMod(s.abilities.wis))
+
+export function crText(cr: number | undefined): string {
+  if (cr == null || !Number.isFinite(cr)) return ''
+  return cr === 0.125 ? '1/8' : cr === 0.25 ? '1/4' : cr === 0.5 ? '1/2' : String(cr)
+}
+
+export function crFromText(text: string): number | undefined {
+  const m = /^\s*(\d+)\s*\/\s*(\d+)/.exec(text)
+  if (m) return Number(m[2]) ? Number(m[1]) / Number(m[2]) : undefined
+  const n = parseFloat(text)
+  return Number.isFinite(n) ? n : undefined
+}
+
+export const speedText = (s: Sheet) => {
+  const parts: string[] = []
+  if (s.speed.walk) parts.push(`${s.speed.walk} ft.`)
+  for (const m of SPEED_MODES) if (m !== 'walk' && s.speed[m]) parts.push(`${m} ${s.speed[m]} ft.${m === 'fly' && s.speed.hover ? ' (hover)' : ''}`)
+  return parts.join(', ') || '0 ft.'
+}
+
+// ---------- from the library ----------
+
+const clean = (s: unknown) => String(s ?? '').replace(/\s*\r?\n\s*/g, ' ').trim()
+const named = (list: any[]) => (list ?? []).map((x) => String(x.name ?? x).toLowerCase()).join(', ')
+const resist = (r: any, key: string) => r?.[`${key}_display`] || named(r?.[key])
+
+function usageOf(a: any): Usage | undefined {
+  const u = a?.usage_limits
+  if (!u) return undefined
+  if (u.type === 'RECHARGE_ON_ROLL') return { type: 'recharge', min: Number(u.param) || 6 }
+  if (u.type === 'PER_DAY') return { type: 'perDay', times: Number(u.param) || 1 }
+  if (u.type === 'RECHARGE_AFTER_REST') return { type: 'rest' }
+  return undefined
+}
+
+function featuresOf(list: any[], type: string): Feature[] {
+  return (list ?? [])
+    .filter((a) => a.action_type === type)
+    .sort((a, b) => (a.order_in_statblock ?? 0) - (b.order_in_statblock ?? 0))
+    .map((a) => {
+      const f: Feature = { name: clean(a.name), text: clean(a.desc) }
+      const usage = usageOf(a)
+      if (usage) f.usage = usage
+      if (type === 'LEGENDARY_ACTION' && a.legendary_action_cost > 1) f.cost = Number(a.legendary_action_cost)
+      return f
+    })
+}
+
+/** An Open5e creature as a sheet. Action text comes from `desc`, as in the library mapping (the structured attack data has mistakes). */
+export function sheetFromCreature(e: LibraryEntry): Sheet {
+  const d = e.data ?? {}
+  const s = emptySheet(d.ruleset === '5e-2024' ? '5e-2024' : '5e')
+  s.name = e.name
+  s.size = String(d.size?.name ?? '')
+  s.type = String(d.type?.name ?? '').toLowerCase()
+  s.alignment = String(d.alignment ?? '')
+  for (const [short, long] of [['str', 'strength'], ['dex', 'dexterity'], ['con', 'constitution'], ['int', 'intelligence'], ['wis', 'wisdom'], ['cha', 'charisma']] as const) {
+    const v = Number(d.ability_scores?.[long])
+    if (Number.isFinite(v)) s.abilities[short] = v
+  }
+  s.ac = { value: Number(d.armor_class) || 10, note: String(d.armor_detail ?? '') }
+  s.hp = { max: Number(d.hit_points) || 1, formula: String(d.hit_dice ?? '') }
+  // speed_all pads every mode with a derived value; speed holds only what is printed
+  s.speed = {}
+  for (const m of SPEED_MODES) { const v = Number(d.speed?.[m]) || 0; if (v) s.speed[m] = v }
+  if (!Object.keys(s.speed).length) s.speed.walk = 0
+  if (d.speed_all?.hover && s.speed.fly) s.speed.hover = true
+  for (const [short, long] of [['str', 'strength'], ['dex', 'dexterity'], ['con', 'constitution'], ['int', 'intelligence'], ['wis', 'wisdom'], ['cha', 'charisma']] as const) {
+    if (d.saving_throws?.[long] != null) s.saves[short] = Number(d.saving_throws[long])
+  }
+  for (const [k, v] of Object.entries(d.skill_bonuses ?? {})) s.skills[k.replace(/_/g, ' ')] = Number(v)
+  if (d.initiative_bonus != null) s.initiative = Number(d.initiative_bonus)
+  for (const k of SENSES) { const v = Number(d[`${k}_range`]); if (v) s.senses[k] = v }
+  if (d.passive_perception != null) s.passivePerception = Number(d.passive_perception)
+  const r = d.resistances_and_immunities
+  s.vulnerabilities = resist(r, 'damage_vulnerabilities')
+  s.resistances = resist(r, 'damage_resistances')
+  s.immunities = resist(r, 'damage_immunities')
+  s.conditionImmunities = resist(r, 'condition_immunities')
+  s.languages = String(d.languages?.as_string ?? '')
+  const cr = Number(d.challenge_rating)
+  if (Number.isFinite(cr)) s.cr = cr
+  if (d.experience_points != null) s.xp = Number(d.experience_points)
+  s.features.traits = (d.traits ?? []).map((t: any) => ({ name: clean(t.name), text: clean(t.desc) }))
+  const acts = d.actions ?? []
+  s.features.actions = featuresOf(acts, 'ACTION')
+  s.features.bonus = featuresOf(acts, 'BONUS_ACTION')
+  s.features.reactions = featuresOf(acts, 'REACTION')
+  s.features.legendary = featuresOf(acts, 'LEGENDARY_ACTION')
+  return s
+}
+
+// ---------- from the old string-based stat block data ----------
+
+const num = (text: string | undefined) => {
+  const m = /-?\d+/.exec(String(text ?? '').replace('−', '-'))
+  return m ? Number(m[0]) : undefined
+}
+const bonus = (text: string) => num(text.replace(/^[^+\-−\d]*/, ''))
+
+function parseSpeed(text: string): Sheet['speed'] {
+  const out: Sheet['speed'] = {}
+  for (const part of text.split(/[,;]/)) {
+    const m = /^\s*(?:(burrow|climb|crawl|fly|swim|walk)\s+)?(\d+)/i.exec(part)
+    if (m) out[(m[1]?.toLowerCase() as SpeedMode) ?? 'walk'] = Number(m[2])
+    if (/hover/i.test(part)) out.hover = true
+  }
+  return out
+}
+
+function parseFeatures(text: string | undefined): Feature[] {
+  const out: Feature[] = []
+  for (const line of String(text ?? '').split('\n')) {
+    const t = line.trim()
+    if (!t) continue
+    const m = /^\*\*\*(.+?)\*\*\*\s*(.*)$/.exec(t)
+    if (!m) { out.push({ name: t.replace(/\*/g, ''), text: '' }); continue }
+    let name = m[1].trim().replace(/\.$/, '')
+    const f: Feature = { name, text: m[2].trim() }
+    const recharge = /\(Recharge (\d)/i.exec(name)
+    const perDay = /\((\d+)\s*\/\s*Day/i.exec(name)
+    const cost = /\(Costs (\d+) Actions?\)/i.exec(name)
+    if (recharge) f.usage = { type: 'recharge', min: Number(recharge[1]) }
+    else if (perDay) f.usage = { type: 'perDay', times: Number(perDay[1]) }
+    else if (/\(Recharges after/i.test(name)) f.usage = { type: 'rest' }
+    if (cost) f.cost = Number(cost[1])
+    name = name.replace(/\s*\((Recharge[^)]*|\d+\s*\/\s*Day[^)]*|Recharges after[^)]*|Costs \d+ Actions?)\)/i, '').trim()
+    f.name = name
+    out.push(f)
+  }
+  return out
+}
+
+/** Reads the string fields of a monster stat block into a sheet. Anything unreadable falls back to the sheet's default. */
+export function sheetFromLegacy(data: Record<string, string>, templateId = '5e-monster'): Sheet {
+  const s = emptySheet(templateId === '5e-monster-2024' ? '5e-2024' : '5e')
+  s.name = data.name ?? ''
+  const [head, ...rest] = String(data.type ?? '').split(',')
+  const words = head.trim().split(/\s+/)
+  const sizes = ['tiny', 'small', 'medium', 'large', 'huge', 'gargantuan']
+  if (sizes.includes(words[0]?.toLowerCase())) { s.size = words[0]; s.type = words.slice(1).join(' ').toLowerCase() } else s.type = head.trim().toLowerCase()
+  s.alignment = rest.join(',').trim()
+  for (const a of ABILITIES) { const v = num(data[a]); if (v != null) s.abilities[a] = v }
+  const ac = /^\s*(\d+)\s*(?:\((.*)\))?/.exec(data.ac ?? '')
+  if (ac) s.ac = { value: Number(ac[1]), note: ac[2] ?? '' }
+  const hp = /^\s*(\d+)\s*(?:\((.*)\))?/.exec(data.hp ?? '')
+  if (hp) s.hp = { max: Number(hp[1]), formula: hp[2] ?? '' }
+  if (data.speed) s.speed = parseSpeed(data.speed)
+  for (const part of String(data.saves ?? '').split(',')) {
+    const m = /^\s*(str|dex|con|int|wis|cha)\w*\s+([+\-−]?\d+)/i.exec(part)
+    if (m) s.saves[m[1].toLowerCase() as Ability] = bonus(m[2])!
+  }
+  for (const a of ABILITIES) { const v = data[`${a}_save`]; if (v) { const n = bonus(v); if (n != null) s.saves[a] = n } }
+  for (const part of String(data.skills ?? '').split(',')) {
+    const m = /^\s*([A-Za-z' ]+?)\s+([+\-−]\d+)/.exec(part)
+    if (m) s.skills[m[1].toLowerCase()] = bonus(m[2])!
+  }
+  const init = bonus(String(data.init ?? '').split('(')[0])
+  if (init != null && data.init) s.initiative = init
+  for (const part of String(data.senses ?? '').split(',')) {
+    const m = /^\s*(blindsight|darkvision|tremorsense|truesight)\s+(\d+)/i.exec(part)
+    if (m) s.senses[m[1].toLowerCase() as Sense] = Number(m[2])
+    const p = /passive Perception\s+(\d+)/i.exec(part)
+    if (p) s.passivePerception = Number(p[1])
+  }
+  s.vulnerabilities = data.vuln ?? ''
+  s.resistances = data.resist ?? ''
+  s.immunities = data.immune ?? ''
+  s.conditionImmunities = data.condImmune ?? ''
+  s.languages = data.languages ?? ''
+  const cr = crFromText(data.cr ?? '')
+  if (cr != null) s.cr = cr
+  const xp = /([\d,]+)\s*XP|XP\s*([\d,]+)/i.exec(data.cr ?? '')
+  if (xp) s.xp = Number((xp[1] ?? xp[2]).replace(/,/g, ''))
+  s.features = { traits: parseFeatures(data.traits), actions: parseFeatures(data.actions), bonus: parseFeatures(data.bonus), reactions: parseFeatures(data.reactions), legendary: parseFeatures(data.legendary) }
+  return s
+}
