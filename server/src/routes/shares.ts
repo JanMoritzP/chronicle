@@ -53,7 +53,7 @@ function publicDoc(page: PageRow, doc: DocNode, depth = 0): DocNode {
       const inner = publicDoc(target, sliceSection(JSON.parse(target.content) as DocNode, a.anchor), depth + 1)
       return inner.content?.length ? [{ type: 'blockquote', content: inner.content }] : []
     }
-    if (n.type === 'todo') return []
+    if (n.type === 'todo' || n.type === 'comment') return []
     // a secret never leaves with its text; the reader sees that something is being kept closed
     if (n.type === 'callout' && n.attrs?.kind === 'secret') {
       return [{ type: 'callout', attrs: { kind: 'secret' }, content: [{ type: 'paragraph', content: [{ type: 'text', text: 'This is a secret. It stays closed in shared pages.' }] }] }]

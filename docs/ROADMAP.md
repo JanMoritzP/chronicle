@@ -155,6 +155,18 @@ What it does: a built-in manual explains the app, and a bare `/` in a page now l
 - **Manual view.** `{ type: 'manual' }`, `components/Manual.tsx`. Opened from the question mark button in the sidebar footer, `/help` in a page or "Open manual" in Ctrl+K. It has a search box and a contents row. The command table is built from `COMMAND_LIST` in `slash.ts`, the chain block names from `CHAIN_TAGS` in `chain.ts` and the shortcuts from `keys.ts`, so they follow the code. The prose is written by hand: update it when a feature changes.
 - **Tests.** `scripts/test-chain.ts` covers the new chain message. The view has no server part.
 
+## Comments (built)
+
+What it does: typing `@` and a name in a page leaves a comment for that person. They find it in the Comments view, with a count in the sidebar, until they resolve it.
+
+- **In the page.** An inline atom node `comment` with attributes `id`, `to` (username), `from` (username of the writer), `message`, `done`. `web/src/editor/Comment.tsx` (node view, like the todo marker) and `mention.ts` (the `@` suggestion; it offers everyone from `GET /api/workspaces/:ws/people`, which is the owners plus the world's members, cached for a minute). `@` only triggers after a space or at a line start, so addresses are left alone. UniqueID gives each comment an id.
+- **Index.** Table `comments` (migration #15) is rebuilt from the page document on every save in `reindexLinks`, next to the todo index, and keeps `created_at` and `done_at` of known comments. It is derived data, so it is not backed up, copied or exported separately.
+- **API.** `GET /api/workspaces/:ws/comments`, `GET /api/workspaces/:ws/people`, `PATCH|DELETE /api/pages/:id/comments/:commentId` (editors; `done`, `message`). Changes go through the live document when the page is open (`editTodoLive` with the node type), otherwise through `replaceContent`.
+- **View.** Sidebar "Comments" (Ctrl+K "Open comments"): For me, From me, Everyone, with Open, Resolved, All and a text filter. The sidebar count is the open comments addressed to the signed-in account and follows page saves live. "Go to" opens the page and flashes the comment.
+- **Privacy.** `publicDoc` drops comments from shared pages and embeds, `templateDoc` leaves them out of templates, and they are not part of the page text, outline or search. Markdown export writes `**Comment for @name:** text` (owner only).
+- **Limits.** `from` is written by the client, so it is a label, not proof of who wrote it. There is no notification beyond the count, no threads or replies, and a comment is tied to a spot in the text, not to a selection. Copying a page to another world keeps its comments, even for people who are not in that world.
+- **Tests.** `node scripts/smoke-comments.mjs <url> <user> <pass>`.
+
 ## Boxes, sections and columns (built)
 
 What it does: new kinds of block for page layout, inserted from the slash menu or a chain (see "Slash chains"). `web/src/editor/blocks.tsx`.

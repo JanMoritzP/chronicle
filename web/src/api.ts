@@ -1,6 +1,6 @@
 import { get, set } from 'idb-keyval'
 import type { Calendar } from './lib/calendar'
-import type { LibraryEntry, LibraryIndex, LibraryStatus, BackupInfo, Bootstrap, EventRow, FullPage, MapFull, MapItem, MapLayer, CopyPreview, CopyResult, GameSession, MapMeta, PageType, PageVersion, Relation, StatsResult, StatTemplateRow, Template, TodoItem, User, Workspace, WorldSettings } from './types'
+import type { CommentItem, Person, LibraryEntry, LibraryIndex, LibraryStatus, BackupInfo, Bootstrap, EventRow, FullPage, MapFull, MapItem, MapLayer, CopyPreview, CopyResult, GameSession, MapMeta, PageType, PageVersion, Relation, StatsResult, StatTemplateRow, Template, TodoItem, User, Workspace, WorldSettings } from './types'
 
 export interface StatTemplateBody { name: string; sections: any[]; look?: Record<string, any> }
 export interface PageTypeBody { name: string; icon: string; tag: string; source: string; definition: Record<string, any> }
@@ -76,6 +76,18 @@ export const api = {
   },
   deleteTodo: async (pageId: string, todoId: string) => {
     const r = await req('DELETE', `/api/pages/${pageId}/todos/${todoId}`)
+    pageCache.delete(pageId)
+    return r
+  },
+  people: (ws: string) => req<Person[]>('GET', `/api/workspaces/${ws}/people`),
+  comments: (ws: string) => req<CommentItem[]>('GET', `/api/workspaces/${ws}/comments`),
+  patchComment: async (pageId: string, commentId: string, b: { done?: boolean; message?: string }) => {
+    const r = await req('PATCH', `/api/pages/${pageId}/comments/${commentId}`, b)
+    pageCache.delete(pageId)
+    return r
+  },
+  deleteComment: async (pageId: string, commentId: string) => {
+    const r = await req('DELETE', `/api/pages/${pageId}/comments/${commentId}`)
     pageCache.delete(pageId)
     return r
   },

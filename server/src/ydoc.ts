@@ -73,15 +73,15 @@ export function fragmentToDoc(doc: Y.Doc): DocNode {
   return { type: 'doc', content: fromY(doc.getXmlFragment(FRAGMENT)) }
 }
 
-/** Finds the todo marker with this id in a live document and changes its attributes, or removes it with `change` null. */
-export function editTodoIn(doc: Y.Doc, todoId: string, change: Record<string, any> | null): boolean {
+/** Finds the marker (a todo, or a comment with `type`) with this id in a live document and changes its attributes, or removes it with `change` null. */
+export function editTodoIn(doc: Y.Doc, todoId: string, change: Record<string, any> | null, type = 'todo'): boolean {
   let hit = false
   const walk = (parent: Y.XmlFragment | Y.XmlElement) => {
     const kids = parent.toArray()
     for (let i = kids.length - 1; i >= 0; i--) {
       const c = kids[i]
       if (!(c instanceof Y.XmlElement)) continue
-      if (c.nodeName === 'todo' && c.getAttribute('id') === todoId) {
+      if (c.nodeName === type && c.getAttribute('id') === todoId) {
         hit = true
         if (change) for (const [k, v] of Object.entries(change)) c.setAttribute(k, v)
         else parent.delete(i, 1)

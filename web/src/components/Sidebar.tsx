@@ -1,5 +1,6 @@
+import { useUnreadComments } from './Comments'
 import {
-  BookOpen, CalendarDays, ChevronDown, ChevronRight, CircleHelp, FilePlus2, FolderPlus, Hash, Inbox, LayoutTemplate, Library, ListTodo, Map as MapIcon, Network, ScrollText, Search, Settings, Shapes, Trash2, Users, Zap,
+  BookOpen, CalendarDays, ChevronDown, ChevronRight, CircleHelp, FilePlus2, FolderPlus, Hash, Inbox, LayoutTemplate, Library, ListTodo, Map as MapIcon, MessageSquare, Network, ScrollText, Search, Settings, Shapes, Trash2, Users, Zap,
 } from 'lucide-react'
 import { useMemo, useRef, useState } from 'react'
 import { api } from '../api'
@@ -40,6 +41,7 @@ export function Sidebar() {
   const activeId = view.type === 'page' ? view.id : null
   const unprocessed = data.zettels.filter((z) => !z.processedAt).length
   const openTodos = data.pages.reduce((n, p) => n + (p.todos ?? 0), 0)
+  const unreadComments = useUnreadComments()
 
   const tagTree = useMemo(() => buildTagTree(data.pages), [data.pages])
   const byFolder = useMemo(() => {
@@ -194,6 +196,10 @@ export function Sidebar() {
         <div className="side-item" tabIndex={0} role="button" aria-label="Todos" onClick={() => navigate({ type: 'todos' })} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate({ type: 'todos' }) } }}>
           <ListTodo size={15} /> <span className="grow">Todos</span>
           {openTodos > 0 && <span className="chip">{openTodos}</span>}
+        </div>
+        <div className="side-item" tabIndex={0} role="button" aria-label="Comments" onClick={() => navigate({ type: 'comments' })} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate({ type: 'comments' }) } }}>
+          <MessageSquare size={15} /> <span className="grow">Comments</span>
+          {unreadComments > 0 && <span className="chip" title="Open comments for you">{unreadComments}</span>}
         </div>
         <div className="side-item" tabIndex={0} role="button" aria-label="Library" onClick={() => navigate({ type: 'library' })} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate({ type: 'library' }) } }}><Library size={15} /> <span className="grow">Library</span></div>
         <div className="side-item" tabIndex={0} role="button" aria-label="Templates" onClick={() => navigate({ type: 'templates' })} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate({ type: 'templates' }) } }}><LayoutTemplate size={15} /> <span className="grow">Templates</span></div>

@@ -39,6 +39,7 @@ export function SearchDialog() {
         ...(st.user?.role === 'viewer' ? [] : [{ id: 'library', label: 'Add from the library', hint: bindings.library[0], run: () => st.setUi({ libraryOpen: true }) }]),
         { id: 'libraryview', label: 'Open library', run: () => st.navigate({ type: 'library' }) },
         { id: 'todos', label: 'Open todos', hint: bindings.todos[0], run: () => st.navigate({ type: 'todos' }) },
+        { id: 'comments', label: 'Open comments', run: () => st.navigate({ type: 'comments' }) },
         ...(() => {
           const tab = st.tabs.find((t) => t.id === st.activeTab) ?? st.tabs[0]
           const v = tab.history[tab.index]

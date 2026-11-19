@@ -199,7 +199,7 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
     const t = setTimeout(() => {
       const el = editor.view.dom.querySelector(`[data-id="${CSS.escape(anchor)}"]`)
       el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-      if (el?.matches('[data-todo]')) {
+      if (el?.matches('[data-todo], [data-comment]')) {
         el.classList.add('flash')
         setTimeout(() => el.classList.remove('flash'), 2200)
       }

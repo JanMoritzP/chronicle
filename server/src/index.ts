@@ -22,6 +22,7 @@ import { exportRoutes } from './routes/export.js'
 import { relationRoutes } from './routes/relations.js'
 import { timelineRoutes } from './routes/timeline.js'
 import { todoRoutes } from './routes/todos.js'
+import { commentRoutes } from './routes/comments.js'
 import { templateRoutes } from './routes/templates.js'
 import { pageTypeRoutes } from './routes/pagetypes.js'
 import { statTemplateRoutes } from './routes/stattemplates.js'
@@ -73,6 +74,7 @@ await app.register(copyRoutes)
 await app.register(sessionRoutes)
 await app.register(shareRoutes)
 await app.register(todoRoutes)
+await app.register(commentRoutes)
 await app.register(templateRoutes)
 await app.register(pageTypeRoutes)
 await app.register(statTemplateRoutes)

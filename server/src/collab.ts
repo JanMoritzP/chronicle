@@ -226,12 +226,12 @@ contentHooks.replaced = (pageId) => {
  * Edits a todo marker inside the live document, if the page has one, so a change made in the Todos tab reaches open editors
  * as a normal edit. Returns null when the page has no live document (the caller then edits the stored JSON instead).
  */
-export function editTodoLive(pageId: string, todoId: string, change: Record<string, any> | null, author: Author | null = null): 'ok' | 'missing' | null {
+export function editTodoLive(pageId: string, todoId: string, change: Record<string, any> | null, author: Author | null = null, type = 'todo'): 'ok' | 'missing' | null {
   const has = rooms.has(pageId) || db.prepare('SELECT 1 FROM page_docs WHERE page_id = ?').get(pageId)
   if (!has) return null
   const room = openRoom(pageId)
   if (!room) return null
-  const hit = editTodoIn(room.doc, todoId, change)
+  const hit = editTodoIn(room.doc, todoId, change, type)
   if (hit) { room.writer = author; persist(room) }
   if (!room.conns.size) disposeRoom(room)
   return hit ? 'ok' : 'missing'

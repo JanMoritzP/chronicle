@@ -20,6 +20,7 @@ export type View =
   | { type: 'relations' }
   | { type: 'sessions' }
   | { type: 'todos' }
+  | { type: 'comments' }
   | { type: 'library'; key?: string }
   | { type: 'templates' }
   | { type: 'template'; id: string }

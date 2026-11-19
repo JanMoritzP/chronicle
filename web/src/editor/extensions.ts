@@ -10,6 +10,8 @@ import UniqueID from '@tiptap/extension-unique-id'
 import { Placeholder } from '@tiptap/extensions'
 import type { CollabProvider } from '../lib/collab'
 import { Callout, Column, Columns, Fold, Toc } from './blocks'
+import { Comment } from './Comment'
+import { Mentions } from './mention'
 import { Embed } from './Embed'
 import { SlashCommands } from './slash'
 import { StatBlock } from './StatBlock'
@@ -27,8 +29,9 @@ export function buildExtensions(opts: { readOnly?: boolean; collab?: CollabOptio
     TaskList,
     TaskItem.configure({ nested: true }),
     TableKit.configure({ table: { resizable: false } }),
-    UniqueID.configure({ types: ['heading', 'todo'], attributeName: 'id' }),
+    UniqueID.configure({ types: ['heading', 'todo', 'comment'], attributeName: 'id' }),
     Todo,
+    Comment,
     Callout,
     Fold,
     Columns,
@@ -41,9 +44,10 @@ export function buildExtensions(opts: { readOnly?: boolean; collab?: CollabOptio
   if (opts.readOnly) return base
   return [
     ...base,
-    Placeholder.configure({ placeholder: "Write something… type {{ to link a page, / for commands" }),
+    Placeholder.configure({ placeholder: "Write something… type {{ to link a page, / for commands, @ to leave a comment" }),
     WikiLinking,
     SlashCommands,
+    Mentions,
     ...(opts.collab ? [
       Collaboration.configure({ document: opts.collab.provider.doc }),
       CollaborationCaret.configure({ provider: opts.collab.provider, user: opts.collab.user }),

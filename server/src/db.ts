@@ -304,6 +304,23 @@ const migrations: string[] = [
   ALTER TABLE page_versions ADD COLUMN reason TEXT;
   ALTER TABLE page_versions ADD COLUMN restored_from INTEGER;
   `,
+  `
+  CREATE TABLE comments (
+    page_id TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+    comment_id TEXT NOT NULL,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    from_name TEXT NOT NULL DEFAULT '',
+    to_name TEXT NOT NULL DEFAULT '',
+    message TEXT NOT NULL DEFAULT '',
+    done INTEGER NOT NULL DEFAULT 0,
+    context TEXT NOT NULL DEFAULT '',
+    pos INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    done_at INTEGER,
+    PRIMARY KEY (page_id, comment_id)
+  );
+  CREATE INDEX comments_ws ON comments(workspace_id, done);
+  `,
 ]
 
 export const SCHEMA_VERSION = migrations.length

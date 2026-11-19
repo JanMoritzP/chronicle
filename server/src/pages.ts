@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
 import { db, now } from './db.js'
-import { ensureHeadingIds, extract, extractTodos, statblockRefs, type DocNode } from './doc.js'
+import { ensureHeadingIds, extract, extractComments, extractTodos, statblockRefs, type DocNode } from './doc.js'
 import { dataRefs, propsStatData, type Ref } from './refs.js'
 
 export const uid = () => crypto.randomUUID()
@@ -39,6 +39,19 @@ export function reindexTodos(pageId: string, workspaceId: string, doc: DocNode) 
     const o = old.get(t.id)
     const done = t.done ? 1 : 0
     ins.run(pageId, t.id, workspaceId, t.message, done, t.context, i, o?.created_at ?? now(), done ? (o?.done ? o.done_at : now()) : null)
+  })
+}
+
+/** Rebuilds the comment index of one page. Keeps created/resolved timestamps of comments that were already known. */
+export function reindexComments(pageId: string, workspaceId: string, doc: DocNode) {
+  const old = new Map((db.prepare('SELECT comment_id, done, created_at, done_at FROM comments WHERE page_id = ?').all(pageId) as
+    { comment_id: string; done: number; created_at: number; done_at: number | null }[]).map((r) => [r.comment_id, r]))
+  db.prepare('DELETE FROM comments WHERE page_id = ?').run(pageId)
+  const ins = db.prepare('INSERT INTO comments(page_id,comment_id,workspace_id,from_name,to_name,message,done,context,pos,created_at,done_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)')
+  extractComments(doc).forEach((c, i) => {
+    const o = old.get(c.id)
+    const done = c.done ? 1 : 0
+    ins.run(pageId, c.id, workspaceId, c.from, c.to, c.message, done, c.context, i, o?.created_at ?? now(), done ? (o?.done ? o.done_at : now()) : null)
   })
 }
 
@@ -114,6 +127,7 @@ export function fieldRefs(props: any): FieldRef[] {
 export function reindexLinks(pageId: string, workspaceId: string, doc: DocNode, props?: any) {
   // every path that stores page content calls this, so the todo index is refreshed here too
   reindexTodos(pageId, workspaceId, doc)
+  reindexComments(pageId, workspaceId, doc)
   const ex = extract(doc)
   db.prepare('DELETE FROM links WHERE source_id = ?').run(pageId)
   const ins = db.prepare('INSERT INTO links(source_id,target_id,target_name,anchor,embed,lib_key) VALUES(?,?,?,?,?,?)')

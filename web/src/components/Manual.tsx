@@ -185,6 +185,21 @@ const SECTIONS: Section[] = [
     ),
   },
   {
+    id: 'comments', title: 'Comments', text: 'comment mention at username person tell ask resolve',
+    body: () => (
+      <>
+        <p>To leave someone a note on a page, type <K>@</K> and pick their name. Write the comment and press <K>Enter</K>. It sits in the text where you left it, and the person finds it under <b>Comments</b> in the sidebar, which shows how many are waiting for them.</p>
+        <ul>
+          <li>Tick a comment to mark it resolved. It stays in the page, dimmed, until someone deletes it.</li>
+          <li>The Comments view lists comments for you, from you or for everyone, and <b>Go to</b> jumps to the spot in the page.</li>
+          <li>You can pick anyone who can open the world, yourself included, as a reminder.</li>
+          <li>Comments never appear on shared pages and are left out of templates. A Markdown export keeps them as <Code>Comment for @name</Code>.</li>
+        </ul>
+        <p>Comments are different from todos: a todo is a reminder for whoever opens the page, a comment is addressed to one person.</p>
+      </>
+    ),
+  },
+  {
     id: 'search', title: 'Search and commands', text: 'search ctrl k quick find command palette',
     body: () => (
       <>

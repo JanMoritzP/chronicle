@@ -54,6 +54,7 @@ function inline(nodes: DocNode[] | undefined, ctx: MdContext): string {
       // library entries are not pages of the export, so they stay plain text
       case 'wikilink': if (n.attrs?.libKey) return esc(String(n.attrs.alias || n.attrs.name || '')); return wikiSyntax(n.attrs ?? {}, false, ctx.titles)
       case 'image': return image(n, ctx)
+      case 'comment': return `**Comment for @${esc(String(n.attrs?.to ?? ''))}${n.attrs?.done ? ' (resolved)' : ''}:** ${esc(String(n.attrs?.message ?? ''))}`
       case 'todo': return n.attrs?.done ? `**DONE:** ~~${esc(String(n.attrs?.message ?? ''))}~~` : `**TODO:** ${esc(String(n.attrs?.message ?? ''))}`
       default: return inline(n.content, ctx)
     }

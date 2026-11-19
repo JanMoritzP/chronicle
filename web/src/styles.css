@@ -472,6 +472,15 @@ table.simple td, table.simple th { padding: 6px 8px; border-bottom: 1px solid va
 .todo-marker.selected { outline: 2px solid var(--accent); }
 .todo-marker.flash { animation: todo-flash 2.2s ease-out; }
 @keyframes todo-flash { 0%, 40% { box-shadow: 0 0 0 5px var(--accent); } 100% { box-shadow: 0 0 0 0 transparent; } }
+.comment-marker { display: inline-flex; align-items: center; gap: 6px; vertical-align: baseline; margin: 0 2px; padding: 0 6px 0 9px; border-radius: 8px; background: color-mix(in srgb, var(--accent) 8%, var(--panel)); border: 1px solid var(--border); border-left: 3px solid var(--accent); font-size: .92em; line-height: 1.55; }
+.comment-marker .comment-to { font-weight: 700; color: var(--accent); }
+.comment-marker .comment-text { font: inherit; color: inherit; background: transparent; border: 0; outline: 0; padding: 0; min-width: 6ch; max-width: 100%; }
+.comment-marker input[type=checkbox] { margin: 0; accent-color: var(--accent); cursor: pointer; }
+.comment-marker.done { opacity: .55; }
+.comment-marker.done .comment-text { text-decoration: line-through; }
+.comment-marker.selected { outline: 2px solid var(--accent); }
+.comment-marker.flash { animation: todo-flash 2.2s ease-out; }
+.comment-line { overflow-wrap: anywhere; }
 .todo-group { margin-bottom: 22px; }
 .todo-page { display: inline-block; font-weight: 600; margin-bottom: 4px; cursor: pointer; color: var(--text); }
 .todo-page:hover { text-decoration: underline; }

@@ -34,10 +34,11 @@ function plain(node: DocNode, skipTodos = false): string {
   if (node.type === 'wikilink') return node.attrs?.alias || node.attrs?.name || ''
   if (node.type === 'hardBreak') return '\n'
   if (node.type === 'todo') return skipTodos ? '' : String(node.attrs?.message ?? '')
+  if (node.type === 'comment') return ''
   return (node.content ?? []).map((c) => plain(c, skipTodos)).join('')
 }
 
-/** Copy of a document that can be stored as a template: heading and todo ids are dropped (every insertion gets fresh ones) and todos are reset to open. */
+/** Copy of a document that can be stored as a template: heading and todo ids are dropped (every insertion gets fresh ones), todos are reset to open and comments, which are addressed to people, are left out. */
 export function templateDoc(doc: DocNode): DocNode {
   const walk = (n: DocNode): DocNode => {
     const out: DocNode = { ...n }
@@ -46,7 +47,7 @@ export function templateDoc(doc: DocNode): DocNode {
       if (n.type === 'heading' || n.type === 'todo') delete out.attrs.id
       if (n.type === 'todo') out.attrs.done = false
     }
-    if (n.content) out.content = n.content.map(walk)
+    if (n.content) out.content = n.content.filter((c) => c.type !== 'comment').map(walk)
     return out
   }
   return walk(doc)
@@ -65,6 +66,33 @@ export function extractTodos(doc: DocNode): ExtractedTodo[] {
         seen.add(id)
         const context = block ? plain(block, true).replace(/\s+/g, ' ').trim().slice(0, 240) : ''
         out.push({ id, message: String(n.attrs?.message ?? '').replace(/\s+/g, ' ').trim().slice(0, 500), done: !!n.attrs?.done, context })
+      }
+      return
+    }
+    const b = n.type && TEXT_BLOCKS.has(n.type) ? n : block
+    for (const c of n.content ?? []) walk(c, b)
+  }
+  walk(doc)
+  return out
+}
+
+export interface ExtractedComment { id: string; from: string; to: string; message: string; done: boolean; context: string }
+
+/** Comment markers in document order, each with the text of the paragraph it sits in. */
+export function extractComments(doc: DocNode): ExtractedComment[] {
+  const out: ExtractedComment[] = []
+  const seen = new Set<string>()
+  const walk = (n: DocNode, block?: DocNode) => {
+    if (n.type === 'comment') {
+      const id = n.attrs?.id ? String(n.attrs.id) : ''
+      if (id && !seen.has(id)) {
+        seen.add(id)
+        const context = block ? plain(block, true).replace(/\s+/g, ' ').trim().slice(0, 240) : ''
+        out.push({
+          id, context, done: !!n.attrs?.done,
+          from: String(n.attrs?.from ?? '').slice(0, 80), to: String(n.attrs?.to ?? '').slice(0, 80),
+          message: String(n.attrs?.message ?? '').replace(/\s+/g, ' ').trim().slice(0, 1000),
+        })
       }
       return
     }
@@ -123,7 +151,7 @@ export function extract(doc: DocNode): Extracted {
 export function ensureHeadingIds(doc: DocNode): DocNode {
   const seen = new Set<string>()
   const walk = (n: DocNode) => {
-    if (n.type === 'heading' || n.type === 'todo') {
+    if (n.type === 'heading' || n.type === 'todo' || n.type === 'comment') {
       const cur = n.attrs?.id
       if (!cur || seen.has(cur)) n.attrs = { ...(n.attrs ?? {}), id: crypto.randomUUID() }
       seen.add(n.attrs!.id)

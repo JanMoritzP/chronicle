@@ -15,6 +15,7 @@ import { StatTemplateEditor, StatTemplatesView } from './components/StatTemplate
 import { resolveTemplates } from './editor/templates'
 import { TodosView } from './components/Todos'
 import { ManualView } from './components/Manual'
+import { CommentsView } from './components/Comments'
 import { useWorld } from './lib/world'
 import { PageView } from './components/PageView'
 import { BUILTIN_TYPES } from './lib/pageTypes'
@@ -70,6 +71,7 @@ function viewTitle(v: View, pages: { id: string; title: string }[]) {
     case 'relations': return 'Relations'
     case 'sessions': return 'Sessions'
     case 'todos': return 'Todos'
+    case 'comments': return 'Comments'
     case 'library': return 'Library'
     case 'templates': return 'Templates'
     case 'template': return useStore.getState().data.templates?.find((t) => t.id === v.id)?.name ?? 'Template'
@@ -96,6 +98,7 @@ function ViewRouter({ view }: { view: View }) {
     case 'relations': return <RelationsView />
     case 'sessions': return <SessionsView />
     case 'todos': return <TodosView />
+    case 'comments': return <CommentsView />
     case 'library': return <LibraryView entryKey={view.key} />
     case 'templates': return <TemplatesView />
     case 'template': return <TemplateEditor id={view.id} />
