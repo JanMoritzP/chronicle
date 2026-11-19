@@ -86,3 +86,44 @@ test('an imported creature shows a stat block', { tag: '@feature:library.import'
   await expect(app.getByLabel('Page title')).toHaveValue(/Wolf/)
   await expect(app.locator('main')).toContainText(/Armor|AC|13/)
 })
+
+test('open the classes, species, backgrounds, feats, items and terms', { tag: '@feature:library.kinds' }, async ({ app }) => {
+  await app.reload()
+  await openView(app, 'Library')
+  const search = app.getByRole('textbox').first()
+  const cases: [string, string, RegExp][] = [
+    ['wizard', 'Level progression', /Hit die|D6/],
+    ['evoker', 'Subclass of Wizard', /Sculpt Spells/],
+    ['elf', 'Darkvision', /Fey Ancestry/],
+    ['sage', 'Researcher', /Skill Proficiencies/],
+    ['alert', 'Prerequisite', /initiative/],
+    ['longsword', 'Versatile', /1d8/],
+    ['chain mail', 'Armor', /16/],
+    ['finesse', 'Weapon property', /Strength or Dexterity/],
+    ['stealth', 'Skill', /DEX/],
+    ['dexterity', 'Skills', /agility/i],
+    ['elvish', 'Language', /Elf|elves/],
+    ['beast', 'Creature type', /nonhumanoid/],
+    ['cover', 'Rule', /trees/],
+  ]
+  for (const [query, shown, more] of cases) {
+    await search.fill(query)
+    await app.locator('main').getByText(new RegExp('^' + query, 'i')).first().click()
+    await expect(app.locator('main'), query).toContainText(shown)
+    await expect(app.locator('main'), query).toContainText(more)
+  }
+})
+
+test('every kind of entry can be added to the world as its own page', { tag: '@feature:library.import-kinds' }, async ({ app }) => {
+  await openView(app, 'Library')
+  const search = app.getByRole('textbox').first()
+  for (const query of ['wizard', 'elf', 'sage', 'alert', 'longsword', 'chain mail', 'finesse', 'cover']) {
+    await openView(app, 'Library')
+    await search.fill(query)
+    await app.locator('main').getByText(new RegExp('^' + query, 'i')).first().click()
+    await app.getByRole('button', { name: /Add to this world/ }).click()
+    // the longsword page already links to Finesse in the library, so adding it offers to point that link at the new page
+    if (query === 'finesse') await app.getByRole('button', { name: 'Point links to the page' }).click()
+    await expect(app.getByLabel('Page title')).toHaveValue(new RegExp(query, 'i'))
+  }
+})

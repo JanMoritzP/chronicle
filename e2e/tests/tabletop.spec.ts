@@ -424,3 +424,125 @@ test('a Pathfinder 2e world: a creature sheet, and a threat rating by level', { 
   await expect(meter).toContainText('80 XP of creatures against party level 3')
   await expect(meter).toContainText('Moderate')
 })
+
+test('canvas: hex grids, tiles that can be dragged, doors that open and walls that can be erased', { tag: '@feature:table.canvas-more' }, async ({ app }) => {
+  const errors: string[] = []
+  app.on('pageerror', (e) => errors.push(e.message))
+  await openTable(app)
+  await makeScene(app, 'Hexmap')
+  await makeToken(app, 'Scout')
+  const canvas = app.locator('.tt-canvas canvas')
+  const box = (await canvas.boundingBox())!
+  const cx = box.x + box.width / 2, cy = box.y + box.height / 2
+
+  // every kind of grid and every rule for counting diagonals
+  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Scene' }).click()
+  for (const [from, option] of [['Square', 'Hexes, pointy top'], ['Hexes, pointy top', 'Hexes, flat top'], ['Hexes, flat top', 'No grid'], ['No grid', 'Square']] as const) {
+    await app.getByRole('combobox').filter({ hasText: from }).first().click()
+    await app.getByRole('option', { name: option }).click()
+    await expect(app.getByRole('combobox').filter({ hasText: option }).first()).toBeVisible()
+  }
+  for (const rule of ['Straight line length', 'Across then down', 'Every diagonal counts one cell']) {
+    await app.getByRole('combobox').filter({ hasText: /Every second diagonal|Straight line|Across then down|Every diagonal/ }).first().click()
+    await app.getByRole('option', { name: new RegExp(rule) }).click()
+  }
+  await app.getByRole('combobox').filter({ hasText: 'Square' }).first().click()
+  await app.getByRole('option', { name: 'Hexes, pointy top' }).click()
+  // on a hex grid a token still moves and the ruler still measures
+  await app.mouse.move(cx, cy)
+  await app.mouse.down()
+  await app.mouse.move(cx + 60, cy + 30, { steps: 5 })
+  await app.mouse.up()
+  await app.getByRole('button', { name: 'Ruler' }).click()
+  await app.mouse.move(cx - 120, cy - 60)
+  await app.mouse.down()
+  await app.mouse.move(cx + 20, cy - 10, { steps: 5 })
+  await app.mouse.up()
+  await app.getByRole('button', { name: 'Select' }).click()
+
+  // a tile can be picked up and moved, then locked
+  const chooser = app.waitForEvent('filechooser')
+  await app.getByRole('button', { name: 'Add a tile' }).click()
+  await (await chooser).setFiles({ name: 'crate.png', mimeType: 'image/png', buffer: makePng(120, 120) })
+  await expect(app.getByRole('list', { name: 'Tiles on this scene' })).toContainText('Tile 1')
+  await app.waitForTimeout(600)
+  await app.mouse.move(cx - 150, cy + 100)
+  await app.mouse.down()
+  await app.mouse.up()
+  await app.getByRole('list', { name: 'Tiles on this scene' }).getByRole('button', { name: /Tile 1/ }).click()
+  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Token' }).click()
+  await app.getByRole('button', { name: 'Lock', exact: true }).click()
+  await expect(app.getByRole('button', { name: 'Unlock', exact: true })).toBeVisible()
+  await app.getByRole('button', { name: 'Forward', exact: true }).click()
+  await app.getByRole('button', { name: 'Back', exact: true }).click()
+  await app.getByRole('button', { name: 'Bigger' }).click()
+  await app.getByRole('button', { name: 'Smaller' }).click()
+  await app.getByRole('button', { name: 'Unlock', exact: true }).click()
+  await app.keyboard.press('Delete')
+
+  // a door opens when clicked and a wall goes when erased
+  await app.getByRole('button', { name: 'Draw walls' }).click()
+  await app.getByRole('group', { name: 'Kind of wall' }).getByRole('button', { name: 'Door', exact: true }).click()
+  await app.mouse.click(cx - 100, cy - 100)
+  await app.mouse.dblclick(cx + 100, cy - 100)
+  await app.getByRole('group', { name: 'Kind of wall' }).getByRole('button', { name: 'Window' }).click()
+  await app.mouse.click(cx - 100, cy + 100)
+  await app.mouse.dblclick(cx + 100, cy + 100)
+  await app.getByRole('group', { name: 'Kind of wall' }).getByRole('button', { name: 'Secret door' }).click()
+  await app.mouse.click(cx - 100, cy - 20)
+  await app.mouse.dblclick(cx - 100, cy + 40)
+  await app.getByRole('button', { name: 'Draw walls' }).click()
+  await app.mouse.click(cx, cy - 100)
+  await app.mouse.click(cx, cy - 100)
+  await app.getByRole('button', { name: 'Erase', exact: true }).click()
+  await app.mouse.click(cx - 100, cy + 100)
+  await app.getByRole('button', { name: 'Select' }).click()
+  await app.keyboard.press('f')
+  await app.keyboard.press('Control+a')
+  await app.keyboard.press('r')
+  await app.keyboard.press('h')
+  await app.keyboard.press('l')
+  await app.keyboard.press('ArrowRight')
+  await app.keyboard.press('Escape')
+  expect(errors).toEqual([])
+})
+
+test('a token linked to a creature page gets its sheet card with a roll on every number', { tag: '@feature:table.card' }, async ({ app, makePage }) => {
+  const sheet = {
+    v: 1, ruleset: '5e', name: 'Bandit', size: 'Medium', type: 'humanoid', alignment: 'any non-lawful',
+    abilities: { str: 11, dex: 12, con: 12, int: 10, wis: 10, cha: 10 }, ac: { value: 12, note: 'leather armor' }, hp: { max: 11, formula: '2d8 + 2' },
+    speed: { walk: 30 }, saves: { dex: 3 }, skills: { stealth: 3 }, senses: {}, vulnerabilities: '', resistances: 'cold', immunities: '', conditionImmunities: '', languages: 'Common', cr: 0.125, xp: 25,
+    features: { traits: [], actions: [{ name: 'Scimitar', text: 'Melee Weapon Attack: +3 to hit, reach 5 ft. Hit: 4 (1d6 + 1) slashing damage.', usage: { type: 'recharge', min: 5 } }, { name: 'Light Crossbow', text: 'Ranged Weapon Attack: +3 to hit, range 80/320 ft. DC 12 Dexterity saving throw.', usage: { type: 'perDay', times: 3 } }], bonus: [], reactions: [], legendary: [] },
+  }
+  await makePage('Bandit', { props: { type: 'monster', sheet } })
+  await app.reload()
+  await openTable(app)
+  await makeScene(app, 'Road')
+  await makeToken(app, 'Bandit 1')
+  await app.getByRole('button', { name: 'Link a page' }).click()
+  await app.getByPlaceholder('Find a monster or character…').fill('Bandit')
+  await app.getByPlaceholder('Find a monster or character…').press('Enter')
+  const card = app.locator('.tt-sheet')
+  await expect(card).toContainText('Medium humanoid')
+  await expect(app.getByLabel('Hit points', { exact: true })).toHaveValue('11')
+  await card.getByRole('button', { name: /^Initiative/ }).click()
+  await card.getByRole('group', { name: 'Ability checks' }).getByRole('button').first().click({ modifiers: ['Shift'] })
+  await card.getByRole('button', { name: /^DEX save/ }).click({ modifiers: ['Control'] })
+  await card.getByRole('button', { name: /^Stealth/ }).click()
+  await card.getByText('Scimitar').click()
+  await card.getByRole('button', { name: /^To hit/ }).first().click()
+  await card.getByRole('button', { name: /1d6\+1/ }).click()
+  await app.locator('.tt-panel .seg').getByRole('button', { name: /Chat/ }).click()
+  const chat = app.getByRole('list', { name: 'Chat' })
+  await expect(chat).toContainText('Bandit 1: Initiative')
+  await expect(chat).toContainText('Scimitar, attack')
+  await expect(chat).toContainText('Scimitar, slashing damage')
+  await expect(chat.locator('.tt-rollout')).toHaveCount(6)
+  // conditions toggle on and off
+  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Token' }).click()
+  const prone = app.getByRole('group', { name: 'Conditions' }).getByRole('button', { name: 'Prone' })
+  await prone.click()
+  await expect(prone).toHaveAttribute('aria-pressed', 'true')
+  await prone.click()
+  await expect(prone).toHaveAttribute('aria-pressed', 'false')
+})

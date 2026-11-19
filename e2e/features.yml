@@ -343,6 +343,11 @@ areas:
       - id: library.import
         name: "Add an entry to the world"
         files: [web/src/lib/open5e.ts]
+      - id: library.kinds
+        name: "Open classes, species, backgrounds, feats, items and terms"
+        files: [web/src/lib/open5e.ts, web/src/components/Library.tsx]
+      - id: library.import-kinds
+        name: "Every kind of entry can be added to the world as a page"
       - id: library.entries
         name: "Open every kind of entry"
         files: [web/src/components/LibraryEntry.tsx, web/src/components/LibraryField.tsx]
@@ -400,6 +405,12 @@ areas:
       - id: sheet.character
         name: "A person page gets a character sheet that works out the numbers"
         files: [web/src/components/CharacterSheet.tsx]
+      - id: sheet.character-more
+        name: "A character sheet tracks rests, hit dice, death saves, spell slots, items and coins"
+        files: [web/src/components/CharacterSheet.tsx]
+      - id: sheet.edit-more
+        name: "A creature sheet takes legendary actions, recharges and uses per day"
+        files: [web/src/components/SheetView.tsx]
       - id: sheet.legacy
         name: "An old text stat block is shown as a sheet and stored as one when edited"
         files: [web/src/lib/sheet.ts]
@@ -447,6 +458,12 @@ areas:
       - id: pf2e
         name: "A Pathfinder 2e world: creature sheet and threat rating by level"
         files: [web/src/components/Pf2eSheet.tsx, web/src/tabletop/encounter.ts]
+      - id: table.canvas-more
+        name: "Canvas: hex grids, dragging tiles, doors, erasing walls and the keyboard"
+        files: [web/src/tabletop/engine.ts, web/src/tabletop/grid.ts]
+      - id: table.card
+        name: "A token linked to a creature page gets a sheet card with a roll on every number"
+        files: [web/src/components/TableSheet.tsx, web/src/components/TableParts.tsx]
       - id: table.panel
         name: "The GM edits a token from the panel"
         files: [web/src/components/Tabletop.tsx]
