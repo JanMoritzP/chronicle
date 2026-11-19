@@ -292,3 +292,16 @@ export function rollsIn(text: string): FeatureRolls {
   const save = /DC\s*(\d+)\s*(Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma)\s*saving throw/i.exec(text)
   return { attack: hit ? Number(hit[1].replace('−', '-')) : null, damage, save: save ? { ability: save[2], dc: Number(save[1]) } : null }
 }
+
+/** The same path patch the server applies (`hp.max`, `abilities.str`; null removes), so the screen can follow an edit before it is saved. */
+export function patchSheetLocal(sheet: Sheet, patch: Record<string, unknown>): Sheet {
+  const next: any = structuredClone(sheet)
+  for (const [path, value] of Object.entries(patch)) {
+    const keys = path.split('.')
+    let at = next
+    for (const k of keys.slice(0, -1)) { if (!at[k] || typeof at[k] !== 'object') at[k] = {}; at = at[k] }
+    const last = keys[keys.length - 1]
+    if (value === null) delete at[last]; else at[last] = value
+  }
+  return next
+}

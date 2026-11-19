@@ -1,10 +1,12 @@
 import { ImagePlus, X } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { StatBlockBody, StatBlockEditor } from '../editor/StatBlock'
 import { findTemplate, TEMPLATES } from '../editor/templates'
 import { useTemplates } from '../editor/useTemplates'
 import type { Block, Layout } from '../lib/pageTypes'
+import type { Sheet } from '../lib/sheet'
 import { LibraryField, refsOf } from './LibraryField'
+import { SheetView, type SheetPatch } from './SheetView'
 
 export type TypeData = Record<string, any>
 
@@ -15,6 +17,8 @@ interface Props {
   setValue: (key: string, value: any) => void
   pickImage: () => Promise<string | null>
   body: ReactNode
+  /** The page's structured sheet; creature stat blocks draw and edit it instead of the old text form. */
+  sheet?: { value: Sheet | null; set: (patch: SheetPatch) => void }
 }
 
 function ImageBlock({ b, value, readOnly, set, pick }: { b: Extract<Block, { type: 'image' }>; value?: string; readOnly: boolean; set: (v: string | null) => void; pick: () => Promise<string | null> }) {
@@ -40,10 +44,19 @@ function ImageBlock({ b, value, readOnly, set, pick }: { b: Extract<Block, { typ
   )
 }
 
-function StatBlockSlot({ b, value, readOnly, set }: { b: Extract<Block, { type: 'statblock' }>; value?: { template?: string; data?: Record<string, string> }; readOnly: boolean; set: (v: any) => void }) {
+function StatBlockSlot({ b, value, readOnly, set, sheet }: { b: Extract<Block, { type: 'statblock' }>; value?: { template?: string; data?: Record<string, string> }; readOnly: boolean; set: (v: any) => void; sheet?: Props['sheet'] }) {
   const all = useTemplates()
+  const [textForm, setTextForm] = useState(false)
   const template = findTemplate(all, value?.template ?? b.template) ?? TEMPLATES[0]
   const data = value?.data ?? {}
+  if (sheet?.value && template.id.startsWith('5e-monster') && !textForm) {
+    return (
+      <div className="tl-statblock">
+        <SheetView sheet={sheet.value} set={readOnly ? undefined : sheet.set} />
+        {!readOnly && <div className="sb-toolbar"><button className="btn sm" title="Edit the old text form. The sheet is rebuilt from it." onClick={() => setTextForm(true)}>Edit as text form</button></div>}
+      </div>
+    )
+  }
   return (
     <div className="tl-statblock">
       {readOnly
@@ -76,14 +89,14 @@ function FieldsBlock({ b, data, readOnly, set }: { b: Extract<Block, { type: 'fi
   )
 }
 
-export function TypeLayout({ layout, data, readOnly, setValue, pickImage, body }: Props) {
+export function TypeLayout({ layout, data, readOnly, setValue, pickImage, body, sheet }: Props) {
   const render = (blocks: Block[], zone: string) =>
     blocks.map((b, i) => {
       const k = `${zone}-${i}`
       switch (b.type) {
         case 'body': return <div key={k} className="editor">{body}</div>
         case 'image': return <ImageBlock key={k} b={b} value={data[b.key]} readOnly={readOnly} set={(v) => setValue(b.key, v)} pick={pickImage} />
-        case 'statblock': return <StatBlockSlot key={k} b={b} value={data[b.key]} readOnly={readOnly} set={(v) => setValue(b.key, v)} />
+        case 'statblock': return <StatBlockSlot key={k} b={b} value={data[b.key]} readOnly={readOnly} set={(v) => setValue(b.key, v)} sheet={sheet} />
         case 'fields': return <FieldsBlock key={k} b={b} data={data} readOnly={readOnly} set={setValue} />
       }
     })

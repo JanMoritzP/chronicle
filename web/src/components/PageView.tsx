@@ -18,6 +18,8 @@ import { alertDialog, askText, confirmDialog } from '../lib/dialog'
 import { typeOf } from '../lib/pageTypes'
 import { TypeIcon, useTypes } from './TypeIcon'
 import { TypeLayout } from './TypeLayout'
+import type { SheetPatch } from './SheetView'
+import { patchSheetLocal, sheetOf, wholeSheetPatch } from '../lib/sheet'
 import { Select } from './Select'
 import type { FullPage, PageVersion } from '../types'
 import { ReadOnlyDoc } from '../editor/Embed'
@@ -258,6 +260,13 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
     setProps(next)
     schedule({ propsPatch: key === 'portrait' ? { portrait: value || null } : { data: { [key]: value == null || value === '' ? null : value } } }, 500)
   }
+  /** Edits the creature sheet. The first edit of an old stat block stores the whole converted sheet. */
+  const setSheetFields = (patch: SheetPatch) => {
+    const base = sheetOf(props)
+    if (!base) return
+    setProps({ ...props, sheet: patchSheetLocal(base, patch) })
+    schedule({ propsPatch: { sheet: props.sheet ? patch : { ...wholeSheetPatch(base), ...patch } } }, 500)
+  }
   const pickImage = () => new Promise<string | null>((resolve) => {
     const el = document.createElement('input')
     el.type = 'file'
@@ -382,7 +391,7 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
           {meta && <span style={{ marginLeft: 'auto' }}>{words} words · edited {ago(meta.updatedAt)}</span>}
         </div>
         {pageType ? (
-          <TypeLayout layout={pageType.layout} data={typeData} readOnly={readOnly} setValue={setTypeValue} pickImage={pickImage}
+          <TypeLayout layout={pageType.layout} data={typeData} readOnly={readOnly} setValue={setTypeValue} pickImage={pickImage} sheet={{ value: sheetOf(props), set: setSheetFields }}
             body={<EditorContent editor={editor} />} />
         ) : (
           <div className="editor"><EditorContent editor={editor} /></div>

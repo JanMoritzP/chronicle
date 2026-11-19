@@ -391,6 +391,16 @@ areas:
         name: "A failing request shows a plain message"
         files: [web/src/lib/dialog.ts]
 
+  - id: sheet
+    name: Creature sheet
+    features:
+      - id: sheet.edit
+        name: "A monster page edits its numbers in place and keeps them"
+        files: [web/src/components/SheetView.tsx]
+      - id: sheet.legacy
+        name: "An old text stat block is shown as a sheet and stored as one when edited"
+        files: [web/src/lib/sheet.ts]
+
   - id: table
     name: Tabletop
     features:

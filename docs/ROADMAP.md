@@ -190,6 +190,16 @@ What it does: new kinds of block for page layout, inserted from the slash menu o
 - Rides in the bootstrap (and the IndexedDB cache) and in `world.json` / backup restore. Copying between worlds does not carry custom page types: their pages become plain pages, while stat block forms are matched by name.
 - API: `POST /api/workspaces/:ws/page-types`, `PATCH|DELETE /api/page-types/:id` (editors and owners; viewers read only). Tests: `scripts/smoke-pagetypes.mjs` (11 checks), `scripts/test-layout.ts` (parse/serialize round trip, key handling; 16 checks).
 
+## Creature sheet (built)
+
+What it does: a Monster page shows and edits its creature as a real sheet instead of a text form. Numbers are numbers (armor class, hit points, speeds, abilities, saves, skills, senses, challenge rating), modifiers, passive Perception and proficiency bonus are worked out and never typed twice, and traits, actions, bonus actions, reactions and legendary actions are separate entries with their own recharge, uses per day or cost.
+
+- **Data.** `props.sheet`, described in `web/src/lib/sheet.ts` and validated by `server/src/sheet.ts`. Edits go through `propsPatch.sheet` (field paths such as `hp.max`), so two people editing different fields do not overwrite each other. Library imports of creatures write the sheet.
+- **Old pages.** A Monster page with only the old text stat block (`props.data.main`) is converted for display and stored as a sheet on its first edit. "Edit as text form" under the sheet switches back to the old form; changing the old form drops the stored sheet, so the two never disagree.
+- **Where.** The Monster page (`web/src/components/SheetView.tsx`, used by `TypeLayout`), and in the tabletop panel as a card with roll buttons. Read-only viewers see the printed stat block with library terms linked. The Library view and hover previews still draw the older stat block.
+- **Not done yet.** Characters on the sheet (levels, classes, spell slots, inventory), the same sheet in hover previews and the Library view, custom stat block forms.
+- **Tests.** `scripts/test-sheet.ts`, `scripts/smoke-sheet.mjs`, `e2e/tests/content.spec.ts` (creature sheet).
+
 ## Library (Open5e, built)
 
 A read-only reference library of everything Open5e publishes (api.open5e.com/v2): creatures, magic items, equipment (weapons and armor are part of it), spells, classes and subclasses, species, backgrounds, feats and conditions. It belongs to the server, not to a world, and is opened at any time from the sidebar ("Library") or the command list.
