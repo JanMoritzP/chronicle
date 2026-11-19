@@ -22,21 +22,6 @@ The admin dashboard is on `http://localhost:3001`. Set `ADMIN_PANEL_PASSWORD` fo
 - `docker compose down` (without `-v`) is safe: it stops the container but keeps the volume, and it is not needed for an update. Never use `docker compose down -v` or delete the volume without a backup: that deletes the world.
 - If the app suddenly shows no data, the database is probably not gone: run `docker volume ls`. The volume name includes the folder you run compose from, so a differently named folder starts a fresh, empty volume while the old one keeps the data.
 
-### Auto-deploy with a GitHub runner
-
-Every release (a `feat:` or `fix:` commit pushed to `main`) can rebuild the server on the machine that hosts it. `.github/workflows/deploy-server.yml` runs on a self-hosted runner there and does `docker compose up -d --build --wait`. A failed health check fails the run.
-
-One-time setup on the server (needs Docker and Git):
-
-1. GitHub repo → Settings → Actions → Runners → New self-hosted runner. Follow the commands for your system and, when asked for labels, add `chronicle-server`.
-2. Install it as a service (`./svc.sh install && ./svc.sh start` on Linux, `config.cmd` offers it on Windows) so it survives reboots. The runner's user must be allowed to run `docker`.
-3. Check the volume name with `docker volume ls`. If it is not `chronicle_chronicle-data`, set a repo variable `COMPOSE_PROJECT_NAME` (Settings → Secrets and variables → Actions → Variables) to the part before `_chronicle-data`. Otherwise the deploy starts a fresh, empty volume.
-4. Stop and remove the container you started by hand (`docker compose down`, without `-v`), or it keeps port 3000.
-
-The runner deploys the `docker-compose.yml` from the repo, so the admin passwords and ports in it apply. Passwords are only read on the very first start.
-
-The repo is public: never use this runner in a workflow triggered by `pull_request`, and keep "Require approval for all outside collaborators" on under Settings → Actions → General. Run it by hand from the Actions tab (Deploy server → Run workflow) to redeploy a tag.
-
 ## 2. Umbrel (community app store)
 
 This repo contains a ready store in `umbrel/`. Umbrel pulls a prebuilt image, so the image has to exist first.

@@ -5,8 +5,7 @@ name: Release
 # files and both lockfiles, prepends a CHANGELOG.md section written from the
 # commit subjects, commits that, and tags it vX.Y.Z. This workflow then pushes
 # the commit and the tag, then starts release-desktop.yml for that tag, which
-# builds on Windows and publishes the GitHub release, and deploy-server.yml, which
-# rebuilds the server on the self-hosted runner. (The tag push itself does
+# builds on Windows and publishes the GitHub release. (The tag push itself does
 # not start it: GitHub does not run workflows for pushes made with GITHUB_TOKEN,
 # so the build is started explicitly.) A push without feat:/fix: commits does
 # nothing.
@@ -44,8 +43,3 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh workflow run release-desktop.yml --ref "${{ steps.release.outputs.tag }}"
-      - name: Start the server deploy
-        if: steps.release.outputs.tag != ''
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh workflow run deploy-server.yml --ref "${{ steps.release.outputs.tag }}"
