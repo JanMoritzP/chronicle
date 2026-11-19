@@ -20,8 +20,28 @@ export type Usage =
 
 export type ActionCost = 'one' | 'two' | 'three' | 'reaction' | 'free'
 /** What only a Pathfinder 2e creature has. Ability scores do not exist there: `mods` holds the modifiers themselves. */
+/** Proficiency rank: 0 untrained, 1 trained, 2 expert, 3 master, 4 legendary. */
+export type Rank = 0 | 1 | 2 | 3 | 4
+export interface Pf2eStrike { name: string; ability: 'str' | 'dex'; rank: Rank; item: number; damage: string; agile: boolean; note: string }
+/** What only a Pathfinder 2e player character has. Its numbers are worked out from level, ranks and modifiers by `pfDerived`. */
+export interface Pf2eChar {
+  ancestry: string; heritage: string; background: string; className: string
+  keyAbility: Ability | ''
+  ranks: { perception: Rank; fort: Rank; ref: Rank; will: Rank; classDc: Rank; spell: Rank; armor: Rank; skills: Record<string, Rank> }
+  lores: { name: string; rank: Rank }[]
+  armor: { name: string; bonus: number; dexCap: number | null }
+  acExtra: number
+  strikes: Pf2eStrike[]
+  heroPoints: number
+  dying: number
+  wounded: number
+  focus: { max: number; current: number }
+  tradition: string
+  spellAbility: Ability | ''
+}
 export interface Pf2ePart {
   level: number
+  char?: Pf2eChar
   perception: number
   fort: number
   ref: number
@@ -189,6 +209,64 @@ export const initiativeBonus = (s: Sheet) => s.initiative ?? (s.ruleset === 'pf2
 export const multipleAttack = (bonus: number, agile = false) => [bonus, bonus - (agile ? 4 : 5), bonus - (agile ? 8 : 10)]
 
 export const pf2eMod = (s: Sheet, a: Ability) => s.pf2e?.mods[a] ?? 0
+
+// ---------- Pathfinder 2e characters ----------
+
+export const RANK_NAMES = ['Untrained', 'Trained', 'Expert', 'Master', 'Legendary'] as const
+export const PF_SKILLS: Record<string, Ability> = {
+  acrobatics: 'dex', arcana: 'int', athletics: 'str', crafting: 'int', deception: 'cha', diplomacy: 'cha', intimidation: 'cha', medicine: 'wis',
+  nature: 'wis', occultism: 'int', performance: 'cha', religion: 'wis', society: 'int', stealth: 'dex', survival: 'wis', thievery: 'dex',
+}
+
+/** Level plus two per rank, nothing at all when untrained. */
+export const rankBonus = (level: number, rank: number) => (rank > 0 ? level + 2 * rank : 0)
+
+const pfc = (s: Sheet) => s.pf2e?.char
+const lvl = (s: Sheet) => s.pf2e?.level ?? 1
+export const pfPerception = (s: Sheet) => pf2eMod(s, 'wis') + rankBonus(lvl(s), pfc(s)?.ranks.perception ?? 0)
+export const pfSave = (s: Sheet, k: 'fort' | 'ref' | 'will') => pf2eMod(s, k === 'fort' ? 'con' : k === 'ref' ? 'dex' : 'wis') + rankBonus(lvl(s), pfc(s)?.ranks[k] ?? 0)
+export const pfSkill = (s: Sheet, skill: string) => pf2eMod(s, PF_SKILLS[skill] ?? 'int') + rankBonus(lvl(s), pfc(s)?.ranks.skills[skill] ?? 0)
+export const pfLore = (s: Sheet, rank: number) => pf2eMod(s, 'int') + rankBonus(lvl(s), rank)
+/** 10, plus Dexterity up to what the armor allows, plus the armor's bonus, plus armor proficiency, plus anything else that applies. */
+export function pfAc(s: Sheet) {
+  const c = pfc(s)
+  if (!c) return s.ac.value
+  const dex = c.armor.dexCap == null ? pf2eMod(s, 'dex') : Math.min(pf2eMod(s, 'dex'), c.armor.dexCap)
+  return 10 + dex + c.armor.bonus + rankBonus(lvl(s), c.ranks.armor) + c.acExtra
+}
+export const pfStrike = (s: Sheet, st: Pf2eStrike) => pf2eMod(s, st.ability) + rankBonus(lvl(s), st.rank) + st.item
+export const pfClassDc = (s: Sheet) => { const c = pfc(s); return c && c.keyAbility ? 10 + pf2eMod(s, c.keyAbility) + rankBonus(lvl(s), c.ranks.classDc) : null }
+export const pfSpellAttack = (s: Sheet) => { const c = pfc(s); return c && c.spellAbility ? pf2eMod(s, c.spellAbility) + rankBonus(lvl(s), c.ranks.spell) : null }
+export const pfSpellDc = (s: Sheet) => { const a = pfSpellAttack(s); return a == null ? null : 10 + a }
+
+/**
+ * The numbers other parts of the app read from a character (initiative, armor class on a token, the roll card) written back to the sheet,
+ * so they never disagree with the ranks. Added to every edit of a Pathfinder character.
+ */
+export function pfDerived(s: Sheet): Record<string, unknown> {
+  return { 'pf2e.perception': pfPerception(s), 'pf2e.fort': pfSave(s, 'fort'), 'pf2e.ref': pfSave(s, 'ref'), 'pf2e.will': pfSave(s, 'will'), 'ac.value': pfAc(s) }
+}
+
+/** Eight hours of rest: Constitution modifier times level hit points (at least the level), spells back, focus points back to the number of sources. */
+export function pfRestPatch(s: Sheet): Record<string, unknown> {
+  const heal = Math.max(1, pf2eMod(s, 'con')) * lvl(s)
+  const patch: Record<string, unknown> = { 'hp.current': Math.min(s.hp.max, (s.hp.current ?? s.hp.max) + heal) }
+  if (s.spellcasting) patch['spellcasting.slots'] = s.spellcasting.slots.map((x) => ({ ...x, used: 0 }))
+  return patch
+}
+
+export const emptyPf2eCharacter = (): Sheet => ({
+  ...emptyPf2eCreature(), kind: 'character', hp: { max: 10, formula: '', current: 10, temp: 0 }, speed: { walk: 25 },
+  inventory: [], currency: { cp: 0, sp: 0, ep: 0, gp: 15, pp: 0 }, xp: 0, spells: '', spellcasting: { ability: '', slots: [] },
+  pf2e: {
+    level: 1, perception: 0, fort: 0, ref: 0, will: 0, mods: { str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 }, traits: [], rarity: 'common',
+    char: {
+      ancestry: '', heritage: '', background: '', className: '', keyAbility: '',
+      ranks: { perception: 1, fort: 1, ref: 1, will: 1, classDc: 1, spell: 0, armor: 0, skills: {} }, lores: [],
+      armor: { name: '', bonus: 0, dexCap: null }, acExtra: 0, strikes: [], heroPoints: 1, dying: 0, wounded: 0, focus: { max: 0, current: 0 }, tradition: '', spellAbility: '',
+    },
+  },
+})
 
 export const emptyPf2eCreature = (): Sheet => ({
   ...emptySheet('pf2e'),

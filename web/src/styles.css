@@ -920,3 +920,16 @@ button.cs-roll:disabled { cursor: default; }
 .pf-trait { background: var(--sb-accent, var(--accent)); color: var(--accent-fg); font-size: .75em; font-weight: 700; text-transform: uppercase; padding: 1px 7px; border-radius: 3px; letter-spacing: .03em; }
 .pf-trait.rarity { background: var(--danger); }
 .pf-glyph { font-family: sans-serif; }
+
+/* ---------- Pathfinder 2e character ---------- */
+.pc-rank { width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--border); background: var(--bg); color: var(--muted); font-size: 11px; font-weight: 700; padding: 0; cursor: pointer; flex: none; }
+.pc-rank.r1 { background: var(--accent-soft); color: var(--text); }
+.pc-rank.r2 { background: #7fb3d5; color: #10202c; }
+.pc-rank.r3 { background: #af7ac5; color: #1d1026; }
+.pc-rank.r4 { background: #f5b041; color: #2a1c05; }
+.pc-rank:disabled { cursor: default; }
+.cs-big { font-size: 1.6rem; font-weight: 600; }
+.cs-skill-roll { display: flex; flex: 1; align-items: center; gap: 6px; border: 0; background: transparent; color: inherit; font: inherit; font-size: 12px; cursor: pointer; padding: 2px 4px; border-radius: 6px; text-align: left; }
+.cs-skill-roll:hover:not(:disabled) { background: var(--bg-hover); }
+.cs-skill-roll:disabled { cursor: default; }
+.pc-strike { margin: 4px 0; }

@@ -441,6 +441,9 @@ areas:
       - id: mobile.table
         name: "On a phone: bottom bar, chat sheet and a strip with your hit points"
         files: [web/src/components/Tabletop.tsx]
+      - id: pf2e.character
+        name: "A Pathfinder 2e character works out its numbers from level and ranks"
+        files: [web/src/components/Pf2eCharacterSheet.tsx]
       - id: pf2e
         name: "A Pathfinder 2e world: creature sheet and threat rating by level"
         files: [web/src/components/Pf2eSheet.tsx, web/src/tabletop/encounter.ts]

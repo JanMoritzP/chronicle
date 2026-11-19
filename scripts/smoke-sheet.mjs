@@ -84,6 +84,21 @@ check('a creature level above 30 is refused', r.status === 400)
 r = await call('PATCH', `/api/pages/${pfId}`, { propsPatch: { sheet: { 'features.actions': [{ name: 'x', text: '', actions: 'seven' }] } } })
 check('an unknown action cost is refused', r.status === 400)
 
+// Pathfinder 2e characters
+const pcSheet = () => ({ ...pf2eSheet(), kind: 'character', hp: { max: 60, formula: '', current: 60, temp: 0 }, inventory: [], currency: { cp: 0, sp: 0, ep: 0, gp: 15, pp: 0 }, spellcasting: { ability: '', slots: [{ total: 3, used: 0 }, { total: 2, used: 0 }, { total: 0, used: 0 }, { total: 0, used: 0 }, { total: 0, used: 0 }, { total: 0, used: 0 }, { total: 0, used: 0 }, { total: 0, used: 0 }, { total: 0, used: 0 }, { total: 1, used: 0 }] }, pf2e: { ...pf2eSheet().pf2e, char: { ancestry: 'Human', heritage: 'Versatile', background: 'Warrior', className: 'Fighter', keyAbility: 'str', ranks: { perception: 2, fort: 2, ref: 1, will: 2, classDc: 1, spell: 0, armor: 1, skills: { athletics: 3 } }, lores: [{ name: 'Warfare', rank: 1 }], armor: { name: 'Breastplate', bonus: 4, dexCap: 1 }, acExtra: 0, strikes: [{ name: 'Longsword', ability: 'str', rank: 2, item: 1, damage: '1d8+4 slashing', agile: false, note: '' }], heroPoints: 1, dying: 0, wounded: 0, focus: { max: 1, current: 1 }, tradition: '', spellAbility: '' } } })
+r = await call('POST', `/api/workspaces/${ws}/pages`, { title: 'Valeros', props: { type: 'person', sheet: pcSheet() } })
+check('a Pathfinder character sheet is stored', r.status === 200)
+const pcId = r.data.id
+r = await call('GET', `/api/pages/${pcId}`)
+check('with ranks, armor, strikes and ten spell ranks', r.data.props.sheet.pf2e.char.ranks.skills.athletics === 3 && r.data.props.sheet.pf2e.char.armor.bonus === 4 && r.data.props.sheet.pf2e.char.strikes[0].damage === '1d8+4 slashing' && r.data.props.sheet.spellcasting.slots.length === 10)
+r = await call('PATCH', `/api/pages/${pcId}`, { propsPatch: { sheet: { 'pf2e.char': { ...pcSheet().pf2e.char, heroPoints: 2 }, 'pf2e.perception': 13 } } })
+r = await call('GET', `/api/pages/${pcId}`)
+check('the character part and the derived numbers are patched together', r.data.props.sheet.pf2e.char.heroPoints === 2 && r.data.props.sheet.pf2e.perception === 13)
+r = await call('PATCH', `/api/pages/${pcId}`, { propsPatch: { sheet: { 'pf2e.char': { ...pcSheet().pf2e.char, ranks: { ...pcSheet().pf2e.char.ranks, will: 7 } } } } })
+check('a proficiency rank above legendary is refused', r.status === 400)
+r = await call('PATCH', `/api/pages/${pcId}`, { propsPatch: { sheet: { 'pf2e.char': { ...pcSheet().pf2e.char, heroPoints: 9 } } } })
+check('more than three hero points is refused', r.status === 400)
+
 // characters
 const hero = () => ({ ...sheet(), kind: 'character', name: 'Aria', player: 'Sam', species: 'Elf', background: 'Sage', classes: [{ name: 'Wizard', level: 5, subclass: 'Evoker' }], profs: { saves: ['int', 'wis'], skills: { arcana: 'e' }, tools: 'Calligrapher' }, hitDice: [{ sides: 6, total: 5, used: 1 }], deathSaves: { ok: 0, fail: 0 }, spellcasting: { ability: 'int', slots: [{ total: 4, used: 1 }] }, spells: 'Fire Bolt', inventory: [{ name: 'Quarterstaff', qty: 1, equipped: true, note: '' }], currency: { cp: 0, sp: 0, ep: 0, gp: 25, pp: 0 }, inspiration: false })
 r = await call('POST', `/api/workspaces/${ws}/pages`, { title: 'Aria', props: { type: 'person', sheet: hero() } })

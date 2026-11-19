@@ -13,18 +13,18 @@ import { Select } from './Select'
 const ABILITY_NAME: Record<Ability, string> = { str: 'Strength', dex: 'Dexterity', con: 'Constitution', int: 'Intelligence', wis: 'Wisdom', cha: 'Charisma' }
 const title = (s: string) => s.replace(/\b\w/g, (c) => c.toUpperCase())
 
-function Num({ value, onChange, label, min = 0, max, width = 56, placeholder }: { value: number | undefined; onChange: (n: number) => void; label: string; min?: number; max?: number; width?: number; placeholder?: string }) {
+export function Num({ value, onChange, label, min = 0, max, width = 56, placeholder }: { value: number | undefined; onChange: (n: number) => void; label: string; min?: number; max?: number; width?: number; placeholder?: string }) {
   return (
     <input type="number" className="sv-num" aria-label={label} min={min} max={max} placeholder={placeholder} style={{ width }} value={value ?? ''}
       onChange={(e) => { if (e.target.value === '') return; const n = Math.round(Number(e.target.value)); if (Number.isFinite(n)) onChange(n) }} />
   )
 }
-function Txt({ value, onChange, label, placeholder }: { value: string; onChange: (v: string) => void; label: string; placeholder?: string }) {
+export function Txt({ value, onChange, label, placeholder }: { value: string; onChange: (v: string) => void; label: string; placeholder?: string }) {
   return <input className="sv-text" aria-label={label} placeholder={placeholder} value={value} onChange={(e) => onChange(e.target.value)} />
 }
 
 /** A row of small circles: the first `used` are filled. Clicking one sets how many are used. */
-function Bubbles({ total, used, onChange, label }: { total: number; used: number; onChange: (n: number) => void; label: string }) {
+export function Bubbles({ total, used, onChange, label }: { total: number; used: number; onChange: (n: number) => void; label: string }) {
   return (
     <span className="cs-bubbles" role="group" aria-label={label}>
       {Array.from({ length: total }, (_, i) => (

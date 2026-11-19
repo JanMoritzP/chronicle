@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
-import { ABILITIES, FEATURE_GROUPS, multipleAttack, SKILLS, abilityMod, crText, initiativeBonus, isCharacter, passivePerception, rollsIn, saveBonus, sheetOf, signed, skillBonus, speedText, type Sheet } from '../lib/sheet'
+import { ABILITIES, FEATURE_GROUPS, PF_SKILLS, multipleAttack, pfLore, pfPerception, pfSave, pfSkill, pfStrike, SKILLS, abilityMod, crText, initiativeBonus, isCharacter, passivePerception, rollsIn, saveBonus, sheetOf, signed, skillBonus, speedText, type Sheet } from '../lib/sheet'
 
 // The sheet of a creature as a table card: every number that can be rolled is a button.
 // Click rolls it, Shift-click with advantage, Ctrl-click with disadvantage. The roll goes to the table chat.
@@ -52,12 +52,26 @@ function Pf2eCard({ sheet, roll }: { sheet: Sheet; roll: RollFn }) {
         <button className="tt-roll" title="Roll initiative with Perception" onClick={() => check(initiativeBonus(sheet), 'Initiative')}>Initiative {signed(initiativeBonus(sheet))}</button>
       </div>
       <div className="tt-chips" role="group" aria-label="Checks and saves">
-        <button className="tt-roll prof" onClick={() => check(p.perception, 'Perception')}>Perception {signed(p.perception)}</button>
+        <button className="tt-roll prof" onClick={() => check(p.char ? pfPerception(sheet) : p.perception, 'Perception')}>Perception {signed(p.char ? pfPerception(sheet) : p.perception)}</button>
         <button className="tt-roll prof" onClick={() => check(p.fort, 'Fortitude save')}>Fort {signed(p.fort)}</button>
         <button className="tt-roll prof" onClick={() => check(p.ref, 'Reflex save')}>Ref {signed(p.ref)}</button>
         <button className="tt-roll prof" onClick={() => check(p.will, 'Will save')}>Will {signed(p.will)}</button>
-        {Object.entries(sheet.skills).map(([k, v]) => <button key={k} className="tt-roll" onClick={() => check(v, `${title(k)} check`)}>{title(k)} {signed(v)}</button>)}
+        {p.char
+          ? [...Object.keys(PF_SKILLS).map((k): [string, number, boolean] => [title(k), pfSkill(sheet, k), !!p.char!.ranks.skills[k]]), ...p.char.lores.map((l): [string, number, boolean] => [`${l.name || 'Lore'} Lore`, pfLore(sheet, l.rank), l.rank > 0])]
+            .map(([name, v, trained]) => <button key={name} className={`tt-roll${trained ? ' prof' : ''}`} onClick={() => check(v, name + ' check')}>{name} {signed(v)}</button>)
+          : Object.entries(sheet.skills).map(([k, v]) => <button key={k} className="tt-roll" onClick={() => check(v, `${title(k)} check`)}>{title(k)} {signed(v)}</button>)}
       </div>
+      {p.char && p.char.strikes.length > 0 && (
+        <div className="tt-features"><h4>Strikes</h4>
+          {p.char.strikes.map((s, i) => (
+            <div key={i} className="tt-chips" role="group" aria-label={s.name + ' attacks'}>
+              <b>{s.name}</b>
+              {multipleAttack(pfStrike(sheet, s), s.agile).map((n, j) => <button key={j} className="tt-roll" onClick={() => check(n, s.name + ', attack' + (j ? ' ' + (j + 1) : ''))}>{signed(n)}</button>)}
+              {diceOf(s.damage) && <button className="tt-roll" onClick={() => roll(diceOf(s.damage)!, s.name + ', damage')}>{s.damage}</button>}
+            </div>
+          ))}
+        </div>
+      )}
       {(['traits', 'actions', 'reactions'] as const).map((g) => sheet.features[g].length > 0 && (
         <div key={g} className="tt-features">
           <h4>{g === 'traits' ? 'Abilities' : g === 'actions' ? 'Actions and strikes' : 'Reactions'}</h4>

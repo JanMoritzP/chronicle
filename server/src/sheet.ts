@@ -32,13 +32,26 @@ const character = {
   profs: z.object({ saves: z.array(abilityKey).max(6), skills: z.record(text(40), z.enum(['p', 'e'])).refine((r) => Object.keys(r).length <= 30), tools: text(300).optional() }).optional(),
   hitDice: z.array(z.object({ sides: int(2, 100), total: count(40), used: count(40) })).max(6).optional(),
   deathSaves: z.object({ ok: int(0, 3), fail: int(0, 3) }).optional(),
-  spellcasting: z.object({ ability: z.union([abilityKey, z.literal('')]), slots: z.array(z.object({ total: count(20), used: count(20) })).max(9) }).optional(),
+  spellcasting: z.object({ ability: z.union([abilityKey, z.literal('')]), slots: z.array(z.object({ total: count(20), used: count(20) })).max(10) }).optional(),
   spells: text(8000).optional(),
   inventory: z.array(z.object({ name: text(120), qty: count(99999), equipped: z.boolean(), note: text(300) })).max(200).optional(),
   currency: z.object({ cp: count(10_000_000), sp: count(10_000_000), ep: count(10_000_000), gp: count(10_000_000), pp: count(10_000_000) }).optional(),
 }
 
+const rank = int(0, 4)
+const pf2eChar = z.object({
+  ancestry: text(80), heritage: text(80), background: text(80), className: text(80), keyAbility: z.union([abilityKey, z.literal('')]),
+  ranks: z.object({ perception: rank, fort: rank, ref: rank, will: rank, classDc: rank, spell: rank, armor: rank, skills: z.record(text(40), rank).refine((r) => Object.keys(r).length <= 30) }),
+  lores: z.array(z.object({ name: text(60), rank })).max(20),
+  armor: z.object({ name: text(80), bonus: int(0, 20), dexCap: int(0, 10).nullable() }),
+  acExtra: int(-10, 20),
+  strikes: z.array(z.object({ name: text(80), ability: z.enum(['str', 'dex']), rank, item: int(0, 10), damage: text(100), agile: z.boolean(), note: text(300) })).max(30),
+  heroPoints: int(0, 3), dying: int(0, 4), wounded: int(0, 4),
+  focus: z.object({ max: int(0, 3), current: int(0, 3) }),
+  tradition: text(30), spellAbility: z.union([abilityKey, z.literal('')]),
+})
 const pf2e = z.object({
+  char: pf2eChar.optional(),
   level: int(-1, 30), perception: int(-10, 80), fort: int(-10, 80), ref: int(-10, 80), will: int(-10, 80),
   mods: z.object({ str: int(-10, 20), dex: int(-10, 20), con: int(-10, 20), int: int(-10, 20), wis: int(-10, 20), cha: int(-10, 20) }),
   traits: z.array(text(40)).max(30), rarity: text(20),

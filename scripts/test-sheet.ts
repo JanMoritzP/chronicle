@@ -1,5 +1,5 @@
 import { creatureToStatBlock, importPlan } from '../web/src/lib/open5e'
-import { emptyPf2eCreature, multipleAttack, emptyCharacter, longRestPatch, proficiency, skillBonus, spellAttack, spellDC, characterLevel, isCharacter, rollsIn, abilityMod, sheetOf, wholeSheetPatch, crFromText, crText, initiativeBonus, passivePerception, profBonus, saveBonus, sheetFromCreature, sheetFromLegacy, speedText } from '../web/src/lib/sheet'
+import { emptyPf2eCharacter, pfAc, pfClassDc, pfDerived, pfPerception, pfRestPatch, pfSave, pfSkill, pfSpellAttack, pfSpellDc, pfStrike, rankBonus, emptyPf2eCreature, multipleAttack, emptyCharacter, longRestPatch, proficiency, skillBonus, spellAttack, spellDC, characterLevel, isCharacter, rollsIn, abilityMod, sheetOf, wholeSheetPatch, crFromText, crText, initiativeBonus, passivePerception, profBonus, saveBonus, sheetFromCreature, sheetFromLegacy, speedText } from '../web/src/lib/sheet'
 import type { LibraryEntry } from '../web/src/types'
 
 let failed = 0
@@ -87,6 +87,29 @@ const pf = emptyPf2eCreature()
 pf.pf2e!.perception = 9
 check('a Pathfinder 2e creature rolls initiative with Perception', initiativeBonus(pf) === 9 && pf.ruleset === 'pf2e' && initiativeBonus({ ...pf, initiative: 3 }) === 3)
 check('multiple attack penalty: -5 and -10, agile -4 and -8', JSON.stringify(multipleAttack(15)) === '[15,10,5]' && JSON.stringify(multipleAttack(15, true)) === '[15,11,7]')
+
+const pc = emptyPf2eCharacter()
+pc.pf2e!.level = 5
+pc.pf2e!.mods = { str: 4, dex: 2, con: 1, int: 0, wis: 3, cha: 1 }
+const cc = pc.pf2e!.char!
+cc.keyAbility = 'str'
+cc.ranks = { perception: 2, fort: 2, ref: 1, will: 2, classDc: 1, spell: 1, armor: 1, skills: { athletics: 3, stealth: 1 } }
+cc.armor = { name: 'Breastplate', bonus: 4, dexCap: 1 }
+cc.acExtra = 1
+cc.strikes = [{ name: 'Longsword', ability: 'str', rank: 2, item: 1, damage: '1d8+4 slashing', agile: false, note: '' }]
+cc.spellAbility = 'wis'
+check('proficiency is level plus two per rank, nothing untrained', rankBonus(5, 0) === 0 && rankBonus(5, 1) === 7 && rankBonus(5, 2) === 9 && rankBonus(5, 4) === 13)
+check('Perception and saves from modifiers and ranks', pfPerception(pc) === 12 && pfSave(pc, 'fort') === 10 && pfSave(pc, 'ref') === 9 && pfSave(pc, 'will') === 12)
+check('skills: master Athletics, trained Stealth, untrained Arcana', pfSkill(pc, 'athletics') === 15 && pfSkill(pc, 'stealth') === 9 && pfSkill(pc, 'arcana') === 0)
+check('armor class caps Dexterity at what the armor allows', pfAc(pc) === 10 + 1 + 4 + 7 + 1)
+check('a strike adds the ability, the rank and the item', pfStrike(pc, cc.strikes[0]) === 4 + 9 + 1)
+check('class DC and spell numbers', pfClassDc(pc) === 10 + 4 + 7 && pfSpellAttack(pc) === 3 + 7 && pfSpellDc(pc) === 20 && pfClassDc(emptyPf2eCharacter()) === null)
+const dv = pfDerived(pc) as any
+check('the numbers other parts read are written back', dv['pf2e.perception'] === 12 && dv['pf2e.will'] === 12 && dv['ac.value'] === 23)
+pc.hp = { max: 60, formula: '', current: 10, temp: 0 }
+pc.spellcasting = { ability: '', slots: [{ total: 3, used: 3 }] }
+const prest = pfRestPatch(pc) as any
+check('a night of rest heals Constitution times level and returns spells', prest['hp.current'] === 15 && prest['spellcasting.slots'][0].used === 0 && (pfRestPatch({ ...pc, hp: { max: 8, formula: '', current: 5 } }) as any)['hp.current'] === 8)
 
 const plan = importPlan(dragon, null as any)
 check('import writes the sheet and the old stat block', plan.props.sheet?.hp.max === 110 && plan.props.data.main.data.hp === '110 (13d10 + 39)')

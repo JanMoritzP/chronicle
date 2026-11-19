@@ -19,8 +19,9 @@ import { typeOf } from '../lib/pageTypes'
 import { TypeIcon, useTypes } from './TypeIcon'
 import { TypeLayout } from './TypeLayout'
 import type { SheetPatch } from './SheetView'
-import { emptyCharacter, emptyPf2eCreature, patchSheetLocal, sheetOf, wholeSheetPatch } from '../lib/sheet'
+import { emptyCharacter, emptyPf2eCharacter, emptyPf2eCreature, pfDerived, patchSheetLocal, sheetOf, wholeSheetPatch } from '../lib/sheet'
 import { CharacterSheet } from './CharacterSheet'
+import { Pf2eCharacterSheet } from './Pf2eCharacterSheet'
 import { Select } from './Select'
 import type { FullPage, PageVersion } from '../types'
 import { ReadOnlyDoc } from '../editor/Embed'
@@ -274,6 +275,12 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
     setProps({ ...props, sheet })
     schedule({ propsPatch: { sheet: wholeSheetPatch(sheet) } }, 200)
   }
+  const addPf2eCharacter = () => {
+    const base = { ...emptyPf2eCharacter(), name: title }
+    const sheet = patchSheetLocal(base, pfDerived(base))
+    setProps({ ...props, sheet })
+    schedule({ propsPatch: { sheet: wholeSheetPatch(sheet) } }, 200)
+  }
   const addCharacterSheet = () => {
     const sheet = { ...emptyCharacter(system === '5e-2024' ? '5e-2024' : '5e'), name: title }
     setProps({ ...props, sheet })
@@ -403,9 +410,11 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
           {meta && <span style={{ marginLeft: 'auto' }}>{words} words · edited {ago(meta.updatedAt)}</span>}
         </div>
         {sheetOf(props)?.kind === 'character' ? (
-          <CharacterSheet sheet={sheetOf(props)!} set={readOnly ? undefined : setSheetFields} />
-        ) : pageType?.id === 'person' && !readOnly && !zen && system !== 'pf2e' ? (
-          <div className="cs-add"><button className="btn sm" onClick={addCharacterSheet}>Add a character sheet</button></div>
+          sheetOf(props)!.pf2e?.char
+            ? <Pf2eCharacterSheet sheet={sheetOf(props)!} set={readOnly ? undefined : setSheetFields} />
+            : <CharacterSheet sheet={sheetOf(props)!} set={readOnly ? undefined : setSheetFields} />
+        ) : pageType?.id === 'person' && !readOnly && !zen ? (
+          <div className="cs-add"><button className="btn sm" onClick={system === 'pf2e' ? addPf2eCharacter : addCharacterSheet}>Add a character sheet</button></div>
         ) : null}
         {pageType ? (
           <TypeLayout layout={pageType.layout} data={typeData} readOnly={readOnly} setValue={setTypeValue} pickImage={pickImage} sheet={{ value: sheetOf(props), set: setSheetFields, createPf2e: system === 'pf2e' ? addPf2eSheet : undefined }}

@@ -19,7 +19,7 @@ function Txt({ value, onChange, label, placeholder, className }: { value: string
   return <input className={`sv-text${className ? ` ${className}` : ''}`} aria-label={label} placeholder={placeholder} value={value} onChange={(e) => onChange(e.target.value)} />
 }
 
-function FeatureList({ group, list, set }: { group: FeatureGroup; list: Feature[]; set: (next: Feature[]) => void }) {
+export function FeatureList({ group, list, set }: { group: FeatureGroup; list: Feature[]; set: (next: Feature[]) => void }) {
   const change = (i: number, p: Partial<Feature>) => set(list.map((f, j) => (j === i ? { ...f, ...p } : f)))
   return (
     <div className="sv-features">
