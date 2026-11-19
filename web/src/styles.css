@@ -933,3 +933,4 @@ button.cs-roll:disabled { cursor: default; }
 .cs-skill-roll:hover:not(:disabled) { background: var(--bg-hover); }
 .cs-skill-roll:disabled { cursor: default; }
 .pc-strike { margin: 4px 0; }
+.tt-form .tt-order input.tt-init, .tt-form .tt-order span.tt-init { width: 56px; flex: none; }
