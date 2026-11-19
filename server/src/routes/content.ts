@@ -198,7 +198,9 @@ export async function contentRoutes(app: FastifyInstance) {
       const ex = reindexLinks(id, ws, doc)
       db.prepare('UPDATE pages SET text = ?, outline = ?, word_count = ?, has_stats = ? WHERE id = ?').run(ex.text, JSON.stringify(ex.outline), ex.wordCount, ex.hasStats ? 1 : 0, id)
       if (b.data.tags) setTags(id, b.data.tags)
-      recordActivity(id, ws, ex.wordCount, true)
+      // text imported from the library was not written by the user, so it does not count as words written
+      const imported = typeof b.data.props?.library === 'string' && b.data.props.library !== ''
+      recordActivity(id, ws, imported ? 0 : ex.wordCount, true)
       if (b.data.title.trim()) relinkByName(ws, id, b.data.title, [])
       if (b.data.sourceZettelId) {
         db.prepare('UPDATE zettels SET page_id = ?, processed_at = ? WHERE id = ?').run(id, t, b.data.sourceZettelId)
