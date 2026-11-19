@@ -2,6 +2,11 @@
 
 Newest first. The version in `electron/package.json` is the app version; the release notes on GitHub are what the in-app update dialog shows, so keep each entry short and in plain words. Sections after 0.2.0 are written by `scripts/release.mjs` from the commit subjects, so the commit messages carry the release notes.
 
+## 0.17.0 (2026-11-19)
+
+### Features
+- add a built-in manual, list every command when you type / and explain chain text in braces
+
 ## 0.16.0 (2026-11-19)
 
 ### Features
