@@ -122,6 +122,7 @@ a.btn { display: inline-block; color: inherit; text-decoration: none; }
 .menu .grow { text-align: left; }
 .menu-sep { height: 1px; margin: 4px 0; background: var(--border); }
 .menu button[aria-checked="true"] { font-weight: 600; }
+.world-list { max-height: calc(100vh - 200px); overflow-y: auto; }
 .side-item { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 7px; cursor: pointer; user-select: none; min-height: 30px; }
 .side-item.nav svg { color: var(--muted); flex: none; }
 .side-item.nav.active svg { color: var(--accent); }

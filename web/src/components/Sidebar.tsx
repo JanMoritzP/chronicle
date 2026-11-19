@@ -250,11 +250,13 @@ export function Sidebar() {
       {worldMenu && (
         <div className="overlay" style={{ background: 'transparent', padding: 0 }} onMouseDown={() => setWorldMenu(null)}>
           <div className="menu world-menu" role="menu" style={{ left: worldMenu.x, top: worldMenu.y, minWidth: worldMenu.w }} onMouseDown={(e) => e.stopPropagation()}>
-            {workspaces.map((w) => (
-              <button key={w.id} role="menuitemradio" aria-checked={w.id === wsId} onClick={() => { setWorldMenu(null); if (w.id !== wsId) useStore.getState().selectWorkspace(w.id) }}>
-                <span className="grow ellipsis">{w.name}</span>{w.id === wsId && <Check size={14} />}
-              </button>
-            ))}
+            <div className="world-list">
+              {workspaces.map((w) => (
+                <button key={w.id} role="menuitemradio" aria-checked={w.id === wsId} onClick={() => { setWorldMenu(null); if (w.id !== wsId) useStore.getState().selectWorkspace(w.id) }}>
+                  <span className="grow ellipsis">{w.name}</span>{w.id === wsId && <Check size={14} />}
+                </button>
+              ))}
+            </div>
             <div className="menu-sep" />
             <button role="menuitem" onClick={() => { setWorldMenu(null); navigate({ type: 'home' }) }}><Home size={14} /> Home</button>
             {!readOnly && (
