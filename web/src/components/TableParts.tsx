@@ -179,3 +179,35 @@ export function ChatPanel() {
   )
 }
 
+
+/** What a token sees and the light it gives off, in the scene's units. Blank sight means as far as the walls allow. */
+export function SightLight({ token }: { token: Token }) {
+  const unit = useTable((s) => s.scenes.find((x) => x.id === s.sceneId)?.unit ?? 'ft')
+  const vision = (token.data.vision ?? {}) as { sight?: number | null; dark?: number }
+  const light = (token.data.light ?? {}) as { bright?: number; dim?: number; color?: string }
+  const save = (key: 'vision' | 'light', value: Record<string, unknown>) => {
+    const data = { ...token.data, [key]: value }
+    if (key === 'light' && !(value.bright || value.dim)) delete data.light
+    sendTable({ t: 'token.update', id: token.id, patch: { data } })
+  }
+  const field = (label: string, value: number | null | undefined, commit: (n: number | null) => void, blank = false) => (
+    <label>{label}
+      <input className="input tt-num" type="number" min={0} aria-label={label} defaultValue={value ?? ''} key={`${label}${value}`}
+        onBlur={(e) => { const raw = e.target.value.trim(); const n = raw === '' ? null : Number(raw); if (n === null ? blank && value != null : Number.isFinite(n) && n >= 0 && n !== value) commit(n) }}
+        onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />
+    </label>
+  )
+  return (
+    <div className="tt-sightlight">
+      <b>Sight and light ({unit})</b>
+      <div className="tt-row">
+        {field('Sees up to', vision.sight, (n) => save('vision', { ...vision, sight: n }), true)}
+        {field('Darkvision', vision.dark ?? 0, (n) => save('vision', { ...vision, dark: n ?? 0 }))}
+      </div>
+      <div className="tt-row">
+        {field('Bright light', light.bright ?? 0, (n) => save('light', { ...light, bright: n ?? 0 }))}
+        {field('Dim light', light.dim ?? 0, (n) => save('light', { ...light, dim: n ?? 0 }))}
+      </div>
+    </div>
+  )
+}

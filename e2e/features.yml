@@ -403,6 +403,13 @@ areas:
       - id: table.stats
         name: "Hit points, damage, healing and conditions on a token, with a linked page's sheet"
         files: [web/src/components/TableParts.tsx, web/src/components/TableSheet.tsx]
+      - id: table.fog
+        name: "Fog of war and darkness are switched on per scene and kept"
+        files: [web/src/components/Tabletop.tsx]
+      - id: table.walls-draw
+        name: "Drawing walls, doors and windows on the canvas, and the fog a player sees"
+        status: planned
+        note: Needs canvas pixel checks; covered by hand and by scripts/test-visibility.ts for the maths.
       - id: table.panel
         name: "The GM edits a token from the panel"
         files: [web/src/components/Tabletop.tsx]

@@ -801,3 +801,8 @@ input[type=color] { width: 34px; height: 24px; padding: 0; border: 1px solid var
 .tt-dicebar { display: flex; gap: 4px; flex-wrap: wrap; }
 .tt-compose { display: flex; gap: 6px; }
 .tt-compose .input { flex: 1; min-width: 0; }
+.tt-kinds { display: inline-flex; }
+.tt-kinds button { padding: 3px 8px; font-size: 12px; }
+.tt-sightlight { display: flex; flex-direction: column; gap: 6px; }
+.tt-bar > * { flex: none; }
+.tt-bar > .grow { flex: 1 1 auto; }

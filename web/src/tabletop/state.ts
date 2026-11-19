@@ -1,17 +1,18 @@
 import { create } from 'zustand'
 import type { GridSpec } from './grid'
+import type { Light, Wall } from './fog'
 
 // What the browser knows about the table. The server is the only writer: this store only ever holds what it was told.
 
 export type TableRole = 'gm' | 'player' | 'spectator'
-export interface Scene extends GridSpec { id: string; name: string; sort: number; bg: string; width: number; height: number }
+export interface Scene extends GridSpec { id: string; name: string; sort: number; bg: string; width: number; height: number; fog: boolean; darkness: number }
 export interface Token {
   id: string; sceneId: string; name: string; x: number; y: number; size: number; rotation: number
   image: string; color: string; pageId: string | null; hidden: boolean; locked: boolean
   owners: string[]; z: number; data: Record<string, any>
 }
 export interface Settings {
-  gms: string[]; playersMoveOwn: boolean; playersCreateTokens: boolean; playersEditOwnStats: boolean; playersPing: boolean; playersRuler: boolean; showCursors: boolean
+  gms: string[]; playersMoveOwn: boolean; playersCreateTokens: boolean; playersEditOwnStats: boolean; playersOpenDoors: boolean; playersPing: boolean; playersRuler: boolean; showCursors: boolean
 }
 export interface Who { id: string; username: string; role: string }
 export interface Cursor { user: string; name: string; x: number; y: number; at: number }
@@ -23,7 +24,7 @@ export interface RollJson { expr: string; label: string; total: number; terms: R
 export type ChatPart = { t: 'text'; text: string } | { t: 'roll'; roll: RollJson }
 export interface ChatMsg { id: string; ts: number; userId: string; name: string; kind: 'say' | 'roll' | 'gmroll' | 'emote' | 'whisper'; to: string[]; parts: ChatPart[] }
 
-export const DEFAULT_SETTINGS: Settings = { gms: [], playersMoveOwn: true, playersCreateTokens: false, playersEditOwnStats: true, playersPing: true, playersRuler: true, showCursors: true }
+export const DEFAULT_SETTINGS: Settings = { gms: [], playersMoveOwn: true, playersCreateTokens: false, playersEditOwnStats: true, playersOpenDoors: false, playersPing: true, playersRuler: true, showCursors: true }
 
 interface TableState {
   conn: Conn
@@ -41,12 +42,16 @@ interface TableState {
   rulers: Record<string, Ruler>
   chat: ChatMsg[]
   unread: number
+  walls: Wall[]
+  lights: Light[]
+  /** The explored area of this scene for this person, as a PNG in base64 */
+  fog: string | null
   error: string
 }
 
 export const useTable = create<TableState>(() => ({
   conn: 'closed', you: null, role: 'spectator', settings: DEFAULT_SETTINGS, scenes: [], active: null, sceneId: null, tokens: [], online: [], members: [],
-  selected: [], cursors: {}, rulers: {}, chat: [], unread: 0, error: '',
+  selected: [], cursors: {}, rulers: {}, chat: [], unread: 0, walls: [], lights: [], fog: null, error: '',
 }))
 
 type Listener = (m: any) => void
@@ -63,10 +68,13 @@ export function applyMessage(m: any) {
     case 'snapshot':
       set({
         you: m.you, role: m.you.role, settings: { ...DEFAULT_SETTINGS, ...m.settings }, scenes: m.scenes, active: m.active, sceneId: m.sceneId,
-        tokens: m.tokens, online: m.online, members: m.members ?? [], chat: m.chat ?? [], unread: 0, selected: [], cursors: {}, rulers: {},
+        tokens: m.tokens, online: m.online, members: m.members ?? [], chat: m.chat ?? [], unread: 0, walls: m.walls ?? [], lights: m.lights ?? [], fog: m.fog ?? null, selected: [], cursors: {}, rulers: {},
       })
       break
-    case 'view': set({ sceneId: m.sceneId, tokens: m.tokens, selected: [], cursors: {}, rulers: {} }); break
+    case 'view': set({ sceneId: m.sceneId, tokens: m.tokens, walls: m.walls ?? [], lights: m.lights ?? [], fog: m.fog ?? null, selected: [], cursors: {}, rulers: {} }); break
+    case 'walls': set((s) => (m.sceneId === s.sceneId ? { walls: m.walls } : {})); break
+    case 'lights': set((s) => (m.sceneId === s.sceneId ? { lights: m.lights } : {})); break
+    case 'fog.reset': set((s) => (m.sceneId === s.sceneId ? { fog: null } : {})); break
     case 'scene': set((s) => ({ scenes: upsert(s.scenes, m.scene).sort((a, b) => a.sort - b.sort), ...(m.active ? { active: m.active } : {}) })); break
     case 'scene.remove': set((s) => ({ scenes: s.scenes.filter((x) => x.id !== m.id), active: m.active })); break
     case 'active': set({ active: m.id }); break
@@ -127,7 +135,7 @@ export function leaveTable() {
   const s = socket
   socket = null
   s?.close()
-  set({ conn: 'closed', you: null, role: 'spectator', scenes: [], tokens: [], sceneId: null, active: null, selected: [], cursors: {}, rulers: {}, online: [], members: [], chat: [], unread: 0, error: '' })
+  set({ conn: 'closed', you: null, role: 'spectator', scenes: [], tokens: [], sceneId: null, active: null, selected: [], cursors: {}, rulers: {}, online: [], members: [], chat: [], unread: 0, walls: [], lights: [], fog: null, error: '' })
 }
 
 /** Sends a message; an operation id comes back with a refusal so the cause can be shown. */

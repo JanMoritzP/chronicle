@@ -12,6 +12,7 @@ export const settingsSchema = z.object({
   playersMoveOwn: z.boolean().default(true),
   playersCreateTokens: z.boolean().default(false),
   playersEditOwnStats: z.boolean().default(true),
+  playersOpenDoors: z.boolean().default(false),
   playersPing: z.boolean().default(true),
   playersRuler: z.boolean().default(true),
   /** Players see each other's cursors. */
@@ -20,7 +21,7 @@ export const settingsSchema = z.object({
 /** A change to the settings: only the keys that are present (a partial of the schema above would fill the defaults back in). */
 export const settingsPatch = z.object({
   gms: z.array(z.string().max(64)).max(20),
-  playersMoveOwn: z.boolean(), playersCreateTokens: z.boolean(), playersEditOwnStats: z.boolean(), playersPing: z.boolean(), playersRuler: z.boolean(), showCursors: z.boolean(),
+  playersMoveOwn: z.boolean(), playersCreateTokens: z.boolean(), playersEditOwnStats: z.boolean(), playersOpenDoors: z.boolean(), playersPing: z.boolean(), playersRuler: z.boolean(), showCursors: z.boolean(),
 }).partial().strict()
 export type TableSettings = z.infer<typeof settingsSchema>
 export const DEFAULT_SETTINGS: TableSettings = settingsSchema.parse({})
@@ -73,6 +74,16 @@ const coord = z.number().finite().min(-100000).max(100000)
 const color = z.string().max(20).regex(/^(#[0-9a-fA-F]{3,8}|)$/)
 const imageUrl = z.string().max(300).regex(/^(\/api\/uploads\/[A-Za-z0-9-]+|)$/)
 
+const num = (v: unknown, max: number) => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= max
+/** Light a token gives off and how far it sees, in game units. */
+function validLightVision(d: Record<string, unknown>) {
+  const l = d.light as Record<string, unknown> | undefined
+  const v = d.vision as Record<string, unknown> | undefined
+  if (l !== undefined && !(l && typeof l === 'object' && num(l.bright ?? 0, 2000) && num(l.dim ?? 0, 2000) && (l.color === undefined || (typeof l.color === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(l.color))))) return false
+  if (v !== undefined && !(v && typeof v === 'object' && (v.sight === null || v.sight === undefined || num(v.sight, 20000)) && num(v.dark ?? 0, 2000))) return false
+  return true
+}
+
 export const tokenPatch = z.object({
   name: z.string().max(100),
   x: coord, y: coord,
@@ -85,7 +96,7 @@ export const tokenPatch = z.object({
   locked: z.boolean(),
   owners: z.array(id).max(50),
   z: z.number().int().min(-1000).max(1000),
-  data: z.record(z.string().max(40), z.unknown()).refine((d) => JSON.stringify(d).length <= 8000, 'data too large'),
+  data: z.record(z.string().max(40), z.unknown()).refine((d) => JSON.stringify(d).length <= 8000, 'data too large').refine(validLightVision, 'bad light or vision'),
 }).partial().strict()
 
 export const scenePatch = z.object({
@@ -98,9 +109,15 @@ export const scenePatch = z.object({
   unit: z.string().min(1).max(8),
   dist: z.number().min(0.1).max(1000),
   diagonal: z.enum(['5-5-5', '5-10-5', 'euclid', 'manhattan']),
+  /** Players see only what their tokens see, and remember what they saw. */
+  fog: z.boolean(),
+  /** 0 is daylight, 1 is pitch dark; light sources push it back. */
+  darkness: z.number().min(0).max(1),
 }).partial().strict()
 
 const point = z.object({ x: coord, y: coord })
+const wall = z.object({ x1: coord, y1: coord, x2: coord, y2: coord, kind: z.enum(['wall', 'door', 'secret', 'window']).default('wall') })
+export const wallPatch = z.object({ x1: coord, y1: coord, x2: coord, y2: coord, kind: z.enum(['wall', 'door', 'secret', 'window']), open: z.boolean() }).partial().strict()
 const hpValue = z.number().int().min(-9999).max(99999)
 export const statPatch = z.object({
   hp: z.object({ value: hpValue, max: z.number().int().min(0).max(99999), temp: z.number().int().min(0).max(99999) }).partial().strict(),
@@ -122,6 +139,12 @@ export const clientMessage = z.discriminatedUnion('t', [
   z.object({ t: z.literal('token.delete'), ids: z.array(id).min(1).max(100) }),
   z.object({ t: z.literal('settings.set'), patch: settingsPatch }),
   z.object({ t: z.literal('chat'), text: z.string().min(1).max(600), as: z.string().max(60).optional() }),
+  z.object({ t: z.literal('wall.add'), sceneId: id, walls: z.array(wall).min(1).max(200) }),
+  z.object({ t: z.literal('wall.update'), id, patch: wallPatch }),
+  z.object({ t: z.literal('wall.delete'), ids: z.array(id).min(1).max(200) }),
+  z.object({ t: z.literal('door.toggle'), id }),
+  z.object({ t: z.literal('fog.save'), sceneId: id, mask: z.string().max(400_000) }),
+  z.object({ t: z.literal('fog.reset'), sceneId: id }),
   z.object({ t: z.literal('cursor'), x: coord, y: coord }),
   z.object({ t: z.literal('ping'), x: coord, y: coord }),
   z.object({ t: z.literal('ruler'), points: z.array(point).max(50).nullable() }),

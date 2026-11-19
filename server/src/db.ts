@@ -379,6 +379,26 @@ const migrations: string[] = [
   );
   CREATE INDEX chat_ws ON chat_messages(workspace_id, ts);
   `,
+  `
+  ALTER TABLE scenes ADD COLUMN fog INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE scenes ADD COLUMN darkness REAL NOT NULL DEFAULT 0;
+  CREATE TABLE scene_walls (
+    id TEXT PRIMARY KEY,
+    scene_id TEXT NOT NULL REFERENCES scenes(id) ON DELETE CASCADE,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    x1 REAL NOT NULL, y1 REAL NOT NULL, x2 REAL NOT NULL, y2 REAL NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'wall',
+    open INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE INDEX walls_scene ON scene_walls(scene_id);
+  CREATE TABLE scene_fog (
+    scene_id TEXT NOT NULL REFERENCES scenes(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL,
+    mask BLOB NOT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (scene_id, user_id)
+  );
+  `,
 ]
 
 export const SCHEMA_VERSION = migrations.length

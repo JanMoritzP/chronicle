@@ -1,4 +1,5 @@
 import { Application, Color, Container, Graphics, Sprite, Text, Texture } from 'pixi.js'
+import { FogLayer, type Light, type Wall } from './fog'
 import { formatDistance, hexCentres, hexCorners, measure, snap, tokenPixels, type Pt } from './grid'
 import type { Cursor, Ruler, Scene, Token } from './state'
 
@@ -12,9 +13,13 @@ export interface Hooks {
   onPing(p: Pt): void
   onCursor(p: Pt): void
   onRuler(points: Pt[] | null): void
+  onWallAdd(walls: { x1: number; y1: number; x2: number; y2: number; kind: Wall['kind'] }[]): void
+  onWallErase(id: string): void
+  onDoor(id: string): void
+  onExplored(png: string): void
   colorOf(userId: string): number
 }
-export type Tool = 'select' | 'ruler'
+export type Tool = 'select' | 'ruler' | 'wall' | 'erase'
 
 const textures = new Map<string, Promise<Texture | null>>()
 /** Images come from our own server behind the login cookie, so they are fetched rather than handed to the loader by address. */
@@ -51,6 +56,14 @@ export class TableEngine {
   private ruleG = new Graphics()
   private ruleLabel = new Text({ text: '', style: { fontSize: 14, fill: 0xffffff, fontFamily: 'sans-serif', stroke: { color: 0x000000, width: 3 } } })
   private marquee = new Graphics()
+  private wallG = new Graphics()
+  private wallPreview = new Graphics()
+  private walls: Wall[] = []
+  private wallKind: Wall['kind'] = 'wall'
+  private wallPoly: Pt[] = []
+  private lastClick = { t: 0, x: 0, y: 0 }
+  private fog!: FogLayer
+  private me = { id: '', gm: true, canDoors: false }
   private drag: null | { kind: 'pan' | 'tokens' | 'ruler' | 'marquee'; start: Pt; screen: Pt; origins?: Map<string, Pt>; lead?: string; moved: boolean; sent: number } = null
   private pointers = new Map<number, Pt>()
   private pinch: null | { dist: number; scale: number } = null
@@ -66,7 +79,9 @@ export class TableEngine {
     this.ready = true
     this.host.appendChild(this.app.canvas)
     this.app.canvas.style.touchAction = 'none'
-    this.world.addChild(this.bg, this.gridG, this.tokenLayer, this.others, this.ruleG, this.ruleLabel, this.overlay, this.marquee)
+    this.fog = new FogLayer(this.app)
+    this.fog.onExplored = (png) => this.hooks.onExplored(png)
+    this.world.addChild(this.bg, this.gridG, this.tokenLayer, this.fog.view, this.wallG, this.others, this.ruleG, this.ruleLabel, this.overlay, this.wallPreview, this.marquee)
     this.ruleLabel.visible = false
     this.app.stage.addChild(this.world)
     const c = this.app.canvas
@@ -78,6 +93,7 @@ export class TableEngine {
     c.addEventListener('contextmenu', (e) => e.preventDefault())
     this.app.ticker.add(this.tick)
     if (this.scene) this.setScene(this.scene)
+    this.drawWalls()
     this.setTokens([...this.tokens.values()])
   }
 
@@ -86,6 +102,7 @@ export class TableEngine {
     clearTimeout(this.longPress)
     if (!this.ready) return
     this.app.ticker.remove(this.tick)
+    this.fog.destroy()
     this.app.destroy(true, { children: true })
   }
 
@@ -99,6 +116,8 @@ export class TableEngine {
     if (changed) this.drawBackground()
     if (scene && this.fitted !== scene.id) { this.fitted = scene.id; this.fit() }
     for (const v of this.views.values()) this.layout(v)
+    this.fog.configure(scene, !this.me.gm)
+    this.refreshVision()
   }
 
   private async drawBackground() {
@@ -150,6 +169,7 @@ export class TableEngine {
     for (const [id, v] of this.views) if (!this.tokens.has(id)) { v.box.destroy({ children: true }); this.views.delete(id) }
     for (const t of list) this.upsert(t)
     this.sortLayer()
+    this.refreshVision()
   }
 
   upsert(t: Token) {
@@ -165,6 +185,7 @@ export class TableEngine {
       this.build(v)
     }
     v.token = t
+    if (!this.me.gm && this.tokens.size) this.refreshVision()
     // a token the person is dragging is theirs to place; the server's older position must not pull it back
     if (!(this.drag?.kind === 'tokens' && this.drag.origins?.has(t.id))) this.layout(v)
   }
@@ -260,7 +281,93 @@ export class TableEngine {
     if (this.ready) for (const v of this.views.values()) this.drawSelection(v)
   }
 
-  setTool(tool: Tool) { this.tool = tool; if (this.ready) this.app.canvas.style.cursor = tool === 'ruler' ? 'crosshair' : '' }
+  /** Who is looking: the GM sees everything, a player sees what their own tokens see. */
+  setViewer(me: { id: string; gm: boolean; spectator: boolean; canDoors: boolean }) {
+    this.me = { id: me.id, gm: me.gm || me.spectator, canDoors: me.canDoors || me.gm }
+    if (!this.ready) return
+    this.fog.configure(this.scene, !this.me.gm)
+    this.drawWalls()
+    this.refreshVision()
+  }
+
+  setWalls(walls: Wall[]) { this.walls = walls; if (this.ready) { this.fog.setWalls(walls); this.drawWalls() } }
+  setLights(lights: Light[]) { if (this.ready) this.fog.setLights(lights) }
+  setExplored(png: string | null) { if (this.ready) void this.fog.loadExplored(png) }
+  setWallKind(kind: Wall['kind']) { this.wallKind = kind }
+
+  /** Tokens that give their owner sight, and who is hidden by the dark. */
+  private refreshVision() {
+    if (!this.ready || this.me.gm) {
+      for (const v of this.views.values()) v.box.visible = true
+      return
+    }
+    const mine = [...this.tokens.values()].filter((t) => t.owners.includes(this.me.id))
+    this.fog.setViewers(mine.map((t) => {
+      const vis = (t.data.vision ?? {}) as { sight?: number | null; dark?: number }
+      return { id: t.id, x: t.x, y: t.y, sight: vis.sight ?? null, dark: vis.dark ?? 0 }
+    }))
+    window.setTimeout(() => this.applyTokenVisibility(), 40)
+  }
+
+  private applyTokenVisibility() {
+    if (this.me.gm) return
+    for (const v of this.views.values()) v.box.visible = v.token.owners.includes(this.me.id) || this.fog.isVisible({ x: v.token.x, y: v.token.y })
+  }
+
+  /** Ends the wall being drawn and sends it. */
+  finishWalls() {
+    const p = this.wallPoly
+    this.wallPoly = []
+    this.wallPreview.clear()
+    if (p.length < 2) return
+    this.hooks.onWallAdd(p.slice(1).map((q, i) => ({ x1: p[i].x, y1: p[i].y, x2: q.x, y2: q.y, kind: this.wallKind })))
+  }
+
+  private snapWall(p: Pt): Pt {
+    const k = this.world.scale.x
+    const reach = 12 / k
+    let best: Pt | null = null, bd = reach
+    for (const w of this.walls) for (const e of [{ x: w.x1, y: w.y1 }, { x: w.x2, y: w.y2 }]) {
+      const d = Math.hypot(e.x - p.x, e.y - p.y)
+      if (d < bd) { bd = d; best = e }
+    }
+    if (best) return best
+    const s = this.scene
+    if (s && s.grid === 'square') { const h = s.gridSize / 2; return { x: Math.round(p.x / h) * h, y: Math.round(p.y / h) * h } }
+    return { x: Math.round(p.x), y: Math.round(p.y) }
+  }
+
+  private nearWall(p: Pt, only?: (w: Wall) => boolean): Wall | null {
+    const reach = 10 / this.world.scale.x
+    let best: Wall | null = null, bd = reach
+    for (const w of this.walls) {
+      if (only && !only(w)) continue
+      const dx = w.x2 - w.x1, dy = w.y2 - w.y1
+      const len2 = dx * dx + dy * dy
+      const t = len2 ? Math.max(0, Math.min(1, ((p.x - w.x1) * dx + (p.y - w.y1) * dy) / len2)) : 0
+      const d = Math.hypot(p.x - (w.x1 + t * dx), p.y - (w.y1 + t * dy))
+      if (d < bd) { bd = d; best = w }
+    }
+    return best
+  }
+
+  private drawWalls() {
+    const g = this.wallG
+    g.clear()
+    if (!this.ready) return
+    const k = 1 / this.world.scale.x
+    const editing = this.tool === 'wall' || this.tool === 'erase'
+    for (const w of this.walls) {
+      const door = w.kind === 'door' || w.kind === 'secret'
+      // players see doors (so they can use them) and nothing else
+      if (!this.me.gm && !door) continue
+      const color = w.kind === 'wall' ? 0xf5f0e6 : w.kind === 'door' ? 0xe08a2e : w.kind === 'secret' ? 0xb36bff : 0x6cc7ff
+      g.moveTo(w.x1, w.y1).lineTo(w.x2, w.y2).stroke({ width: (door ? 5 : 3) * k, color, alpha: w.open ? 0.35 : 0.95 })
+      if (editing && this.me.gm) { g.circle(w.x1, w.y1, 4 * k).fill({ color }); g.circle(w.x2, w.y2, 4 * k).fill({ color }) }
+    }
+  }
+
+  setTool(tool: Tool) { this.tool = tool; this.wallPoly = []; this.wallPreview.clear(); this.drawWalls(); if (this.ready) this.app.canvas.style.cursor = tool === 'ruler' ? 'crosshair' : '' }
 
   setOthers(cursors: Record<string, Cursor>, rulers: Record<string, Ruler>) {
     if (!this.ready) return
@@ -353,7 +460,25 @@ export class TableEngine {
     const world = this.toWorld(screen)
     if (e.altKey) return this.hooks.onPing(world)
     const pan = e.button === 1 || e.button === 2
+    if (!pan && this.me.gm && this.tool === 'wall') {
+      const pt = this.snapWall(world)
+      const now = performance.now()
+      const again = now - this.lastClick.t < 350 && Math.hypot(pt.x - this.lastClick.x, pt.y - this.lastClick.y) < 2
+      this.lastClick = { t: now, x: pt.x, y: pt.y }
+      if (again) { this.finishWalls(); return }
+      this.wallPoly.push(pt)
+      return
+    }
+    if (!pan && this.me.gm && this.tool === 'erase') {
+      const w = this.nearWall(world)
+      if (w) this.hooks.onWallErase(w.id)
+      return
+    }
     const tok = pan ? null : this.hit(world)
+    if (!tok && !pan && this.me.canDoors) {
+      const door = this.nearWall(world, (w) => w.kind === 'door' || (w.kind === 'secret' && this.me.gm))
+      if (door) { this.hooks.onDoor(door.id); return }
+    }
     if (this.tool === 'ruler' && !pan) {
       this.drag = { kind: 'ruler', start: world, screen, moved: false, sent: 0 }
       return
@@ -394,6 +519,10 @@ export class TableEngine {
     }
     const world = this.toWorld(screen)
     const now = performance.now()
+    if (this.tool === 'wall' && this.wallPoly.length) {
+      const last = this.wallPoly[this.wallPoly.length - 1], to = this.snapWall(world)
+      this.wallPreview.clear().moveTo(last.x, last.y).lineTo(to.x, to.y).stroke({ width: 3 / this.world.scale.x, color: 0xffd23f, alpha: 0.9 })
+    }
     if (now - this.lastCursor > 60 && e.pointerType === 'mouse') { this.lastCursor = now; this.hooks.onCursor(world) }
     const d = this.drag
     if (!d) return

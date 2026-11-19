@@ -1,5 +1,5 @@
 import { Color } from 'pixi.js'
-import { Crosshair, Eye, MessageSquare, EyeOff, Lock, LockOpen, Maximize, Minus, Plus, Ruler, RotateCw, Swords, Trash2, UserPlus, MousePointer2, Users } from 'lucide-react'
+import { BrickWall, Crosshair, Eraser, Eye, MessageSquare, EyeOff, Lock, LockOpen, Maximize, Minus, Plus, Ruler, RotateCw, Swords, Trash2, UserPlus, MousePointer2, Users } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { askText, confirmDialog } from '../lib/dialog'
 import { colorFor } from '../lib/collab'
@@ -8,7 +8,7 @@ import { TableEngine, type Tool } from '../tabletop/engine'
 import { snap } from '../tabletop/grid'
 import { joinTable, leaveTable, onTableMessage, sendTable, useTable, type Scene, type Token } from '../tabletop/state'
 import { pickImage, uploadImage } from '../tabletop/upload'
-import { ChatPanel, LinkPage, TokenSheet, TokenStats } from './TableParts'
+import { ChatPanel, LinkPage, SightLight, TokenSheet, TokenStats } from './TableParts'
 import { Select } from './Select'
 
 const PALETTE = ['#c0392b', '#2e86c1', '#27ae60', '#d68910', '#8e44ad', '#16a085', '#7f8c8d', '#d35400']
@@ -52,6 +52,10 @@ export function TableView() {
       onPing: (p) => { sendTable({ t: 'ping', x: p.x, y: p.y }) },
       onCursor: (p) => { sendTable({ t: 'cursor', x: p.x, y: p.y }) },
       onRuler: (points) => { sendTable({ t: 'ruler', points }) },
+      onWallAdd: (walls) => { const id = useTable.getState().sceneId; if (id) sendTable({ t: 'wall.add', sceneId: id, walls }) },
+      onWallErase: (id) => { sendTable({ t: 'wall.delete', ids: [id] }) },
+      onDoor: (id) => { sendTable({ t: 'door.toggle', id }) },
+      onExplored: (png) => { const id = useTable.getState().sceneId; if (id) sendTable({ t: 'fog.save', sceneId: id, mask: png }) },
       colorOf: colorNum,
     })
     engine.current = e
@@ -61,22 +65,36 @@ export function TableView() {
         const s = useTable.getState()
         e.setScene(s.scenes.find((x) => x.id === s.sceneId) ?? null)
       }
+      const viewer = () => {
+        const s = useTable.getState()
+        e.setViewer({ id: s.you?.id ?? '', gm: s.role === 'gm', spectator: s.role === 'spectator', canDoors: s.role === 'player' && s.settings.playersOpenDoors })
+      }
+      viewer()
       push()
+      e.setWalls(useTable.getState().walls)
+      e.setLights(useTable.getState().lights)
       e.setTokens(useTable.getState().tokens)
       e.setSelected(useTable.getState().selected)
+      e.setExplored(useTable.getState().fog)
       const unsub = useTable.subscribe((s, prev) => {
+        if (s.role !== prev.role || s.you !== prev.you || s.settings.playersOpenDoors !== prev.settings.playersOpenDoors) viewer()
         if (s.scenes !== prev.scenes || s.sceneId !== prev.sceneId) push()
+        if (s.walls !== prev.walls) e.setWalls(s.walls)
+        if (s.lights !== prev.lights) e.setLights(s.lights)
+        if (s.sceneId !== prev.sceneId || s.fog !== prev.fog) e.setExplored(s.fog)
         if (s.tokens !== prev.tokens) e.setTokens(s.tokens)
         if (s.selected !== prev.selected) e.setSelected(s.selected)
         if (s.cursors !== prev.cursors || s.rulers !== prev.rulers) e.setOthers(s.cursors, s.rulers)
       })
-      const unmsg = onTableMessage((m) => { if (m.t === 'ping') e.ping({ x: m.x, y: m.y }, m.user) })
+      const unmsg = onTableMessage((m) => { if (m.t === 'ping') e.ping({ x: m.x, y: m.y }, m.user); if (m.t === 'fog.reset') e.setExplored(null) })
       off = () => { unsub(); unmsg() }
     })
     return () => { off(); e.destroy(); engine.current = null }
   }, [])
 
+  const [wallKind, setWallKind] = useState<'wall' | 'door' | 'secret' | 'window'>('wall')
   useEffect(() => { engine.current?.setTool(tool) }, [tool])
+  useEffect(() => { engine.current?.setWallKind(wallKind) }, [wallKind])
 
   const tokens = useTable((s) => s.tokens)
   const selected = useTable((s) => s.selected)
@@ -87,7 +105,8 @@ export function TableView() {
     if ((e.target as HTMLElement).closest('input, textarea, [role=listbox]')) return
     const st = useTable.getState()
     const sel = st.tokens.filter((t) => st.selected.includes(t.id))
-    if (e.key === 'Escape') { useTable.setState({ selected: [] }); setTool('select') }
+    if (e.key === 'Enter' && tool === 'wall') engine.current?.finishWalls()
+    else if (e.key === 'Escape') { engine.current?.finishWalls(); useTable.setState({ selected: [] }); setTool('select') }
     else if (e.key === 'f' || e.key === 'F') engine.current?.fit()
     else if (e.key === 'r' && !e.ctrlKey && sel.length) for (const t of sel) sendTable({ t: 'token.update', id: t.id, patch: { rotation: (t.rotation + 45) % 360 } })
     else if (gm && (e.key === 'Delete' || e.key === 'Backspace') && sel.length) { e.preventDefault(); sendTable({ t: 'token.delete', ids: sel.map((t) => t.id) }) }
@@ -128,6 +147,13 @@ export function TableView() {
         <span className="tt-sep" />
         <button className={`btn sm square${tool === 'select' ? ' on' : ''}`} title="Select and move (Esc)" aria-label="Select" onClick={() => setTool('select')}><MousePointer2 size={14} /></button>
         <button className={`btn sm square${tool === 'ruler' ? ' on' : ''}`} title="Measure distance" aria-label="Ruler" onClick={() => setTool('ruler')}><Ruler size={14} /></button>
+        {gm && <button className={`btn sm square${tool === 'wall' ? ' on' : ''}`} title="Draw walls, doors and windows. Click to place points, double-click or Enter to finish." aria-label="Draw walls" onClick={() => setTool(tool === 'wall' ? 'select' : 'wall')}><BrickWall size={14} /></button>}
+        {gm && <button className={`btn sm square${tool === 'erase' ? ' on' : ''}`} title="Remove a wall by clicking it" aria-label="Erase walls" onClick={() => setTool(tool === 'erase' ? 'select' : 'erase')}><Eraser size={14} /></button>}
+        {gm && tool === 'wall' && (
+          <span className="seg tt-kinds" role="group" aria-label="Kind of wall">
+            {(['wall', 'door', 'secret', 'window'] as const).map((k) => <button key={k} className={wallKind === k ? 'on' : ''} onClick={() => setWallKind(k)}>{k === 'wall' ? 'Wall' : k === 'door' ? 'Door' : k === 'secret' ? 'Secret door' : 'Window'}</button>)}
+          </span>
+        )}
         <button className="btn sm square" title="Zoom in" aria-label="Zoom in" onClick={() => engine.current?.zoomBy(1.25)}><Plus size={14} /></button>
         <button className="btn sm square" title="Zoom out" aria-label="Zoom out" onClick={() => engine.current?.zoomBy(0.8)}><Minus size={14} /></button>
         <button className="btn sm square" title="Fit the scene (F)" aria-label="Fit the scene" onClick={() => engine.current?.fit()}><Maximize size={14} /></button>
@@ -192,6 +218,7 @@ function TokenPanel({ token, count }: { token: Token | null; count: number }) {
               {[0.5, 1, 2, 3, 4, 5].map((s) => <option key={s} value={String(s)}>{s === 0.5 ? 'Tiny (half a cell)' : s === 1 ? 'Medium (1 cell)' : `${s} cells`}</option>)}
             </Select>
           </label>
+          <SightLight token={token} />
           <label>Colour<input type="color" className="tt-color" value={token.color || '#6b7280'} onChange={(e) => patch({ color: e.target.value })} /></label>
           <div className="tt-row">
             <button className="btn sm" onClick={async () => { const f = await pickImage(); if (f) { const url = await uploadImage(wsId, f); if (url) patch({ image: url }) } }}>Set picture</button>
@@ -252,6 +279,9 @@ function ScenePanel({ scene, active, wsId }: { scene: Scene; active: boolean; ws
           <option value="manhattan">Across then down</option>
         </Select>
       </label>
+      <label className="tt-check"><input type="checkbox" checked={scene.fog} onChange={(e) => patch({ fog: e.target.checked })} />Fog of war: players only see what their tokens see</label>
+      <label>Darkness ({Math.round(scene.darkness * 100)} %)<input type="range" min={0} max={100} value={Math.round(scene.darkness * 100)} onChange={(e) => patch({ darkness: Number(e.target.value) / 100 })} /></label>
+      {scene.fog && <button className="btn sm" onClick={() => sendTable({ t: 'fog.reset', sceneId: scene.id })}>Forget what players explored</button>}
       <div className="tt-row"><label>Width (px){num('width', scene.width, 100)}</label><label>Height (px){num('height', scene.height, 100)}</label></div>
       <div className="tt-row">
         {!active && <button className="btn sm" onClick={() => sendTable({ t: 'scene.activate', id: scene.id })}>Move players here</button>}
@@ -273,6 +303,7 @@ function TablePanel() {
     ['playersMoveOwn', 'Players move their own tokens'],
     ['playersCreateTokens', 'Players add tokens'],
     ['playersEditOwnStats', 'Players change their own hit points and conditions'],
+    ['playersOpenDoors', 'Players open and close doors'],
     ['playersPing', 'Players ping the map'],
     ['playersRuler', 'Players share their ruler'],
     ['showCursors', 'Show everyone’s pointer'],

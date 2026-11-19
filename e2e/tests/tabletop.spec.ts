@@ -113,3 +113,20 @@ test("hit points, damage, healing and conditions on a token", { tag: '@feature:t
   await prone.click()
   await expect(prone).toHaveAttribute('aria-pressed', 'false')
 })
+
+test('the GM turns on fog and darkness for a scene and the choice is kept', { tag: '@feature:table.fog' }, async ({ app }) => {
+  await openTable(app)
+  await makeScene(app, 'Catacombs')
+  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Scene' }).click()
+  const fog = app.getByLabel(/Fog of war/)
+  await expect(fog).not.toBeChecked()
+  await fog.check()
+  await expect(app.getByRole('button', { name: 'Forget what players explored' })).toBeVisible()
+  await app.reload()
+  await openTable(app)
+  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Scene' }).click()
+  await expect(app.getByLabel(/Fog of war/)).toBeChecked()
+  // the wall tools are there for the GM and offer the kinds of wall
+  await app.getByRole('button', { name: 'Draw walls' }).click()
+  await expect(app.getByRole('group', { name: 'Kind of wall' })).toContainText('Secret door')
+})
