@@ -1,3 +1,4 @@
+import { openPage } from '../lib/ui'
 import { makePng } from '../lib/png'
 import { expect, grantAccess, test } from '../fixtures'
 
@@ -353,4 +354,41 @@ test('a world that plays by the 2024 rules rates a fight against a budget', { ta
   // three ogres are 1,350 XP: above the moderate budget of 900, within the high budget of 1,600
   await expect(meter).toContainText('1350 XP of creatures')
   await expect(meter).toContainText('High')
+})
+
+test('a Pathfinder 2e world: a creature sheet, and a threat rating by level', { tag: '@feature:pf2e' }, async ({ app, api, world, makePage }) => {
+  await api.json('patch', `/api/workspaces/${world.id}`, { settings: { system: 'pf2e' } })
+  await makePage('Orc warrior', { props: { type: 'monster' } })
+  await app.reload()
+  await openPage(app, 'Orc warrior')
+  await app.getByRole('button', { name: 'Use a Pathfinder 2e sheet' }).click()
+  await app.getByLabel('Level', { exact: true }).fill('3')
+  await app.getByLabel('Perception', { exact: true }).fill('9')
+  await app.getByRole('button', { name: 'Add', exact: true }).nth(1).click()
+  await app.getByLabel('Name of actions entry 1').fill('Greataxe')
+  await app.getByLabel('Attack bonus of Greataxe').fill('12')
+  await app.waitForTimeout(1500)
+  await app.reload()
+  await openPage(app, 'Orc warrior')
+  await expect(app.getByLabel('Level', { exact: true })).toHaveValue('3')
+  await expect(app.getByLabel('Perception', { exact: true })).toHaveValue('9')
+  await expect(app.getByLabel('Attack bonus of Greataxe')).toHaveValue('12')
+
+  await openTable(app)
+  await makeScene(app, 'Orc camp')
+  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Encounters' }).click()
+  await app.getByRole('button', { name: 'New encounter' }).click()
+  await app.getByPlaceholder('Goblin ambush on the road').fill('Patrol')
+  await app.getByRole('button', { name: 'Create' }).click()
+  await app.getByLabel('Party levels').fill('3, 3, 3, 3')
+  await app.getByLabel('Party levels').press('Tab')
+  await app.getByRole('button', { name: 'Add a creature' }).click()
+  await app.getByPlaceholder('Find a monster page…').fill('Orc')
+  await app.getByPlaceholder('Find a monster page…').press('Enter')
+  const meter = app.getByRole('group', { name: 'Difficulty' })
+  await expect(meter).toContainText('Pathfinder 2e')
+  await expect(meter).toContainText('Trivial 40 · Low 60 · Moderate 80 · Severe 120 · Extreme 160')
+  await app.getByRole('button', { name: 'One more Orc warrior' }).click()
+  await expect(meter).toContainText('80 XP of creatures against party level 3')
+  await expect(meter).toContainText('Moderate')
 })

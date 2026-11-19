@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
-import { ABILITIES, FEATURE_GROUPS, SKILLS, abilityMod, crText, initiativeBonus, isCharacter, passivePerception, rollsIn, saveBonus, sheetOf, signed, skillBonus, speedText, type Sheet } from '../lib/sheet'
+import { ABILITIES, FEATURE_GROUPS, multipleAttack, SKILLS, abilityMod, crText, initiativeBonus, isCharacter, passivePerception, rollsIn, saveBonus, sheetOf, signed, skillBonus, speedText, type Sheet } from '../lib/sheet'
 
 // The sheet of a creature as a table card: every number that can be rolled is a button.
 // Click rolls it, Shift-click with advantage, Ctrl-click with disadvantage. The roll goes to the table chat.
@@ -34,7 +34,56 @@ export function useSheet(pageId: string | null) {
 const mode = (e: React.MouseEvent) => (e.shiftKey ? ' adv' : e.ctrlKey || e.metaKey ? ' dis' : '')
 const title = (s: string) => s.replace(/\b\w/g, (c) => c.toUpperCase())
 
+/** The damage dice at the start of a strike's damage ("1d8+4 slashing" gives "1d8+4"). */
+const diceOf = (text: string | undefined) => /^\s*(\d+d\d+(?:\s*[+\-]\s*\d+)?)/.exec(text ?? '')?.[1].replace(/\s+/g, '')
+
+const GLYPH = { one: '◆', two: '◆◆', three: '◆◆◆', reaction: '↺', free: '◇' } as const
+
+/** A Pathfinder 2e creature: checks, saves and strikes with the multiple attack penalty as three buttons. Type "dc 25" after a roll in the chat to see the degree of success. */
+function Pf2eCard({ sheet, roll }: { sheet: Sheet; roll: RollFn }) {
+  const p = sheet.pf2e!
+  const bonus = (n: number) => `${n >= 0 ? '+' : '-'}${Math.abs(n)}`
+  const check = (n: number, label: string) => roll(`1d20${bonus(n)}`, label)
+  return (
+    <div className="tt-sheet">
+      <div className="tt-sheet-sub muted">Creature {p.level}{p.traits.length ? ` · ${p.traits.join(', ')}` : ''}</div>
+      <div className="tt-sheet-facts">
+        <span><b>AC</b> {sheet.ac.value}</span><span><b>HP</b> {sheet.hp.max}</span><span><b>Speed</b> {speedText(sheet)}</span>
+        <button className="tt-roll" title="Roll initiative with Perception" onClick={() => check(initiativeBonus(sheet), 'Initiative')}>Initiative {signed(initiativeBonus(sheet))}</button>
+      </div>
+      <div className="tt-chips" role="group" aria-label="Checks and saves">
+        <button className="tt-roll prof" onClick={() => check(p.perception, 'Perception')}>Perception {signed(p.perception)}</button>
+        <button className="tt-roll prof" onClick={() => check(p.fort, 'Fortitude save')}>Fort {signed(p.fort)}</button>
+        <button className="tt-roll prof" onClick={() => check(p.ref, 'Reflex save')}>Ref {signed(p.ref)}</button>
+        <button className="tt-roll prof" onClick={() => check(p.will, 'Will save')}>Will {signed(p.will)}</button>
+        {Object.entries(sheet.skills).map(([k, v]) => <button key={k} className="tt-roll" onClick={() => check(v, `${title(k)} check`)}>{title(k)} {signed(v)}</button>)}
+      </div>
+      {(['traits', 'actions', 'reactions'] as const).map((g) => sheet.features[g].length > 0 && (
+        <div key={g} className="tt-features">
+          <h4>{g === 'traits' ? 'Abilities' : g === 'actions' ? 'Actions and strikes' : 'Reactions'}</h4>
+          {sheet.features[g].map((f, i) => (
+            <details key={i} className="tt-feature">
+              <summary><b>{f.name}</b>{f.actions && <span title={f.actions}> {GLYPH[f.actions]}</span>}{f.bonus != null ? <small> {signed(f.bonus)}</small> : null}</summary>
+              {f.text && <p>{f.text}</p>}
+              {f.bonus != null && (
+                <div className="tt-chips" role="group" aria-label={`${f.name} attacks`}>
+                  {multipleAttack(f.bonus, f.agile).map((n, j) => (
+                    <button key={j} className="tt-roll" title={j === 0 ? 'First attack' : j === 1 ? 'Second attack, multiple attack penalty' : 'Third attack, multiple attack penalty'}
+                      onClick={() => check(n, f.name + ', attack' + (j ? ' ' + (j + 1) : ''))}>{signed(n)}</button>
+                  ))}
+                  {diceOf(f.damage) && <button className="tt-roll" onClick={() => roll(diceOf(f.damage)!, f.name + ', damage')}>{f.damage}</button>}
+                </div>
+              )}
+            </details>
+          ))}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export function SheetCard({ sheet, roll }: { sheet: Sheet; roll: RollFn }) {
+  if (sheet.ruleset === 'pf2e' && sheet.pf2e) return <Pf2eCard sheet={sheet} roll={roll} />
   const bonus = (n: number) => `${n >= 0 ? '+' : '-'}${Math.abs(n)}`
   const check = (e: React.MouseEvent, n: number, label: string) => roll(`1d20${bonus(n)}${mode(e)}`, label)
   return (

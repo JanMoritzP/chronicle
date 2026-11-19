@@ -69,6 +69,21 @@ check('writing both keeps the new sheet', r.data.props.sheet?.name === 'Goblin')
 r = await call('PATCH', `/api/pages/${id}`, { props: { sheet: { v: 2 } } })
 check('whole props with a bad sheet are refused', r.status === 400)
 
+// Pathfinder 2e
+const pf2eSheet = () => ({ ...sheet(), ruleset: 'pf2e', pf2e: { level: 3, perception: 9, fort: 10, ref: 7, will: 6, mods: { str: 3, dex: 1, con: 2, int: -1, wis: 0, cha: 0 }, traits: ['Humanoid', 'Orc'], rarity: 'common' }, features: { traits: [{ name: 'Ferocity', text: 'Keeps fighting.', actions: 'reaction' }], actions: [{ name: 'Greataxe', text: '', actions: 'one', bonus: 12, damage: '1d12+7 slashing', agile: false }], bonus: [], reactions: [], legendary: [] } })
+r = await call('POST', `/api/workspaces/${ws}/pages`, { title: 'Orc warrior', props: { type: 'monster', sheet: pf2eSheet() } })
+check('a Pathfinder 2e sheet is stored', r.status === 200)
+const pfId = r.data.id
+r = await call('GET', `/api/pages/${pfId}`)
+check('with level, saves, modifiers and strikes', r.data.props.sheet.pf2e.level === 3 && r.data.props.sheet.pf2e.fort === 10 && r.data.props.sheet.pf2e.mods.str === 3 && r.data.props.sheet.features.actions[0].bonus === 12 && r.data.props.sheet.features.actions[0].actions === 'one')
+r = await call('PATCH', `/api/pages/${pfId}`, { propsPatch: { sheet: { 'pf2e.level': 4, 'pf2e.mods.dex': 2, 'pf2e.traits': ['Humanoid'] } } })
+r = await call('GET', `/api/pages/${pfId}`)
+check('Pathfinder fields are patched by path', r.data.props.sheet.pf2e.level === 4 && r.data.props.sheet.pf2e.mods.dex === 2 && r.data.props.sheet.pf2e.mods.str === 3 && r.data.props.sheet.pf2e.traits.length === 1)
+r = await call('PATCH', `/api/pages/${pfId}`, { propsPatch: { sheet: { 'pf2e.level': 99 } } })
+check('a creature level above 30 is refused', r.status === 400)
+r = await call('PATCH', `/api/pages/${pfId}`, { propsPatch: { sheet: { 'features.actions': [{ name: 'x', text: '', actions: 'seven' }] } } })
+check('an unknown action cost is refused', r.status === 400)
+
 // characters
 const hero = () => ({ ...sheet(), kind: 'character', name: 'Aria', player: 'Sam', species: 'Elf', background: 'Sage', classes: [{ name: 'Wizard', level: 5, subclass: 'Evoker' }], profs: { saves: ['int', 'wis'], skills: { arcana: 'e' }, tools: 'Calligrapher' }, hitDice: [{ sides: 6, total: 5, used: 1 }], deathSaves: { ok: 0, fail: 0 }, spellcasting: { ability: 'int', slots: [{ total: 4, used: 1 }] }, spells: 'Fire Bolt', inventory: [{ name: 'Quarterstaff', qty: 1, equipped: true, note: '' }], currency: { cp: 0, sp: 0, ep: 0, gp: 25, pp: 0 }, inspiration: false })
 r = await call('POST', `/api/workspaces/${ws}/pages`, { title: 'Aria', props: { type: 'person', sheet: hero() } })

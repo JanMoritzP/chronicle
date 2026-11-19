@@ -18,9 +18,27 @@ export type Usage =
   | { type: 'perDay'; times: number }
   | { type: 'rest' }
 
+export type ActionCost = 'one' | 'two' | 'three' | 'reaction' | 'free'
+/** What only a Pathfinder 2e creature has. Ability scores do not exist there: `mods` holds the modifiers themselves. */
+export interface Pf2ePart {
+  level: number
+  perception: number
+  fort: number
+  ref: number
+  will: number
+  mods: Record<Ability, number>
+  traits: string[]
+  rarity: string
+}
+
 export interface Feature {
   name: string
   text: string
+  /** Pathfinder 2e: what it costs to use, its attack bonus and damage, and whether a strike is agile (a smaller penalty for later attacks) */
+  actions?: ActionCost
+  bonus?: number
+  damage?: string
+  agile?: boolean
   usage?: Usage
   /** legendary actions: how many of the creature's actions this one spends */
   cost?: number
@@ -50,9 +68,10 @@ export interface CharacterPart {
 
 export interface Sheet extends CharacterPart {
   v: 1
+  pf2e?: Pf2ePart
   /** a creature unless it says otherwise */
   kind?: 'creature' | 'character'
-  ruleset: '5e' | '5e-2024'
+  ruleset: '5e' | '5e-2024' | 'pf2e'
   name: string
   size: string
   /** creature type, lower case ("humanoid") */
@@ -163,7 +182,21 @@ export const emptyCharacter = (ruleset: Sheet['ruleset'] = '5e'): Sheet => ({
   currency: { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0 }, inspiration: false,
 })
 
-export const initiativeBonus = (s: Sheet) => s.initiative ?? abilityMod(s.abilities.dex)
+/** Pathfinder 2e rolls initiative with Perception unless the sheet says otherwise. */
+export const initiativeBonus = (s: Sheet) => s.initiative ?? (s.ruleset === 'pf2e' && s.pf2e ? s.pf2e.perception : abilityMod(s.abilities.dex))
+
+/** The attack bonuses of a strike for the first, second and third attack in a turn. */
+export const multipleAttack = (bonus: number, agile = false) => [bonus, bonus - (agile ? 4 : 5), bonus - (agile ? 8 : 10)]
+
+export const pf2eMod = (s: Sheet, a: Ability) => s.pf2e?.mods[a] ?? 0
+
+export const emptyPf2eCreature = (): Sheet => ({
+  ...emptySheet('pf2e'),
+  ac: { value: 15, note: '' },
+  hp: { max: 20, formula: '' },
+  speed: { walk: 25 },
+  pf2e: { level: 1, perception: 5, fort: 5, ref: 5, will: 5, mods: { str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 }, traits: [], rarity: 'common' },
+})
 
 export const passivePerception = (s: Sheet) => s.passivePerception ?? 10 + skillBonus(s, 'perception')
 

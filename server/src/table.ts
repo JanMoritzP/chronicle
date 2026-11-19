@@ -129,9 +129,12 @@ function saveCombat(ws: string, combat: Combat) {
 function initiativeBonus(ws: string, pageId: string | null) {
   if (!pageId) return 0
   const row = db.prepare('SELECT props FROM pages WHERE id = ? AND workspace_id = ?').get(pageId, ws) as { props: string } | undefined
-  const sheet = parse<{ sheet?: { initiative?: number; abilities?: { dex?: number } } }>(row?.props ?? '{}', {}).sheet
+  const sheet = parse<{ sheet?: { initiative?: number; ruleset?: string; pf2e?: { perception?: number }; abilities?: { dex?: number } } }>(row?.props ?? '{}', {}).sheet
   if (!sheet) return 0
-  return typeof sheet.initiative === 'number' ? sheet.initiative : Math.floor(((sheet.abilities?.dex ?? 10) - 10) / 2)
+  if (typeof sheet.initiative === 'number') return sheet.initiative
+  // Pathfinder 2e rolls initiative with Perception
+  if (sheet.ruleset === 'pf2e' && typeof sheet.pf2e?.perception === 'number') return sheet.pf2e.perception
+  return Math.floor(((sheet.abilities?.dex ?? 10) - 10) / 2)
 }
 /** A character's hit points on the table are the hit points on their sheet: the page follows the token. */
 function followHp(ws: string, pageId: string | null, hp: { value?: number; max?: number; temp?: number } | undefined) {
@@ -145,6 +148,12 @@ function followHp(ws: string, pageId: string | null, hp: { value?: number; max?:
   if (typeof hp.max === 'number') h.max = Math.max(0, Math.min(100000, Math.round(hp.max)))
   db.prepare('UPDATE pages SET props = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(props), now(), pageId)
   publishWorld(ws, { k: 'refresh', area: 'pages', pageId })
+}
+
+/** The rules the world plays by, which decides how a roll against a difficulty class is read. */
+function worldSystem(ws: string): string {
+  const row = db.prepare('SELECT settings FROM workspaces WHERE id = ?').get(ws) as { settings: string } | undefined
+  return parse<{ system?: string }>(row?.settings ?? '{}', {}).system ?? '5e'
 }
 
 function postChat(ws: string, userId: string, name: string, kind: Kind, to: string[], parts: Part[]) {
@@ -368,7 +377,7 @@ async function handle(c: Conn, m: ClientMessage) {
       return emitToken(ws, before, tokenRow(m.id, ws)!)
     }
     case 'chat': {
-      const parsed = parseChat(m.text)
+      const parsed = parseChat(m.text, undefined, worldSystem(ws))
       if ('error' in parsed) return nack(c, m, parsed.error)
       if (c.role === 'spectator' && parsed.kind !== 'say') return nack(c, m, 'Spectators can talk but not roll or whisper.')
       let to: string[] = []

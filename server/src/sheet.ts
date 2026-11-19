@@ -12,7 +12,10 @@ const usage = z.discriminatedUnion('type', [
   z.object({ type: z.literal('perDay'), times: int(1, 99) }),
   z.object({ type: z.literal('rest') }),
 ])
-const feature = z.object({ name: text(200), text: text(8000), usage: usage.optional(), cost: optInt(1, 10) })
+const feature = z.object({
+  name: text(200), text: text(8000), usage: usage.optional(), cost: optInt(1, 10),
+  actions: z.enum(['one', 'two', 'three', 'reaction', 'free']).optional(), bonus: int(-30, 60).optional(), damage: text(100).optional(), agile: z.boolean().optional(),
+})
 const features = z.array(feature).max(60)
 const score = int(0, 60)
 const bonus = int(-30, 60)
@@ -35,10 +38,17 @@ const character = {
   currency: z.object({ cp: count(10_000_000), sp: count(10_000_000), ep: count(10_000_000), gp: count(10_000_000), pp: count(10_000_000) }).optional(),
 }
 
+const pf2e = z.object({
+  level: int(-1, 30), perception: int(-10, 80), fort: int(-10, 80), ref: int(-10, 80), will: int(-10, 80),
+  mods: z.object({ str: int(-10, 20), dex: int(-10, 20), con: int(-10, 20), int: int(-10, 20), wis: int(-10, 20), cha: int(-10, 20) }),
+  traits: z.array(text(40)).max(30), rarity: text(20),
+})
+
 export const sheetSchema = z.object({
   ...character,
+  pf2e: pf2e.optional(),
   v: z.literal(1),
-  ruleset: z.enum(['5e', '5e-2024']),
+  ruleset: z.enum(['5e', '5e-2024', 'pf2e']),
   name: text(300),
   size: text(40),
   type: text(80),

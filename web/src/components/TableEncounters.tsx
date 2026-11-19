@@ -4,13 +4,13 @@ import { api } from '../api'
 import { alertDialog, askText, confirmDialog } from '../lib/dialog'
 import { crText } from '../lib/sheet'
 import { useStore } from '../store'
-import { rate, xpOfCr } from '../tabletop/encounter'
+import { pf2eCreatureXp, rate, xpOfCr } from '../tabletop/encounter'
 import { sendTable, useTable } from '../tabletop/state'
 import type { Encounter } from '../types'
 import { PagePicker } from './PagePicker'
 import { loadSheet } from './TableSheet'
 
-interface Info { title: string; cr: number | null; xp: number; hasSheet: boolean }
+interface Info { title: string; cr: number | null; xp: number; hasSheet: boolean; /** Pathfinder 2e creature level */ level: number | null }
 
 /** Challenge rating and XP of the creatures on the pages, read once per page. */
 function useInfo(ids: string[]) {
@@ -23,7 +23,7 @@ function useInfo(ids: string[]) {
       loadSheet(id).then((r) => {
         if (!live) return
         const cr = r.sheet?.cr ?? null
-        setInfo((m) => ({ ...m, [id]: { title: pages.find((p) => p.id === id)?.title ?? r.sheet?.name ?? 'Unknown page', cr, xp: r.sheet?.xp ?? xpOfCr(cr), hasSheet: !!r.sheet } }))
+        setInfo((m) => ({ ...m, [id]: { title: pages.find((p) => p.id === id)?.title ?? r.sheet?.name ?? 'Unknown page', cr, xp: r.sheet?.xp ?? xpOfCr(cr), hasSheet: !!r.sheet, level: r.sheet?.pf2e?.level ?? null } }))
       })
     }
     return () => { live = false }
@@ -31,7 +31,7 @@ function useInfo(ids: string[]) {
   return info
 }
 
-const LABEL = { trivial: 'Trivial', easy: 'Easy', medium: 'Medium', hard: 'Hard', deadly: 'Deadly', low: 'Low', moderate: 'Moderate', high: 'High', over: 'Beyond High: more than the party should face' } as const
+const LABEL = { trivial: 'Trivial', easy: 'Easy', medium: 'Medium', hard: 'Hard', deadly: 'Deadly', low: 'Low', moderate: 'Moderate', high: 'High', over: 'Beyond High: more than the party should face', severe: 'Severe', extreme: 'Extreme' } as const
 
 export function EncounterPanel() {
   const wsId = useStore((s) => s.wsId)!
@@ -49,7 +49,7 @@ export function EncounterPanel() {
     setList((l) => l?.map((e) => (e.id === next.id ? next : e)) ?? l)
     api.patchEncounter(next.id, { name: next.name, party: next.party, notes: next.notes, monsters: next.monsters }).catch((e) => alertDialog(e.message))
   }
-  const rated = useMemo(() => enc ? rate(enc.monsters.map((m) => ({ xp: info[m.pageId]?.xp ?? 0, count: m.count })), enc.party, system) : null, [enc, info, system])
+  const rated = useMemo(() => enc ? rate(enc.monsters.map((m) => ({ xp: info[m.pageId]?.xp ?? 0, count: m.count, level: info[m.pageId]?.level ?? undefined })), enc.party, system) : null, [enc, info, system])
 
   const create = async () => {
     const name = await askText('New encounter', { label: 'Name', placeholder: 'Goblin ambush on the road', okLabel: 'Create' })
@@ -86,7 +86,7 @@ export function EncounterPanel() {
               const inf = info[m.pageId]
               return (
                 <div key={m.pageId} className="tt-enc-row">
-                  <span className="grow ellipsis">{inf?.title ?? '…'}<small className="muted"> {inf?.hasSheet === false ? 'no stat block' : inf?.cr != null ? `CR ${crText(inf.cr)} · ${inf.xp} XP` : ''}</small></span>
+                  <span className="grow ellipsis">{inf?.title ?? '…'}<small className="muted"> {inf?.hasSheet === false ? 'no stat block' : system === 'pf2e' ? (inf?.level != null ? `Level ${inf.level}${rated.method === 'pf2e' ? ` · ${pf2eCreatureXp(inf.level, rated.partyLevel)} XP` : ''}` : 'no Pathfinder sheet') : inf?.cr != null ? `CR ${crText(inf.cr)} · ${inf.xp} XP` : ''}</small></span>
                   <button className="btn ghost sm" aria-label={`One fewer ${inf?.title ?? 'creature'}`} onClick={() => save({ ...enc, monsters: enc.monsters.map((x, j) => (j === i ? { ...x, count: Math.max(1, x.count - 1) } : x)) })}><Minus size={12} /></button>
                   <span className="tt-count" aria-label="Number of creatures">{m.count}</span>
                   <button className="btn ghost sm" aria-label={`One more ${inf?.title ?? 'creature'}`} onClick={() => save({ ...enc, monsters: enc.monsters.map((x, j) => (j === i ? { ...x, count: Math.min(50, x.count + 1) } : x)) })}><Plus size={12} /></button>
@@ -100,14 +100,18 @@ export function EncounterPanel() {
             : <button className="btn sm" onClick={() => setAdding(true)}><Plus size={13} /> Add a creature</button>}
           <p className="muted tt-hint">Missing a creature? Add it to the world from the Library first (Alt+L).</p>
           <div className={`tt-meter ${rated.difficulty}`} role="group" aria-label="Difficulty">
-            <b>{enc.party.length ? LABEL[rated.difficulty] : 'Add the party to rate it'} <small className="muted">{system === '5e-2024' ? '2024 rules' : '2014 rules'}</small></b>
-            {rated.method === '5e-2024'
+            <b>{enc.party.length ? LABEL[rated.difficulty] : 'Add the party to rate it'} <small className="muted">{system === 'pf2e' ? 'Pathfinder 2e' : system === '5e-2024' ? '2024 rules' : '2014 rules'}</small></b>
+            {rated.method === 'pf2e'
+              ? <span>{rated.total} XP of creatures against party level {rated.partyLevel}</span>
+              : rated.method === '5e-2024'
               ? <span>{rated.total} XP of creatures</span>
               : <span>{rated.total} XP × {rated.count ? (rated.adjusted / (rated.total || 1)).toFixed(1).replace(/\.0$/, '') : 0} = {rated.adjusted} adjusted XP</span>}
-            {enc.party.length > 0 && (rated.budget
+            {enc.party.length > 0 && (rated.method === 'pf2e'
+              ? <small className="muted">Trivial {rated.pf2eBudget.trivial} · Low {rated.pf2eBudget.low} · Moderate {rated.pf2eBudget.moderate} · Severe {rated.pf2eBudget.severe} · Extreme {rated.pf2eBudget.extreme}</small>
+              : rated.budget
               ? <small className="muted">Budget: Low {rated.budget.low} · Moderate {rated.budget.moderate} · High {rated.budget.high}</small>
               : <small className="muted">Easy {rated.thresholds.easy} · Medium {rated.thresholds.medium} · Hard {rated.thresholds.hard} · Deadly {rated.thresholds.deadly}</small>)}
-            {rated.total > 0 && enc.party.length > 0 && <small className="muted">{rated.perCharacter} XP for each character</small>}
+            {rated.total > 0 && enc.party.length > 0 && rated.method !== 'pf2e' && <small className="muted">{rated.perCharacter} XP for each character</small>}
           </div>
           <label className="tt-check"><input type="checkbox" checked={hidden} onChange={(e) => setHidden(e.target.checked)} />Place them hidden from the players</label>
           <div className="tt-row">

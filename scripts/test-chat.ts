@@ -1,4 +1,4 @@
-import { parseChat, readable } from '../server/src/chat'
+import { degreeOf, parseChat, readable } from '../server/src/chat'
 import type { Rng } from '../server/src/dice'
 
 let failed = 0
@@ -31,6 +31,16 @@ const msg = (kind: any, userId = 'a', to: string[] = []) => ({ kind, userId, to 
 check('talk is read by everyone', readable(msg('say'), 'z', false) && readable(msg('roll'), 'z', false) && readable(msg('emote'), 'z', false))
 check('a whisper is read by its two people only', readable(msg('whisper', 'a', ['b']), 'a', false) && readable(msg('whisper', 'a', ['b']), 'b', false) && !readable(msg('whisper', 'a', ['b']), 'c', false) && !readable(msg('whisper', 'a', ['b']), 'c', true))
 check('a GM roll is read by the GMs and the roller', readable(msg('gmroll', 'a'), 'a', false) && readable(msg('gmroll', 'a'), 'g', true) && !readable(msg('gmroll', 'a'), 'p', false))
+
+// degrees of success
+check('pf2e: ten over is a critical success, meeting the DC a success', degreeOf(30, 20, null, 'pf2e') === 'critical success' && degreeOf(20, 20, null, 'pf2e') === 'success' && degreeOf(25, 20, null, 'pf2e') === 'success')
+check('pf2e: under is a failure, ten under a critical failure', degreeOf(19, 20, null, 'pf2e') === 'failure' && degreeOf(10, 20, null, 'pf2e') === 'critical failure' && degreeOf(11, 20, null, 'pf2e') === 'failure')
+check('pf2e: a natural 20 raises a step and a natural 1 lowers one', degreeOf(15, 20, 'hit', 'pf2e') === 'success' && degreeOf(25, 20, 'hit', 'pf2e') === 'critical success' && degreeOf(20, 20, 'miss', 'pf2e') === 'failure' && degreeOf(5, 20, 'miss', 'pf2e') === 'critical failure')
+check('5e knows only success and failure', degreeOf(30, 15, null, '5e') === 'success' && degreeOf(14, 15, null, '5e') === 'failure' && degreeOf(15, 15, null, '5e-2024') === 'success')
+const dp = parseChat('/roll 1d20+10 Stealth dc 18', fixed(12), 'pf2e') as any
+check('a roll with a DC in its label is judged', dp.parts[0].roll.total === 22 && dp.parts[0].roll.dc === 18 && dp.parts[0].roll.degree === 'success')
+check('a roll without one is not', (parseChat('/roll 1d20+10 Stealth', fixed(12), 'pf2e') as any).parts[0].roll.degree === undefined)
+check('the same roll in 5e', (parseChat('/roll 1d20+4 dc 20', fixed(12), '5e') as any).parts[0].roll.degree === 'failure')
 
 console.log(failed ? `\n${failed} failed` : '\nall passed')
 process.exit(failed ? 1 : 0)

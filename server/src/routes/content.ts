@@ -34,10 +34,10 @@ const settingsSchema = z.object({
   /** Text of the todo every new page starts with; empty turns it off. */
   newPageTodo: z.string().max(200),
   /** The rules the world plays by: the 2014 or the 2024 edition of 5e. */
-  system: z.enum(['5e', '5e-2024']),
+  system: z.enum(['5e', '5e-2024', 'pf2e']),
 }).partial()
 
-export const DEFAULT_WORLD_SETTINGS = { newPageTodo: 'Fill me', system: '5e' as '5e' | '5e-2024' }
+export const DEFAULT_WORLD_SETTINGS = { newPageTodo: 'Fill me', system: '5e' as '5e' | '5e-2024' | 'pf2e' }
 
 export function worldSettings(raw: string | null | undefined) {
   let saved: any = {}
@@ -45,7 +45,7 @@ export function worldSettings(raw: string | null | undefined) {
   return {
     ...DEFAULT_WORLD_SETTINGS,
     ...(typeof saved.newPageTodo === 'string' ? { newPageTodo: saved.newPageTodo } : {}),
-    ...(saved.system === '5e' || saved.system === '5e-2024' ? { system: saved.system as '5e' | '5e-2024' } : {}),
+    ...(saved.system === '5e' || saved.system === '5e-2024' || saved.system === 'pf2e' ? { system: saved.system as '5e' | '5e-2024' | 'pf2e' } : {}),
   }
 }
 

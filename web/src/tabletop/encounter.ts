@@ -1,7 +1,7 @@
 // Encounter difficulty by the 5e (2014) method: add up the monsters' XP, multiply by how many there are, compare with the party's thresholds.
 
-export type Difficulty = 'trivial' | 'easy' | 'medium' | 'hard' | 'deadly' | 'low' | 'moderate' | 'high' | 'over'
-export type RuleSystem = '5e' | '5e-2024'
+export type Difficulty = 'trivial' | 'easy' | 'medium' | 'hard' | 'deadly' | 'low' | 'moderate' | 'high' | 'over' | 'severe' | 'extreme'
+export type RuleSystem = '5e' | '5e-2024' | 'pf2e'
 
 /** XP of a creature by challenge rating. */
 export const XP_BY_CR: Record<string, number> = {
@@ -54,7 +54,29 @@ export function partyBudget(levels: number[]) {
   return { low: sum[0], moderate: sum[1], high: sum[2] }
 }
 
-export interface Rated { xp: number; count: number }
+export interface Rated { xp: number; count: number; /** Pathfinder 2e: the creature's level */ level?: number }
+
+/** Pathfinder 2e: XP of a creature by how far its level is from the party's. Weaker than four below counts for nothing. */
+const PF2E_XP: Record<number, number> = { [-4]: 10, [-3]: 15, [-2]: 20, [-1]: 30, 0: 40, 1: 60, 2: 80, 3: 120, 4: 160 }
+export const pf2eCreatureXp = (creatureLevel: number, partyLevel: number) => PF2E_XP[Math.max(-5, Math.min(5, creatureLevel - partyLevel))] ?? 0
+
+/** Budgets for a party of four, and what each character more or fewer adds or takes away. */
+const PF2E_BUDGET = { trivial: [40, 10], low: [60, 15], moderate: [80, 20], severe: [120, 30], extreme: [160, 40] } as const
+
+export function pf2eBudget(partySize: number) {
+  const f = (k: keyof typeof PF2E_BUDGET) => Math.max(0, PF2E_BUDGET[k][0] + (partySize - 4) * PF2E_BUDGET[k][1])
+  return { trivial: f('trivial'), low: f('low'), moderate: f('moderate'), severe: f('severe'), extreme: f('extreme') }
+}
+
+/** Pathfinder 2e: the party's level is the average, creatures are worth XP by level against it, and the total is a threat level. */
+function ratePf2e(monsters: Rated[], levels: number[]) {
+  const partyLevel = levels.length ? Math.round(levels.reduce((a, b) => a + b, 0) / levels.length) : 0
+  const count = monsters.reduce((n, m) => n + m.count, 0)
+  const total = monsters.reduce((n, m) => n + pf2eCreatureXp(m.level ?? partyLevel, partyLevel) * m.count, 0)
+  const b = pf2eBudget(levels.length)
+  const difficulty: Difficulty = !levels.length || !count ? 'trivial' : total >= b.extreme ? 'extreme' : total >= b.severe ? 'severe' : total >= b.moderate ? 'moderate' : total >= b.low ? 'low' : 'trivial'
+  return { method: 'pf2e' as const, total, count, adjusted: total, partyLevel, thresholds: { easy: b.low, medium: b.moderate, hard: b.severe, deadly: b.extreme }, budget: null, pf2eBudget: b, difficulty, perCharacter: 0 }
+}
 
 /** The 2024 method: no multiplier, the creatures' XP is compared with the party's budget. */
 function rate2024(monsters: Rated[], levels: number[]) {
@@ -67,6 +89,7 @@ function rate2024(monsters: Rated[], levels: number[]) {
 
 export function rate(monsters: Rated[], levels: number[], system: RuleSystem = '5e') {
   if (system === '5e-2024') return rate2024(monsters, levels)
+  if (system === 'pf2e') return ratePf2e(monsters, levels)
   const total = monsters.reduce((n, m) => n + m.xp * m.count, 0)
   const count = monsters.reduce((n, m) => n + m.count, 0)
   const adjusted = Math.round(total * (levels.length ? multiplier(count, levels.length) : 1))

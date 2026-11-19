@@ -462,6 +462,29 @@ for (const kind of ['cone', 'beam', 'blast', 'cube']) {
 gm.send({ t: 'draw.clear', sceneId: crypt })
 await sleep(100)
 
+// Pathfinder 2e
+await call('PATCH', `/api/workspaces/${ws}`, { settings: { system: 'pf2e' } }, gmCookie)
+pa.send({ t: 'chat', text: '/roll 1d20+40 Athletics dc 20' })
+const degr = await gm.until((m) => m.t === 'chat.msg' && m.msg.parts[0]?.roll?.dc === 20)
+check('in a Pathfinder world a roll against a DC gets a degree of success', degr?.msg.parts[0].roll.degree === 'critical success')
+pa.send({ t: 'chat', text: '/roll 1d20 dc 99' })
+check('a DC that cannot be met is a failure of some degree', /failure/.test((await gm.until((m) => m.t === 'chat.msg' && m.msg.parts[0]?.roll?.dc === 99))?.msg.parts[0].roll.degree ?? ''))
+const pfPage = (await call('POST', `/api/workspaces/${ws}/pages`, { title: 'Watcher', props: { type: 'monster', sheet: { v: 1, ruleset: 'pf2e', name: 'Watcher', size: '', type: '', alignment: '', abilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 }, ac: { value: 20, note: '' }, hp: { max: 40, formula: '' }, speed: { walk: 25 }, saves: {}, skills: {}, senses: {}, vulnerabilities: '', resistances: '', immunities: '', conditionImmunities: '', languages: '', features: { traits: [], actions: [], bonus: [], reactions: [], legendary: [] }, pf2e: { level: 5, perception: 20, fort: 12, ref: 12, will: 12, mods: { str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 }, traits: [], rarity: 'common' } } } }, gmCookie)).data
+gm.send({ t: 'token.add', sceneId: crypt, token: { name: 'Watcher', x: 140, y: 420 } })
+const pfTok = (await gm.until((m) => m.t === 'token' && m.token.name === 'Watcher')).token
+gm.send({ t: 'token.update', id: pfTok.id, patch: { pageId: pfPage.id } })
+gm.send({ t: 'combat.add', tokenIds: [pfTok.id] })
+gm.send({ t: 'combat.roll' })
+const pfInit = await gm.until((m) => m.t === 'combat' && m.combat.list.find((x) => x.name === 'Watcher')?.init != null)
+check('a Pathfinder creature rolls initiative with Perception', pfInit.combat.list.find((x) => x.name === 'Watcher').init >= 21 && pfInit.combat.list.find((x) => x.name === 'Watcher').init <= 40)
+gm.send({ t: 'combat.control', action: 'clear' })
+gm.send({ t: 'token.delete', ids: [pfTok.id] })
+await call('PATCH', `/api/workspaces/${ws}`, { settings: { system: '5e' } }, gmCookie)
+pa.send({ t: 'chat', text: '/roll 1d20+40 dc 20' })
+const five = await gm.until((m) => m.t === 'chat.msg' && m.msg.parts[0]?.roll?.dc === 20 && m.msg.parts[0].roll.degree === 'success')
+check('back in 5e the same roll is simply a success', !!five)
+await sleep(150)
+
 // bad input
 gm.send({ t: 'token.update', id: aria.id, patch: { size: 9999 }, op: 'big' })
 check('out of range values are refused', !!(await gm.until((m) => m.t === 'nack' && m.op === 'big')))

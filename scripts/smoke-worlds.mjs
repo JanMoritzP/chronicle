@@ -59,8 +59,11 @@ if (token) {
 // rules system
 let rs = await call('PATCH', `/api/workspaces/${ws}`, { settings: { system: '5e-2024' } })
 check('a world can play by the 2024 rules', rs.status === 200 && rs.data.settings.system === '5e-2024' && rs.data.settings.newPageTodo !== undefined)
-rs = await call('PATCH', `/api/workspaces/${ws}`, { settings: { system: 'pf2e' } })
+rs = await call('PATCH', `/api/workspaces/${ws}`, { settings: { system: 'dsa' } })
 check('an unknown rules system is refused', rs.status === 400)
+rs = await call('PATCH', `/api/workspaces/${ws}`, { settings: { system: 'pf2e' } })
+check('a world can play Pathfinder 2e', rs.status === 200 && rs.data.settings.system === 'pf2e')
+rs = await call('PATCH', `/api/workspaces/${ws}`, { settings: { system: '5e-2024' } })
 rs = await call('PATCH', `/api/workspaces/${ws}`, { settings: { newPageTodo: 'Look around' } })
 check('changing another setting keeps the rules', rs.data.settings.system === '5e-2024' && rs.data.settings.newPageTodo === 'Look around')
 

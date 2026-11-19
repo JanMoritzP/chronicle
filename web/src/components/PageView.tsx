@@ -19,7 +19,7 @@ import { typeOf } from '../lib/pageTypes'
 import { TypeIcon, useTypes } from './TypeIcon'
 import { TypeLayout } from './TypeLayout'
 import type { SheetPatch } from './SheetView'
-import { emptyCharacter, patchSheetLocal, sheetOf, wholeSheetPatch } from '../lib/sheet'
+import { emptyCharacter, emptyPf2eCreature, patchSheetLocal, sheetOf, wholeSheetPatch } from '../lib/sheet'
 import { CharacterSheet } from './CharacterSheet'
 import { Select } from './Select'
 import type { FullPage, PageVersion } from '../types'
@@ -268,8 +268,14 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
     setProps({ ...props, sheet: patchSheetLocal(base, patch) })
     schedule({ propsPatch: { sheet: props.sheet ? patch : { ...wholeSheetPatch(base), ...patch } } }, 500)
   }
+  const system = useStore((s) => s.workspaces.find((w) => w.id === s.wsId)?.settings?.system ?? '5e')
+  const addPf2eSheet = () => {
+    const sheet = { ...emptyPf2eCreature(), name: title }
+    setProps({ ...props, sheet })
+    schedule({ propsPatch: { sheet: wholeSheetPatch(sheet) } }, 200)
+  }
   const addCharacterSheet = () => {
-    const sheet = { ...emptyCharacter(useStore.getState().workspaces.find((w) => w.id === useStore.getState().wsId)?.settings?.system ?? '5e'), name: title }
+    const sheet = { ...emptyCharacter(system === '5e-2024' ? '5e-2024' : '5e'), name: title }
     setProps({ ...props, sheet })
     schedule({ propsPatch: { sheet: wholeSheetPatch(sheet) } }, 200)
   }
@@ -398,11 +404,11 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
         </div>
         {sheetOf(props)?.kind === 'character' ? (
           <CharacterSheet sheet={sheetOf(props)!} set={readOnly ? undefined : setSheetFields} />
-        ) : pageType?.id === 'person' && !readOnly && !zen ? (
+        ) : pageType?.id === 'person' && !readOnly && !zen && system !== 'pf2e' ? (
           <div className="cs-add"><button className="btn sm" onClick={addCharacterSheet}>Add a character sheet</button></div>
         ) : null}
         {pageType ? (
-          <TypeLayout layout={pageType.layout} data={typeData} readOnly={readOnly} setValue={setTypeValue} pickImage={pickImage} sheet={{ value: sheetOf(props), set: setSheetFields }}
+          <TypeLayout layout={pageType.layout} data={typeData} readOnly={readOnly} setValue={setTypeValue} pickImage={pickImage} sheet={{ value: sheetOf(props), set: setSheetFields, createPf2e: system === 'pf2e' ? addPf2eSheet : undefined }}
             body={<EditorContent editor={editor} />} />
         ) : (
           <div className="editor"><EditorContent editor={editor} /></div>

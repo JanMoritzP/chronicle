@@ -1,4 +1,4 @@
-import { parseRoll, type Rng, type Roll, cryptoRng } from './dice.js'
+import { parseRoll, type Degree, type Rng, type Roll, cryptoRng } from './dice.js'
 
 // What a line typed into the table chat means: plain talk, a roll, an emote or a whisper, with [[1d20+3]] rolling inside the text.
 
@@ -23,7 +23,26 @@ function withInline(text: string, rng: Rng): Part[] {
 }
 
 /** Returns the parsed line, or an error sentence to show the sender. */
-export function parseChat(line: string, rng: Rng = cryptoRng): Parsed | { error: string } {
+/**
+ * How a roll did against a difficulty class. Pathfinder 2e has four degrees: ten or more over or under moves it a step, and so does a natural 20 or 1.
+ * 5e only knows success and failure.
+ */
+export function degreeOf(total: number, dc: number, nat: 'hit' | 'miss' | null, system: string): Degree {
+  if (system !== 'pf2e') return total >= dc ? 'success' : 'failure'
+  let step = total >= dc + 10 ? 3 : total >= dc ? 2 : total <= dc - 10 ? 0 : 1
+  if (nat === 'hit') step = Math.min(3, step + 1)
+  if (nat === 'miss') step = Math.max(0, step - 1)
+  return (['critical failure', 'failure', 'success', 'critical success'] as const)[step]
+}
+
+function withDc(roll: Roll, system: string): Roll {
+  const m = /\bdc\s*(\d{1,2})\b/i.exec(roll.label)
+  if (!m) return roll
+  const dc = Number(m[1])
+  return { ...roll, dc, degree: degreeOf(roll.total, dc, roll.crit, system) }
+}
+
+export function parseChat(line: string, rng: Rng = cryptoRng, system = '5e'): Parsed | { error: string } {
   const text = line.trim()
   if (!text) return { error: 'Nothing to send.' }
   const cmd = /^\/(\w+)\s*(.*)$/s.exec(text)
@@ -33,7 +52,7 @@ export function parseChat(line: string, rng: Rng = cryptoRng): Parsed | { error:
     case 'r': case 'roll': case 'gr': case 'gmroll': {
       const roll = parseRoll(rest, rng)
       if (!roll) return { error: 'That is not a roll. Try /roll 1d20+5, or 2d20kh1 for advantage.' }
-      return { kind: name.toLowerCase().startsWith('g') ? 'gmroll' : 'roll', parts: [{ t: 'roll', roll }] }
+      return { kind: name.toLowerCase().startsWith('g') ? 'gmroll' : 'roll', parts: [{ t: 'roll', roll: withDc(roll, system) }] }
     }
     case 'me': case 'em': return rest ? { kind: 'emote', parts: withInline(rest, rng) } : { error: 'What do you do? Try /me draws a sword.' }
     case 'w': case 'whisper': {

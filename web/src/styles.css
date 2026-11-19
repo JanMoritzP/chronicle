@@ -823,7 +823,8 @@ input[type=color] { width: 34px; height: 24px; padding: 0; border: 1px solid var
 .tt-meter.easy { border-left-color: #4caf50; }
 .tt-meter.medium { border-left-color: #f1c40f; }
 .tt-meter.hard { border-left-color: #e67e22; }
-.tt-meter.deadly, .tt-meter.over { border-left-color: var(--danger); }
+.tt-meter.deadly, .tt-meter.over, .tt-meter.extreme { border-left-color: var(--danger); }
+.tt-meter.severe { border-left-color: #e67e22; }
 .tt-meter.low { border-left-color: #4caf50; }
 .tt-meter.moderate { border-left-color: #f1c40f; }
 .tt-meter.high { border-left-color: #e67e22; }
@@ -906,3 +907,16 @@ button.cs-roll:disabled { cursor: default; }
   .tt-abil { gap: 6px; }
   .cs-abilities { grid-template-columns: repeat(3, 1fr); }
 }
+.tt-degree { flex-basis: 100%; font-size: 12px; font-weight: 600; text-transform: capitalize; }
+.tt-degree.critical-success { color: #2e9e4f; }
+.tt-degree.success { color: #4caf50; }
+.tt-degree.failure { color: #e67e22; }
+.tt-degree.critical-failure { color: var(--danger); }
+
+/* ---------- Pathfinder 2e sheet ---------- */
+.pf .pf-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.pf .pf-level { font-variant: small-caps; font-weight: 700; color: var(--sb-accent); white-space: nowrap; }
+.pf-traits { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; }
+.pf-trait { background: var(--sb-accent, var(--accent)); color: var(--accent-fg); font-size: .75em; font-weight: 700; text-transform: uppercase; padding: 1px 7px; border-radius: 3px; letter-spacing: .03em; }
+.pf-trait.rarity { background: var(--danger); }
+.pf-glyph { font-family: sans-serif; }

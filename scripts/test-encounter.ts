@@ -1,4 +1,4 @@
-import { multiplier, partyBudget, partyThresholds, rate, xpOfCr } from '../web/src/tabletop/encounter'
+import { multiplier, partyBudget, partyThresholds, pf2eBudget, pf2eCreatureXp, rate, xpOfCr } from '../web/src/tabletop/encounter'
 
 let failed = 0
 const check = (name: string, ok: boolean, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name} ${extra}`); if (!ok) failed++ }
@@ -40,6 +40,17 @@ check('2024: 900 XP is the top of moderate, 1,350 would be high', q.difficulty =
 check('2024: past the high budget is flagged', rate([{ xp: 700, count: 3 }], [3, 3, 3, 3], '5e-2024').difficulty === 'over')
 check('2024: the same fight in 2014 is rated with the multiplier', rate([{ xp: 450, count: 2 }], [3, 3, 3, 3], '5e').difficulty === 'hard' && rate([{ xp: 450, count: 2 }], [3, 3, 3, 3]).method === '5e')
 check('2024: no party, no rating', rate([{ xp: 50, count: 2 }], [], '5e-2024').difficulty === 'trivial')
+
+// Pathfinder 2e: creature XP by level against the party, budgets for four characters, adjusted per character
+check('pf2e creature XP by level difference', pf2eCreatureXp(1, 5) === 10 && pf2eCreatureXp(3, 5) === 20 && pf2eCreatureXp(5, 5) === 40 && pf2eCreatureXp(6, 5) === 60 && pf2eCreatureXp(9, 5) === 160 && pf2eCreatureXp(0, 5) === 0)
+check('pf2e budget for four, and per character more or fewer', JSON.stringify(pf2eBudget(4)) === '{"trivial":40,"low":60,"moderate":80,"severe":120,"extreme":160}' && pf2eBudget(5).moderate === 100 && pf2eBudget(3).severe === 90 && pf2eBudget(5).extreme === 200)
+let pf = rate([{ xp: 0, count: 2, level: 3 }], [3, 3, 3, 3], 'pf2e')
+check('pf2e: two creatures of the party level are a moderate threat', pf.method === 'pf2e' && pf.total === 80 && pf.difficulty === 'moderate' && pf.partyLevel === 3)
+check('pf2e: one creature of the party level is low, three are severe', rate([{ xp: 0, count: 1, level: 3 }], [3, 3, 3, 3], 'pf2e').difficulty === 'trivial' && rate([{ xp: 0, count: 3, level: 3 }], [3, 3, 3, 3], 'pf2e').difficulty === 'severe')
+check('pf2e: a boss four levels up is extreme', rate([{ xp: 0, count: 1, level: 7 }], [3, 3, 3, 3], 'pf2e').difficulty === 'extreme')
+check('pf2e: the party level is the rounded average', rate([{ xp: 0, count: 1, level: 4 }], [3, 3, 4, 4], 'pf2e').partyLevel === 4)
+check('pf2e: a bigger party can take more: three creatures are severe for four but only moderate for six', rate([{ xp: 0, count: 3, level: 3 }], [3, 3, 3, 3, 3, 3], 'pf2e').difficulty === 'moderate')
+check('pf2e: without a party there is no rating', rate([{ xp: 0, count: 2, level: 3 }], [], 'pf2e').difficulty === 'trivial')
 
 console.log(failed ? `\n${failed} failed` : '\nall passed')
 process.exit(failed ? 1 : 0)

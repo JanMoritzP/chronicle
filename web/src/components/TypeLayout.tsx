@@ -6,6 +6,7 @@ import { useTemplates } from '../editor/useTemplates'
 import type { Block, Layout } from '../lib/pageTypes'
 import type { Sheet } from '../lib/sheet'
 import { LibraryField, refsOf } from './LibraryField'
+import { Pf2eSheet } from './Pf2eSheet'
 import { SheetView, type SheetPatch } from './SheetView'
 
 export type TypeData = Record<string, any>
@@ -18,7 +19,7 @@ interface Props {
   pickImage: () => Promise<string | null>
   body: ReactNode
   /** The page's structured sheet; creature stat blocks draw and edit it instead of the old text form. */
-  sheet?: { value: Sheet | null; set: (patch: SheetPatch) => void }
+  sheet?: { value: Sheet | null; set: (patch: SheetPatch) => void; /** makes a Pathfinder 2e sheet for a page that has none, in a world that plays Pathfinder 2e */ createPf2e?: () => void }
 }
 
 function ImageBlock({ b, value, readOnly, set, pick }: { b: Extract<Block, { type: 'image' }>; value?: string; readOnly: boolean; set: (v: string | null) => void; pick: () => Promise<string | null> }) {
@@ -49,6 +50,18 @@ function StatBlockSlot({ b, value, readOnly, set, sheet }: { b: Extract<Block, {
   const [textForm, setTextForm] = useState(false)
   const template = findTemplate(all, value?.template ?? b.template) ?? TEMPLATES[0]
   const data = value?.data ?? {}
+  if (sheet?.value?.ruleset === 'pf2e' && template.id.startsWith('5e-monster')) {
+    return <div className="tl-statblock"><Pf2eSheet sheet={sheet.value} set={readOnly ? undefined : sheet.set} /></div>
+  }
+  if (sheet?.createPf2e && !sheet.value && !readOnly && template.id.startsWith('5e-monster')) {
+    return (
+      <div className="tl-statblock">
+        <button className="btn sm primary" onClick={sheet.createPf2e}>Use a Pathfinder 2e sheet</button>
+        <p className="muted" style={{ fontSize: 13 }}>This world plays Pathfinder 2e. The old 5e text form is below.</p>
+        <StatBlockEditor template={template} data={data} onChange={(k, v, extra) => set({ template: template.id, data: { ...data, [k]: v, ...extra } })} onTemplate={(id) => set({ template: id, data })} />
+      </div>
+    )
+  }
   if (sheet?.value && template.id.startsWith('5e-monster') && !textForm) {
     return (
       <div className="tl-statblock">

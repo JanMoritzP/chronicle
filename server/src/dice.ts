@@ -7,7 +7,15 @@ export interface Die { v: number; /** kept out of the total (dropped by kh/kl/dh
 export type Term =
   | { kind: 'num'; sign: 1 | -1; value: number }
   | { kind: 'dice'; sign: 1 | -1; count: number; sides: number; dice: Die[]; subtotal: number; text: string }
-export interface Roll { expr: string; label: string; total: number; terms: Term[]; /** a single d20 that came up 20 or 1 (after keep/drop) */ crit: 'hit' | 'miss' | null }
+export type Degree = 'critical success' | 'success' | 'failure' | 'critical failure'
+export interface Roll {
+  expr: string; label: string; total: number; terms: Term[]
+  /** a single d20 that came up 20 or 1 (after keep/drop) */
+  crit: 'hit' | 'miss' | null
+  /** a difficulty class given as "dc 25" in the label, and how the roll did against it */
+  dc?: number
+  degree?: Degree
+}
 
 export type Rng = (sides: number) => number
 export const cryptoRng: Rng = (sides) => randomInt(1, sides + 1)

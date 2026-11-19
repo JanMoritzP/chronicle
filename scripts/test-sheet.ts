@@ -1,5 +1,5 @@
 import { creatureToStatBlock, importPlan } from '../web/src/lib/open5e'
-import { emptyCharacter, longRestPatch, proficiency, skillBonus, spellAttack, spellDC, characterLevel, isCharacter, rollsIn, abilityMod, sheetOf, wholeSheetPatch, crFromText, crText, initiativeBonus, passivePerception, profBonus, saveBonus, sheetFromCreature, sheetFromLegacy, speedText } from '../web/src/lib/sheet'
+import { emptyPf2eCreature, multipleAttack, emptyCharacter, longRestPatch, proficiency, skillBonus, spellAttack, spellDC, characterLevel, isCharacter, rollsIn, abilityMod, sheetOf, wholeSheetPatch, crFromText, crText, initiativeBonus, passivePerception, profBonus, saveBonus, sheetFromCreature, sheetFromLegacy, speedText } from '../web/src/lib/sheet'
 import type { LibraryEntry } from '../web/src/types'
 
 let failed = 0
@@ -82,6 +82,11 @@ check('spell save DC and attack bonus', spellDC(ch) === 15 && spellAttack(ch) ==
 const rest = longRestPatch(ch) as any
 check('a long rest restores hit points, slots and half the hit dice', rest['hp.current'] === 28 && rest['hp.temp'] === 0 && rest['spellcasting.slots'].every((s: any) => s.used === 0) && rest.hitDice[0].used === 2 && rest.deathSaves.fail === 0)
 check('creatures are unchanged', saveBonus(s, 'dex') === 4 && skillBonus(s, 'stealth') === 4 && skillBonus(s, 'athletics') === 4)
+
+const pf = emptyPf2eCreature()
+pf.pf2e!.perception = 9
+check('a Pathfinder 2e creature rolls initiative with Perception', initiativeBonus(pf) === 9 && pf.ruleset === 'pf2e' && initiativeBonus({ ...pf, initiative: 3 }) === 3)
+check('multiple attack penalty: -5 and -10, agile -4 and -8', JSON.stringify(multipleAttack(15)) === '[15,10,5]' && JSON.stringify(multipleAttack(15, true)) === '[15,11,7]')
 
 const plan = importPlan(dragon, null as any)
 check('import writes the sheet and the old stat block', plan.props.sheet?.hp.max === 110 && plan.props.data.main.data.hp === '110 (13d10 + 39)')

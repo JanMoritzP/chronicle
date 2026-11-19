@@ -7,6 +7,11 @@ import { SheetCard, loadSheet, useSheet } from './TableSheet'
 
 export const CONDITIONS = ['Blinded', 'Charmed', 'Concentrating', 'Deafened', 'Exhaustion', 'Frightened', 'Grappled', 'Incapacitated', 'Invisible', 'Paralyzed', 'Petrified', 'Poisoned', 'Prone', 'Restrained', 'Stunned', 'Unconscious']
 
+/** Pathfinder 2e conditions. The ones with a value (Frightened 2) go up by one on each click and clear after 4. */
+export const PF2E_CONDITIONS = ['Blinded', 'Clumsy', 'Concealed', 'Confused', 'Dazzled', 'Deafened', 'Doomed', 'Drained', 'Dying', 'Enfeebled', 'Fascinated', 'Fatigued', 'Fleeing', 'Frightened', 'Grabbed', 'Hidden', 'Immobilized', 'Invisible', 'Off-guard', 'Paralyzed', 'Petrified', 'Prone', 'Quickened', 'Restrained', 'Sickened', 'Slowed', 'Stunned', 'Stupefied', 'Unconscious', 'Wounded']
+const VALUED = new Set(['Clumsy', 'Doomed', 'Drained', 'Dying', 'Enfeebled', 'Frightened', 'Sickened', 'Slowed', 'Stunned', 'Stupefied', 'Wounded'])
+const baseOf = (c: string) => c.replace(/\s+\d+$/, '')
+
 export const rollText = (expr: string, label: string) => sendTable({ t: 'chat', text: `/roll ${expr} ${label}` })
 
 /** Can this person change the hit points, armor class and conditions of the token? */
@@ -30,6 +35,8 @@ export function TokenStats({ token }: { token: Token }) {
   const hp = token.data.hp as { value?: number; max?: number; temp?: number } | undefined
   const ac = token.data.ac as number | undefined
   const conditions = (token.data.conditions ?? []) as string[]
+  const system = useStore((s) => s.workspaces.find((w) => w.id === s.wsId)?.settings?.system ?? '5e')
+  const names = system === 'pf2e' ? PF2E_CONDITIONS : CONDITIONS
   if (!can && !hp && ac == null && !conditions.length) return null
   const stat = (s: Record<string, unknown>) => sendTable({ t: 'token.stat', id: token.id, stat: s })
   const apply = (sign: 1 | -1) => {
@@ -38,7 +45,15 @@ export function TokenStats({ token }: { token: Token }) {
     sendTable({ t: 'token.stat', id: token.id, damage: sign * n })
     setAmount('')
   }
-  const toggle = (c: string) => stat({ conditions: conditions.includes(c) ? conditions.filter((x) => x !== c) : [...conditions, c] })
+  const current = (c: string) => conditions.find((x) => baseOf(x) === c)
+  const toggle = (c: string) => {
+    const have = current(c)
+    const rest = conditions.filter((x) => x !== have)
+    const valued = system === 'pf2e' && VALUED.has(c)
+    if (!have) return stat({ conditions: [...rest, valued ? c + ' 1' : c] })
+    const n = Number(/\d+$/.exec(have)?.[0] ?? 0)
+    stat({ conditions: valued && n < 4 ? [...rest, c + ' ' + (n + 1)] : rest })
+  }
   const ratio = hp && hp.max ? Math.max(0, Math.min(1, (hp.value ?? 0) / hp.max)) : 0
   return (
     <div className="tt-stats">
@@ -66,8 +81,8 @@ export function TokenStats({ token }: { token: Token }) {
         </div>
       )}
       <div className="tt-chips" role="group" aria-label="Conditions">
-        {(can ? CONDITIONS : conditions).map((c) => (
-          <button key={c} className={`tt-chip${conditions.includes(c) ? ' on' : ''}`} disabled={!can} aria-pressed={conditions.includes(c)} onClick={() => toggle(c)}>{c}</button>
+        {(can ? names : conditions.map(baseOf)).map((c) => (
+          <button key={c} className={`tt-chip${current(c) ? ' on' : ''}`} disabled={!can} aria-pressed={!!current(c)} onClick={() => toggle(c)}>{current(c) ?? c}</button>
         ))}
       </div>
       {gm && hp && (
@@ -122,6 +137,7 @@ function RollView({ r }: { r: RollJson }) {
             : <span key={i}>{t.sign < 0 ? '-' : ''}[{t.dice.map((d, j) => <span key={j} className={`${d.dropped ? 'dropped' : ''}${d.extra ? ' extra' : ''}${t.sides === 20 && d.v === 20 ? ' nat' : ''}${t.sides === 20 && d.v === 1 ? ' one' : ''}`}>{d.v}{j < t.dice.length - 1 ? ', ' : ''}</span>)}]</span>)}
         </span>
         <b className="tt-total" aria-label={`Total ${r.total}`}>{r.total}</b>
+        {r.degree && <span className={`tt-degree ${r.degree.replace(' ', '-')}`}>{r.degree} vs DC {r.dc}</span>}
       </span>
     </span>
   )
