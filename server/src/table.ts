@@ -723,9 +723,12 @@ export function revalidateTable(changedUsers?: string[]) {
     const user = db.prepare('SELECT id, username, role FROM users WHERE id = ?').get(c.user.id) as AuthUser | undefined
     const role = user ? worldRole(user, c.ws) : null
     if (!user || !role) { c.socket.close(CLOSE_DENIED, 'no access'); continue }
+    const before = `${c.wr}:${c.role}`
     c.user = user
     c.wr = role
     c.role = roleAt(user, role, stateOf(c.ws).settings)
+    // an admin changing someone else's access must not reset everyone's screen: only a table whose own role changed starts over
+    if (`${c.wr}:${c.role}` === before) continue
     worlds.add(c.ws)
     sendSnapshot(c)
   }

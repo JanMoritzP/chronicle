@@ -198,6 +198,21 @@ check('a viewer account stays read-only even with editor membership', await (asy
   return (await app('PATCH', `/api/pages/${page.id}`, { title: 'still no' }, bobC)).status === 403
 })())
 
+// an admin changing someone else's access does not reset a table that is open elsewhere
+{
+  const sock = new WebSocket(`${base.replace('http', 'ws')}/api/table/${world.id}`, { headers: { cookie: owner, origin: base } })
+  const got = []
+  sock.on('message', (m) => got.push(JSON.parse(m.toString()).t))
+  await new Promise((r) => sock.on('open', r))
+  await sleep(400)
+  const before = got.filter((t) => t === 'snapshot').length
+  await put(world.id, carol.id, 'viewer')
+  await put(world.id, carol.id, 'editor')
+  await sleep(500)
+  check('the table of someone else is not reset by an access change', before === 1 && got.filter((t) => t === 'snapshot').length === 1, JSON.stringify(got))
+  sock.close()
+}
+
 // cleanup
 o.ws.close(); o2.ws.close(); a.ws.close(); await reader.cancel().catch(() => {})
 for (const id of [alice.id, bob.id, carol.id]) await adm('DELETE', `/api/users/${id}`, null, ac)

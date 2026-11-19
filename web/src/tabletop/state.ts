@@ -77,10 +77,12 @@ const upsert = <T extends { id: string }>(list: T[], item: T) => list.some((x) =
 export function applyMessage(m: any) {
   switch (m.t) {
     case 'snapshot':
-      set({
+      // after a reconnect the same scene comes back: what the person had selected stays selected
+      set((s) => ({
         you: m.you, role: m.you.role, settings: { ...DEFAULT_SETTINGS, ...m.settings }, scenes: m.scenes, active: m.active, sceneId: m.sceneId,
-        tokens: m.tokens, online: m.online, members: m.members ?? [], chat: m.chat ?? [], unread: 0, combat: m.combat ?? NO_COMBAT, drawings: m.drawings ?? [], tiles: m.tiles ?? [], selectedTile: null, walls: m.walls ?? [], lights: m.lights ?? [], fog: m.fog ?? null, selected: [], cursors: {}, rulers: {},
-      })
+        tokens: m.tokens, online: m.online, members: m.members ?? [], chat: m.chat ?? [], unread: 0, combat: m.combat ?? NO_COMBAT, drawings: m.drawings ?? [], tiles: m.tiles ?? [], selectedTile: m.sceneId === s.sceneId && (m.tiles ?? []).some((t: Tile) => t.id === s.selectedTile) ? s.selectedTile : null, walls: m.walls ?? [], lights: m.lights ?? [], fog: m.fog ?? null,
+        selected: m.sceneId === s.sceneId ? s.selected.filter((id) => m.tokens.some((t: Token) => t.id === id)) : [], cursors: {}, rulers: {},
+      }))
       break
     case 'view': set({ sceneId: m.sceneId, tokens: m.tokens, walls: m.walls ?? [], lights: m.lights ?? [], drawings: m.drawings ?? [], tiles: m.tiles ?? [], selectedTile: null, fog: m.fog ?? null, selected: [], cursors: {}, rulers: {} }); break
     case 'tiles': set((s) => (m.sceneId === s.sceneId ? { tiles: m.tiles, selectedTile: m.tiles.some((t: Tile) => t.id === s.selectedTile) ? s.selectedTile : null } : {})); break
