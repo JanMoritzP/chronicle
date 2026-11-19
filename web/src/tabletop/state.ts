@@ -18,7 +18,9 @@ export interface Who { id: string; username: string; role: string }
 export interface Cursor { user: string; name: string; x: number; y: number; at: number }
 export interface Ruler { user: string; name: string; points: { x: number; y: number }[] }
 export type Conn = 'connecting' | 'open' | 'closed'
-export type DrawKind = 'free' | 'line' | 'rect' | 'ellipse' | 'text'
+export type DrawKind = 'free' | 'line' | 'rect' | 'ellipse' | 'text' | 'cone' | 'beam' | 'blast' | 'cube'
+export type TileLayer = 'bg' | 'overhead' | 'gm'
+export interface Tile { id: string; sceneId: string; image: string; x: number; y: number; w: number; h: number; rotation: number; layer: TileLayer; locked: boolean; hidden: boolean; z: number }
 export interface Drawing { id: string; sceneId: string; userId: string; kind: DrawKind; points: { x: number; y: number }[]; color: string; width: number; fill: string; text: string; gmOnly: boolean }
 export interface Combatant { id: string; tokenId: string | null; name: string; init: number | null; hidden: boolean; done: boolean }
 export interface Combat { active: boolean; round: number; turn: string | null; list: Combatant[] }
@@ -49,6 +51,8 @@ interface TableState {
   unread: number
   combat: Combat
   drawings: Drawing[]
+  tiles: Tile[]
+  selectedTile: string | null
   walls: Wall[]
   lights: Light[]
   /** The explored area of this scene for this person, as a PNG in base64 */
@@ -58,7 +62,7 @@ interface TableState {
 
 export const useTable = create<TableState>(() => ({
   conn: 'closed', you: null, role: 'spectator', settings: DEFAULT_SETTINGS, scenes: [], active: null, sceneId: null, tokens: [], online: [], members: [],
-  selected: [], cursors: {}, rulers: {}, chat: [], unread: 0, combat: NO_COMBAT, drawings: [], walls: [], lights: [], fog: null, error: '',
+  selected: [], cursors: {}, rulers: {}, chat: [], unread: 0, combat: NO_COMBAT, drawings: [], tiles: [], selectedTile: null, walls: [], lights: [], fog: null, error: '',
 }))
 
 type Listener = (m: any) => void
@@ -75,10 +79,11 @@ export function applyMessage(m: any) {
     case 'snapshot':
       set({
         you: m.you, role: m.you.role, settings: { ...DEFAULT_SETTINGS, ...m.settings }, scenes: m.scenes, active: m.active, sceneId: m.sceneId,
-        tokens: m.tokens, online: m.online, members: m.members ?? [], chat: m.chat ?? [], unread: 0, combat: m.combat ?? NO_COMBAT, drawings: m.drawings ?? [], walls: m.walls ?? [], lights: m.lights ?? [], fog: m.fog ?? null, selected: [], cursors: {}, rulers: {},
+        tokens: m.tokens, online: m.online, members: m.members ?? [], chat: m.chat ?? [], unread: 0, combat: m.combat ?? NO_COMBAT, drawings: m.drawings ?? [], tiles: m.tiles ?? [], selectedTile: null, walls: m.walls ?? [], lights: m.lights ?? [], fog: m.fog ?? null, selected: [], cursors: {}, rulers: {},
       })
       break
-    case 'view': set({ sceneId: m.sceneId, tokens: m.tokens, walls: m.walls ?? [], lights: m.lights ?? [], drawings: m.drawings ?? [], fog: m.fog ?? null, selected: [], cursors: {}, rulers: {} }); break
+    case 'view': set({ sceneId: m.sceneId, tokens: m.tokens, walls: m.walls ?? [], lights: m.lights ?? [], drawings: m.drawings ?? [], tiles: m.tiles ?? [], selectedTile: null, fog: m.fog ?? null, selected: [], cursors: {}, rulers: {} }); break
+    case 'tiles': set((s) => (m.sceneId === s.sceneId ? { tiles: m.tiles, selectedTile: m.tiles.some((t: Tile) => t.id === s.selectedTile) ? s.selectedTile : null } : {})); break
     case 'draw': set((s) => (m.drawing.sceneId === s.sceneId ? { drawings: upsert(s.drawings, m.drawing) } : {})); break
     case 'draw.remove': set((s) => ({ drawings: s.drawings.filter((d) => !m.ids.includes(d.id)) })); break
     case 'draw.cleared': set((s) => (m.sceneId === s.sceneId ? { drawings: [] } : {})); break
@@ -146,7 +151,7 @@ export function leaveTable() {
   const s = socket
   socket = null
   s?.close()
-  set({ conn: 'closed', you: null, role: 'spectator', scenes: [], tokens: [], sceneId: null, active: null, selected: [], cursors: {}, rulers: {}, online: [], members: [], chat: [], unread: 0, combat: NO_COMBAT, drawings: [], walls: [], lights: [], fog: null, error: '' })
+  set({ conn: 'closed', you: null, role: 'spectator', scenes: [], tokens: [], sceneId: null, active: null, selected: [], cursors: {}, rulers: {}, online: [], members: [], chat: [], unread: 0, combat: NO_COMBAT, drawings: [], tiles: [], selectedTile: null, walls: [], lights: [], fog: null, error: '' })
 }
 
 /** Sends a message; an operation id comes back with a refusal so the cause can be shown. */

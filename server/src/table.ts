@@ -161,7 +161,17 @@ const drawingRow = (id: string) => { const r = db.prepare('SELECT * FROM drawing
 /** Drawings the GM keeps to themselves are left out for everyone else. */
 const drawingsFor = (c: Conn, scene: string | null) => !scene ? [] : (db.prepare('SELECT * FROM drawings WHERE scene_id = ? AND workspace_id = ? ORDER BY created_at').all(scene, c.ws) as DrawingDb[]).filter((r) => c.role === 'gm' || !r.gm_only).map(drawingJson)
 
-const sceneState = (c: Conn) => ({ walls: wallsFor(c, c.scene), lights: lightsOf(c.ws, c.scene), fog: fogOf(c, c.scene), drawings: drawingsFor(c, c.scene) })
+interface TileDb { id: string; scene_id: string; image: string; x: number; y: number; w: number; h: number; rotation: number; layer: string; locked: number; hidden: number; z: number }
+/** Props and overlays. What the GM keeps hidden, or on the GM layer, is left out for everyone else. */
+function tilesFor(c: Conn, scene: string | null) {
+  if (!scene) return []
+  return (db.prepare('SELECT * FROM scene_tiles WHERE scene_id = ? AND workspace_id = ? ORDER BY z').all(scene, c.ws) as TileDb[])
+    .filter((t) => c.role === 'gm' || (!t.hidden && t.layer !== 'gm'))
+    .map((t) => ({ id: t.id, sceneId: t.scene_id, image: t.image, x: t.x, y: t.y, w: t.w, h: t.h, rotation: t.rotation, layer: t.layer, locked: !!t.locked, hidden: !!t.hidden, z: t.z }))
+}
+const sendTiles = (ws: string, sceneId: string) => { for (const c of inWorld(ws)) if (c.scene === sceneId) send(c, { t: 'tiles', sceneId, tiles: tilesFor(c, sceneId) }) }
+
+const sceneState = (c: Conn) => ({ walls: wallsFor(c, c.scene), lights: lightsOf(c.ws, c.scene), fog: fogOf(c, c.scene), drawings: drawingsFor(c, c.scene), tiles: tilesFor(c, c.scene) })
 
 function sendView(c: Conn) {
   send(c, { t: 'view', sceneId: c.scene, tokens: tokensFor(c, c.scene), ...sceneState(c) })
@@ -494,6 +504,40 @@ async function handle(c: Conn, m: ClientMessage) {
       if (!sceneRow(m.sceneId, ws)) return nack(c, m, 'no such scene')
       db.prepare('DELETE FROM drawings WHERE scene_id = ? AND workspace_id = ?').run(m.sceneId, ws)
       for (const x of inWorld(ws)) if (x.scene === m.sceneId) send(x, { t: 'draw.cleared', sceneId: m.sceneId })
+      return
+    }
+    case 'tile.add': {
+      if (!gm) return nack(c, m, 'only the GM can do that')
+      const scene = sceneRow(m.sceneId, ws)
+      if (!scene) return nack(c, m, 'no such scene')
+      const dims = await sizeOfUpload(m.image, ws)
+      if (!dims) return nack(c, m, 'that image is not in this world')
+      // a new prop is about three cells across unless the GM gave a size
+      const k = Math.min(1, (scene.grid_size * 3) / Math.max(dims.width, dims.height))
+      const w = m.w ?? Math.max(8, Math.round(dims.width * k)), h = m.h ?? Math.max(8, Math.round(dims.height * k))
+      const z = ((db.prepare('SELECT MAX(z) AS z FROM scene_tiles WHERE scene_id = ?').get(m.sceneId) as { z: number | null }).z ?? 0) + 1
+      db.prepare('INSERT INTO scene_tiles(id,scene_id,workspace_id,image,x,y,w,h,rotation,layer,locked,hidden,z) VALUES(?,?,?,?,?,?,?,?,0,?,0,0,?)').run(uid(), m.sceneId, ws, m.image, m.x, m.y, w, h, m.layer ?? 'bg', z)
+      return sendTiles(ws, m.sceneId)
+    }
+    case 'tile.update': {
+      if (!gm) return nack(c, m, 'only the GM can do that')
+      const t = db.prepare('SELECT scene_id AS s FROM scene_tiles WHERE id = ? AND workspace_id = ?').get(m.id, ws) as { s: string } | undefined
+      if (!t) return nack(c, m, 'no such tile')
+      const cols = Object.keys(m.patch)
+      if (!cols.length) return
+      db.prepare(`UPDATE scene_tiles SET ${cols.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`).run(...cols.map((k) => { const v = (m.patch as Record<string, unknown>)[k]; return typeof v === 'boolean' ? (v ? 1 : 0) : (v as string | number) }), m.id)
+      return sendTiles(ws, t.s)
+    }
+    case 'tile.delete': {
+      if (!gm) return nack(c, m, 'only the GM can do that')
+      const scenes = new Set<string>()
+      for (const id of m.ids) {
+        const t = db.prepare('SELECT scene_id AS s FROM scene_tiles WHERE id = ? AND workspace_id = ?').get(id, ws) as { s: string } | undefined
+        if (!t) continue
+        scenes.add(t.s)
+        db.prepare('DELETE FROM scene_tiles WHERE id = ?').run(id)
+      }
+      for (const s of scenes) sendTiles(ws, s)
       return
     }
     case 'combat.add': {

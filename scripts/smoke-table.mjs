@@ -420,6 +420,48 @@ check('and so are temporary hit points', (await call('GET', `/api/pages/${heroPa
 gm.send({ t: 'token.delete', ids: [heroTok.id] })
 await sleep(100)
 
+// tiles and templates
+const tilePng = await sharp({ create: { width: 300, height: 150, channels: 3, background: '#a52' } }).png().toBuffer()
+const tileUpload = async (cookie, world) => {
+  const f = new FormData()
+  f.append('file', new Blob([tilePng], { type: 'image/png' }), 'table.png')
+  return (await fetch(`${base}/api/workspaces/${world}/uploads`, { method: 'POST', headers: { cookie }, body: f })).json()
+}
+const tileImg = await tileUpload(gmCookie, ws)
+pa.send({ t: 'tile.add', sceneId: crypt, image: tileImg.url, x: 100, y: 100, op: 'pt' })
+check('players cannot place tiles', !!(await pa.until((m) => m.t === 'nack' && m.op === 'pt')))
+gm.send({ t: 'tile.add', sceneId: crypt, image: tileImg.url, x: 350, y: 280 })
+const tl = await pa.until((m) => m.t === 'tiles' && m.tiles.length === 1)
+check('the GM places a tile; everyone sees it, sized to about three cells', !!tl && tl.tiles[0].w === 210 && tl.tiles[0].h === 105 && tl.tiles[0].layer === 'bg')
+const tileId = tl.tiles[0].id
+gm.send({ t: 'tile.update', id: tileId, patch: { x: 400, rotation: 45, w: 300, layer: 'overhead' } })
+check('a tile is moved, turned, resized and moved to another layer', !!(await pa.until((m) => m.t === 'tiles' && m.tiles[0]?.x === 400 && m.tiles[0].rotation === 45 && m.tiles[0].layer === 'overhead' && m.tiles[0].w === 300)))
+gm.send({ t: 'tile.update', id: tileId, patch: { layer: 'gm' } })
+check('a tile on the GM layer is taken away from the players', !!(await pa.until((m) => m.t === 'tiles' && m.tiles.length === 0)) && !!(await gm.until((m) => m.t === 'tiles' && m.tiles.length === 1 && m.tiles[0].layer === 'gm')))
+gm.send({ t: 'tile.update', id: tileId, patch: { layer: 'bg', hidden: true } })
+await sleep(200)
+check('and so is a hidden one', !pa.msgs.filter((m) => m.t === 'tiles').at(-1).tiles.length)
+gm.send({ t: 'tile.update', id: tileId, patch: { hidden: false } })
+await pa.until((m) => m.t === 'tiles' && m.tiles.length === 1)
+pa.send({ t: 'tile.update', id: tileId, patch: { x: 1 }, op: 'pu' })
+check('players cannot change tiles', !!(await pa.until((m) => m.t === 'nack' && m.op === 'pu')))
+gm.send({ t: 'tile.update', id: tileId, patch: { layer: 'sky' }, op: 'bl' })
+check('an unknown layer is refused', !!(await gm.until((m) => m.t === 'nack' && m.op === 'bl')))
+const otherImg = await tileUpload(gmCookie, ws2)
+gm.send({ t: 'tile.add', sceneId: crypt, image: otherImg.url, x: 0, y: 0, op: 'oi' })
+check("another world's image cannot be a tile", !!(await gm.until((m) => m.t === 'nack' && m.op === 'oi')))
+const pa4 = await open(alice.cookie, ws)
+check('tiles come with the view', (await pa4.until((m) => m.t === 'snapshot'))?.tiles.length === 1)
+pa4.sock.close()
+gm.send({ t: 'tile.delete', ids: [tileId] })
+check('the GM removes a tile', !!(await pa.until((m) => m.t === 'tiles' && m.tiles.length === 0)))
+for (const kind of ['cone', 'beam', 'blast', 'cube']) {
+  pa.send({ t: 'draw.add', sceneId: crypt, kind, points: [{ x: 100, y: 100 }, { x: 240, y: 100 }], color: '#ff5252', width: 3 })
+  check(`a ${kind} template can be placed`, !!(await gm.until((m) => m.t === 'draw' && m.drawing.kind === kind)))
+}
+gm.send({ t: 'draw.clear', sceneId: crypt })
+await sleep(100)
+
 // bad input
 gm.send({ t: 'token.update', id: aria.id, patch: { size: 9999 }, op: 'big' })
 check('out of range values are refused', !!(await gm.until((m) => m.t === 'nack' && m.op === 'big')))

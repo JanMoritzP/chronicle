@@ -1,3 +1,4 @@
+import { makePng } from '../lib/png'
 import { expect, grantAccess, test } from '../fixtures'
 
 const openTable = async (page: import('@playwright/test').Page) => {
@@ -277,4 +278,46 @@ test('canvas tools: drag, measure, ping, draw, walls, and a player under fog', {
   await player.mouse.up()
   expect(errors).toEqual([])
   expect(playerErrors).toEqual([])
+})
+
+test('layers and templates: place a tile, move it to another layer, and draw a spell area', { tag: '@feature:table.tiles' }, async ({ app }) => {
+  await openTable(app)
+  await makeScene(app, 'Hall')
+  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Scene' }).click()
+  const chooser = app.waitForEvent('filechooser')
+  await app.getByRole('button', { name: 'Add a tile' }).click()
+  await (await chooser).setFiles({ name: 'table.png', mimeType: 'image/png', buffer: makePng(300, 150) })
+  const tiles = app.getByRole('list', { name: 'Tiles on this scene' })
+  await expect(tiles).toContainText('Tile 1')
+  await tiles.getByRole('button', { name: /Tile 1/ }).click()
+  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Token' }).click()
+  await app.getByLabel('Tile width').fill('420')
+  await app.getByLabel('Tile width').press('Enter')
+  await expect(app.getByLabel('Tile width')).toHaveValue('420')
+  await app.getByRole('button', { name: 'Hide', exact: true }).click()
+  await expect(app.getByRole('button', { name: 'Reveal' })).toBeVisible()
+  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Scene' }).click()
+  await expect(tiles).toContainText('hidden')
+  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Token' }).click()
+  await app.getByRole('button', { name: 'Delete tile' }).click()
+  await app.getByRole('button', { name: 'Delete', exact: true }).click()
+  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Scene' }).click()
+  await expect(tiles).not.toContainText('Tile 1')
+
+  // a cone and a burst, each as many cells long as it was dragged
+  const errors: string[] = []
+  app.on('pageerror', (e) => errors.push(e.message))
+  const box = (await app.locator('.tt-canvas canvas').boundingBox())!
+  const cx = box.x + box.width / 2, cy = box.y + box.height / 2
+  await app.getByRole('button', { name: 'Draw', exact: true }).click()
+  for (const kind of ['Cone', 'Burst', 'Ray', 'Cube']) {
+    await app.getByRole('group', { name: 'Kind of drawing' }).getByRole('button', { name: kind, exact: true }).click()
+    await app.mouse.move(cx - 150, cy)
+    await app.mouse.down()
+    await app.mouse.move(cx - 60, cy + 10, { steps: 5 })
+    await app.mouse.up()
+  }
+  await app.getByRole('button', { name: 'Erase', exact: true }).click()
+  await app.mouse.click(cx - 100, cy + 4)
+  expect(errors).toEqual([])
 })

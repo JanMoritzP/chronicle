@@ -1,6 +1,6 @@
 import { Application, Color, Container, Graphics, Sprite, Text, Texture } from 'pixi.js'
 import { FogLayer, type Light, type Wall } from './fog'
-import type { DrawKind, Drawing } from './state'
+import type { DrawKind, Drawing, Tile } from './state'
 import { formatDistance, hexCentres, hexCorners, measure, snap, tokenPixels, type Pt } from './grid'
 import type { Cursor, Ruler, Scene, Token } from './state'
 
@@ -21,6 +21,8 @@ export interface Hooks {
   onDraw(d: { kind: DrawKind; points: Pt[]; color: string; width: number; fill: string }): void
   onText(p: Pt, done: (text: string | null) => void): void
   onDrawErase(id: string): void
+  onTileSelect(id: string | null): void
+  onTileMove(id: string, x: number, y: number): void
   colorOf(userId: string): number
 }
 export type Tool = 'select' | 'ruler' | 'wall' | 'erase' | 'draw'
@@ -62,6 +64,13 @@ export class TableEngine {
   private marquee = new Graphics()
   private wallG = new Graphics()
   private drawLayer = new Container()
+  private tileBg = new Container()
+  private tileOver = new Container()
+  private tileGm = new Container()
+  private tileSel = new Graphics()
+  private tiles: Tile[] = []
+  private tileBoxes = new Map<string, Container>()
+  private selectedTile: string | null = null
   private drawStyle: { kind: DrawKind; color: string; width: number; fill: string } = { kind: 'free', color: '#ff5252', width: 4, fill: '' }
   private drawings: Drawing[] = []
   private stroke: Pt[] = []
@@ -74,12 +83,13 @@ export class TableEngine {
   private fog!: FogLayer
   private turnId: string | null = null
   private me = { id: '', gm: true, canDoors: false }
-  private drag: null | { kind: 'pan' | 'tokens' | 'ruler' | 'marquee' | 'draw'; start: Pt; screen: Pt; origins?: Map<string, Pt>; lead?: string; moved: boolean; sent: number } = null
+  private drag: null | { kind: 'pan' | 'tokens' | 'ruler' | 'marquee' | 'draw' | 'tile'; start: Pt; screen: Pt; origins?: Map<string, Pt>; lead?: string; moved: boolean; sent: number } = null
   private pointers = new Map<number, Pt>()
   private pinch: null | { dist: number; scale: number } = null
   private longPress: number | undefined
   private lastCursor = 0
   private raf = 0
+  private needFit = false
   private activeUntil = 0
 
   constructor(private host: HTMLElement, private hooks: Hooks) {}
@@ -94,7 +104,7 @@ export class TableEngine {
     this.fog = new FogLayer(this.app)
     this.fog.onExplored = (png) => this.hooks.onExplored(png)
     this.fog.onDrawn = () => this.poke()
-    this.world.addChild(this.bg, this.gridG, this.drawLayer, this.tokenLayer, this.fog.view, this.wallG, this.others, this.ruleG, this.ruleLabel, this.overlay, this.wallPreview, this.strokeG, this.marquee)
+    this.world.addChild(this.bg, this.gridG, this.tileBg, this.drawLayer, this.tokenLayer, this.tileOver, this.tileGm, this.fog.view, this.wallG, this.others, this.ruleG, this.ruleLabel, this.overlay, this.wallPreview, this.strokeG, this.tileSel, this.marquee)
     this.ruleLabel.visible = false
     this.app.stage.addChild(this.world)
     const c = this.app.canvas
@@ -131,7 +141,7 @@ export class TableEngine {
     if (!this.ready) return
     this.drawGrid()
     if (changed) this.drawBackground()
-    if (scene && this.fitted !== scene.id) { this.fitted = scene.id; this.fit() }
+    if (scene && this.fitted !== scene.id) { this.fitted = scene.id; this.needFit = true; this.fit() }
     for (const v of this.views.values()) this.layout(v)
     this.fog.configure(scene, !this.me.gm)
     this.refreshVision()
@@ -325,6 +335,92 @@ export class TableEngine {
   setLights(lights: Light[]) { this.poke(); if (this.ready) this.fog.setLights(lights) }
   setExplored(png: string | null) { this.poke(); if (this.ready) void this.fog.loadExplored(png) }
   setWallKind(kind: Wall['kind']) { this.wallKind = kind }
+  setTiles(list: Tile[]) {
+    this.poke()
+    this.tiles = list
+    if (!this.ready) return
+    for (const c of [this.tileBg, this.tileOver, this.tileGm]) c.removeChildren().forEach((x) => x.destroy({ children: true }))
+    this.tileBoxes.clear()
+    for (const t of list) {
+      const box = new Container()
+      box.position.set(t.x, t.y)
+      box.rotation = (t.rotation * Math.PI) / 180
+      box.alpha = t.layer === 'gm' || t.hidden ? 0.5 : 1
+      const sprite = new Sprite()
+      sprite.anchor.set(0.5)
+      box.addChild(sprite)
+      loadTexture(t.image).then((tex) => {
+        if (!tex || box.destroyed) return
+        sprite.texture = tex
+        sprite.width = t.w
+        sprite.height = t.h
+        this.poke()
+      })
+      ;(t.layer === 'overhead' ? this.tileOver : t.layer === 'gm' ? this.tileGm : this.tileBg).addChild(box)
+      this.tileBoxes.set(t.id, box)
+    }
+    this.drawTileSel()
+  }
+
+  setSelectedTile(id: string | null) { this.poke(); this.selectedTile = id; this.drawTileSel() }
+
+  private drawTileSel() {
+    this.tileSel.clear()
+    const t = this.tiles.find((x) => x.id === this.selectedTile)
+    if (!t || !this.ready) return
+    this.tileSel.position.set(t.x, t.y)
+    this.tileSel.rotation = (t.rotation * Math.PI) / 180
+    this.tileSel.rect(-t.w / 2, -t.h / 2, t.w, t.h).stroke({ width: 3 / this.world.scale.x, color: 0xffd23f })
+  }
+
+  /** The tile under a point (only the GM works with tiles). */
+  private hitTile(p: Pt): Tile | null {
+    for (const t of [...this.tiles].reverse()) {
+      const rot = (-t.rotation * Math.PI) / 180
+      const dx = p.x - t.x, dy = p.y - t.y
+      const lx = dx * Math.cos(rot) - dy * Math.sin(rot), ly = dx * Math.sin(rot) + dy * Math.cos(rot)
+      if (Math.abs(lx) <= t.w / 2 && Math.abs(ly) <= t.h / 2) return t
+    }
+    return null
+  }
+
+  /** A spell area is a whole number of cells long, so what it covers can be counted. */
+  private areaEnd(a: Pt, b: Pt): Pt {
+    const s = this.scene
+    const len = Math.hypot(b.x - a.x, b.y - a.y)
+    if (!s || len === 0) return b
+    const cells = Math.max(1, Math.round(len / s.gridSize))
+    return { x: a.x + ((b.x - a.x) / len) * cells * s.gridSize, y: a.y + ((b.y - a.y) / len) * cells * s.gridSize }
+  }
+
+  /** Cone, ray, burst and cube as the 5e rules draw them from the origin to the far end. */
+  private area(kind: DrawKind, a: Pt, b: Pt, color: number): Container {
+    const box = new Container()
+    const g = new Graphics()
+    const len = Math.hypot(b.x - a.x, b.y - a.y) || 1
+    const ang = Math.atan2(b.y - a.y, b.x - a.x)
+    const px = -Math.sin(ang), py = Math.cos(ang)
+    const s = this.scene
+    if (kind === 'blast') g.circle(a.x, a.y, len)
+    else if (kind === 'cone') {
+      const half = Math.atan(0.5), R = len / Math.cos(half)
+      g.poly([a.x, a.y, a.x + R * Math.cos(ang - half), a.y + R * Math.sin(ang - half), a.x + R * Math.cos(ang + half), a.y + R * Math.sin(ang + half)])
+    } else {
+      // a ray is one cell wide, a cube as wide as it is long, with the origin in the middle of one face
+      const half = (kind === 'beam' ? (s?.gridSize ?? 70) : len) / 2
+      g.poly([a.x + px * half, a.y + py * half, b.x + px * half, b.y + py * half, b.x - px * half, b.y - py * half, a.x - px * half, a.y - py * half])
+    }
+    g.fill({ color, alpha: 0.28 }).stroke({ width: 2 / this.world.scale.x, color, alpha: 0.9 })
+    box.addChild(g)
+    if (s) {
+      const label = new Text({ text: formatDistance((len / s.gridSize) * s.dist, s.unit), style: { fontSize: 14, fill: 0xffffff, fontFamily: 'sans-serif', stroke: { color: 0x000000, width: 3 } } })
+      label.scale.set(1 / this.world.scale.x)
+      label.position.set(b.x + 8 / this.world.scale.x, b.y - 22 / this.world.scale.x)
+      box.addChild(label)
+    }
+    return box
+  }
+
   setDrawStyle(style: { kind: DrawKind; color: string; width: number; fill: string }) { this.poke(); this.drawStyle = style }
 
   setDrawings(list: Drawing[]) { this.poke();
@@ -339,6 +435,7 @@ export class TableEngine {
     const box = new Container()
     box.alpha = alpha
     const c = new Color(color).toNumber()
+    if (kind === 'cone' || kind === 'beam' || kind === 'blast' || kind === 'cube') { box.addChild(this.area(kind, pts[0], pts[pts.length - 1], c)); return box }
     if (kind === 'text') {
       const t = new Text({ text, style: { fontSize: 14 + width * 3, fill: c, fontFamily: 'sans-serif', fontWeight: '700', stroke: { color: 0x000000, width: 4 } } })
       t.position.set(pts[0].x, pts[0].y)
@@ -373,7 +470,8 @@ export class TableEngine {
       let near = false
       if (d.kind === 'text') near = Math.abs(p.x - a.x - 40) < 60 + reach && Math.abs(p.y - a.y - 10) < 20 + reach
       else if (d.kind === 'free') near = d.points.length === 1 ? Math.hypot(p.x - a.x, p.y - a.y) <= reach : d.points.some((q, i) => i > 0 && dist(d.points[i - 1], q) <= reach)
-      else if (d.kind === 'line') near = dist(a, b) <= reach
+      else if (d.kind === 'blast') near = Math.hypot(p.x - a.x, p.y - a.y) <= Math.hypot(b.x - a.x, b.y - a.y)
+      else if (d.kind === 'line' || d.kind === 'beam' || d.kind === 'cone' || d.kind === 'cube') near = dist(a, b) <= Math.max(reach, this.scene ? this.scene.gridSize / 2 : reach)
       else if (d.kind === 'rect') {
         const [x0, x1, y0, y1] = [Math.min(a.x, b.x), Math.max(a.x, b.x), Math.min(a.y, b.y), Math.max(a.y, b.y)]
         near = d.fill ? p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1 : [[{ x: x0, y: y0 }, { x: x1, y: y0 }], [{ x: x1, y: y0 }, { x: x1, y: y1 }], [{ x: x1, y: y1 }, { x: x0, y: y1 }], [{ x: x0, y: y1 }, { x: x0, y: y0 }]].some(([s, e]) => dist(s, e) <= reach)
@@ -489,7 +587,10 @@ export class TableEngine {
   fit() { this.poke();
     const s = this.scene
     if (!s || !this.ready) return
-    const w = this.host.clientWidth || 800, h = this.host.clientHeight || 600
+    // the view may not have its size yet (a tab that is still opening): try again on the next frame
+    if (!this.host.clientWidth || !this.host.clientHeight) { this.needFit = true; return }
+    this.needFit = false
+    const w = this.host.clientWidth, h = this.host.clientHeight
     const k = Math.min(w / s.width, h / s.height) * 0.95
     this.world.scale.set(k)
     this.world.position.set((w - s.width * k) / 2, (h - s.height * k) / 2)
@@ -596,6 +697,16 @@ export class TableEngine {
       }
       return
     }
+    if (!tok && !pan && this.me.gm && this.tool === 'select') {
+      const tile = this.hitTile(world)
+      if (tile) {
+        this.hooks.onTileSelect(tile.id)
+        this.setSelectedTile(tile.id)
+        if (!tile.locked) this.drag = { kind: 'tile', start: world, screen, origins: new Map([[tile.id, { x: tile.x, y: tile.y }]]), lead: tile.id, moved: false, sent: 0 }
+        return
+      }
+      if (this.selectedTile) { this.hooks.onTileSelect(null); this.setSelectedTile(null) }
+    }
     if (e.shiftKey && !pan) {
       this.drag = { kind: 'marquee', start: world, screen, moved: false, sent: 0 }
       return
@@ -652,10 +763,18 @@ export class TableEngine {
         if (now - d.sent > 70) { d.sent = now; this.hooks.onRuler(path) }
         break
       }
+      case 'tile': {
+        const o = d.origins!.get(d.lead!)!
+        const half = this.scene ? this.scene.gridSize / 2 : 1
+        const nx = Math.round((o.x + world.x - d.start.x) / half) * half, ny = Math.round((o.y + world.y - d.start.y) / half) * half
+        this.tileBoxes.get(d.lead!)?.position.set(nx, ny)
+        this.tileSel.position.set(nx, ny)
+        break
+      }
       case 'draw': {
         const last = this.stroke[this.stroke.length - 1]
         if (this.drawStyle.kind === 'free') { if (Math.hypot(world.x - last.x, world.y - last.y) > 3 / this.world.scale.x && this.stroke.length < 590) this.stroke.push(world) }
-        else this.stroke = [d.start, world]
+        else this.stroke = [d.start, ['cone', 'beam', 'blast', 'cube'].includes(this.drawStyle.kind) ? this.areaEnd(d.start, world) : world]
         this.strokeG.removeChildren().forEach((c) => c.destroy({ children: true }))
         this.strokeG.addChild(this.shape(this.drawStyle.kind, this.stroke, this.drawStyle.color, this.drawStyle.width, this.drawStyle.fill, '', 0.8))
         break
@@ -686,6 +805,10 @@ export class TableEngine {
     if (!d) return
     if (d.kind === 'tokens' && d.moved) this.flushMove(d, true)
     if (d.kind === 'tokens' || d.kind === 'ruler') { this.ruleG.clear(); this.ruleLabel.visible = false; if (d.moved) this.hooks.onRuler(null) }
+    if (d.kind === 'tile' && d.moved) {
+      const box = this.tileBoxes.get(d.lead!)
+      if (box) { const t = this.tiles.find((x) => x.id === d.lead); if (t) { t.x = box.x; t.y = box.y }; this.hooks.onTileMove(d.lead!, box.x, box.y) }
+    }
     if (d.kind === 'draw') {
       this.strokeG.removeChildren().forEach((c) => c.destroy({ children: true }))
       const pts = d.moved || this.drawStyle.kind === 'free' ? this.stroke : []
@@ -731,6 +854,7 @@ export class TableEngine {
 
   private loop = () => {
     this.raf = requestAnimationFrame(this.loop)
+    if (this.needFit && this.host.clientWidth) this.fit()
     if (this.pings.length) { this.tick(); this.poke() }
     if (performance.now() > this.activeUntil) return
     this.app.render()

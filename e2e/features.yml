@@ -432,6 +432,9 @@ areas:
       - id: table.canvas
         name: "Canvas tools: drag, measure, ping, draw, walls, and a player under fog, without errors"
         files: [web/src/tabletop/engine.ts, web/src/tabletop/fog.ts, web/src/tabletop/visibility.ts]
+      - id: table.tiles
+        name: "Layers and templates: tiles, their layers, and spell areas"
+        files: [web/src/components/TableTiles.tsx, web/src/tabletop/engine.ts]
       - id: table.panel
         name: "The GM edits a token from the panel"
         files: [web/src/components/Tabletop.tsx]

@@ -6,9 +6,10 @@ import { colorFor } from '../lib/collab'
 import { useStore } from '../store'
 import { TableEngine, type Tool } from '../tabletop/engine'
 import { snap } from '../tabletop/grid'
-import { joinTable, leaveTable, onTableMessage, sendTable, useTable, type Scene, type Token } from '../tabletop/state'
+import { joinTable, leaveTable, onTableMessage, sendTable, useTable, type DrawKind, type Scene, type Token } from '../tabletop/state'
 import { pickImage, uploadImage } from '../tabletop/upload'
 import { EncounterPanel } from './TableEncounters'
+import { TilePanel, TilesSection } from './TableTiles'
 import { ChatPanel, CombatPanel, LinkPage, SightLight, TokenSheet, TokenStats } from './TableParts'
 import { Select } from './Select'
 
@@ -52,7 +53,7 @@ export function TableView() {
         return st.role === 'gm' || (st.role === 'player' && st.settings.playersMoveOwn && !t.locked && !!st.you && t.owners.includes(st.you.id))
       },
       onMove: (moves) => { sendTable({ t: 'token.move', moves }) },
-      onSelect: (ids) => { useTable.setState({ selected: ids }); if (ids.length) setPanel('token') },
+      onSelect: (ids) => { useTable.setState(ids.length ? { selected: ids, selectedTile: null } : { selected: ids }); if (ids.length) setPanel('token') },
       onPing: (p) => { sendTable({ t: 'ping', x: p.x, y: p.y }) },
       onCursor: (p) => { sendTable({ t: 'cursor', x: p.x, y: p.y }) },
       onRuler: (points) => { sendTable({ t: 'ruler', points }) },
@@ -66,6 +67,8 @@ export function TableView() {
         if (id && text?.trim()) sendTable({ t: 'draw.add', sceneId: id, kind: 'text', points: [p], color: styleRef.current.color, width: styleRef.current.width, text: text.trim(), gmOnly: gmOnlyRef.current && useTable.getState().role === 'gm' })
       },
       onDrawErase: (id) => { sendTable({ t: 'draw.delete', ids: [id] }) },
+      onTileSelect: (id) => { useTable.setState(id ? { selectedTile: id, selected: [] } : { selectedTile: null }); if (id) setPanel('token') },
+      onTileMove: (id, x, y) => { sendTable({ t: 'tile.update', id, patch: { x, y } }) },
       onExplored: (png) => { const id = useTable.getState().sceneId; if (id) sendTable({ t: 'fog.save', sceneId: id, mask: png }) },
       colorOf: colorNum,
     })
@@ -88,6 +91,8 @@ export function TableView() {
       e.setSelected(useTable.getState().selected)
       e.setExplored(useTable.getState().fog)
       e.setDrawings(useTable.getState().drawings)
+      e.setTiles(useTable.getState().tiles)
+      e.setSelectedTile(useTable.getState().selectedTile)
       e.setDrawStyle({ kind: 'free', color: '#ff5252', width: 4, fill: '' })
       const turn = () => { const s = useTable.getState(); e.setTurn(s.combat.active ? s.combat.list.find((x) => x.id === s.combat.turn)?.tokenId ?? null : null) }
       turn()
@@ -96,6 +101,8 @@ export function TableView() {
         if (s.scenes !== prev.scenes || s.sceneId !== prev.sceneId) push()
         if (s.combat !== prev.combat || s.tokens !== prev.tokens) turn()
         if (s.drawings !== prev.drawings) e.setDrawings(s.drawings)
+        if (s.tiles !== prev.tiles) e.setTiles(s.tiles)
+        if (s.selectedTile !== prev.selectedTile) e.setSelectedTile(s.selectedTile)
         if (s.walls !== prev.walls) e.setWalls(s.walls)
         if (s.lights !== prev.lights) e.setLights(s.lights)
         if (s.sceneId !== prev.sceneId || s.fog !== prev.fog) e.setExplored(s.fog)
@@ -109,7 +116,7 @@ export function TableView() {
     return () => { off(); e.destroy(); engine.current = null }
   }, [])
 
-  const [draw, setDraw] = useState<{ kind: 'free' | 'line' | 'rect' | 'ellipse' | 'text'; color: string; width: number; fill: boolean }>({ kind: 'free', color: '#ff5252', width: 4, fill: false })
+  const [draw, setDraw] = useState<{ kind: DrawKind; color: string; width: number; fill: boolean }>({ kind: 'free', color: '#ff5252', width: 4, fill: false })
   const [gmOnly, setGmOnly] = useState(false)
   const canDraw = useTable((s) => s.role === 'gm' || (s.role === 'player' && s.settings.playersDraw))
   useEffect(() => {
@@ -123,6 +130,7 @@ export function TableView() {
 
   const tokens = useTable((s) => s.tokens)
   const selected = useTable((s) => s.selected)
+  const selectedTile = useTable((s) => s.selectedTile)
   const one = selected.length === 1 ? tokens.find((t) => t.id === selected[0]) ?? null : null
 
   // keys act on the selection
@@ -134,6 +142,7 @@ export function TableView() {
     else if (e.key === 'Escape') { engine.current?.finishWalls(); useTable.setState({ selected: [] }); setTool('select') }
     else if (e.key === 'f' || e.key === 'F') engine.current?.fit()
     else if (e.key === 'r' && !e.ctrlKey && sel.length) for (const t of sel) sendTable({ t: 'token.update', id: t.id, patch: { rotation: (t.rotation + 45) % 360 } })
+    else if (gm && (e.key === 'Delete' || e.key === 'Backspace') && st.selectedTile && !sel.length) { e.preventDefault(); sendTable({ t: 'tile.delete', ids: [st.selectedTile] }) }
     else if (gm && (e.key === 'Delete' || e.key === 'Backspace') && sel.length) { e.preventDefault(); sendTable({ t: 'token.delete', ids: sel.map((t) => t.id) }) }
     else if (gm && e.key === 'h' && sel.length) for (const t of sel) sendTable({ t: 'token.update', id: t.id, patch: { hidden: !t.hidden } })
     else if (gm && e.key === 'l' && sel.length) for (const t of sel) sendTable({ t: 'token.update', id: t.id, patch: { locked: !t.locked } })
@@ -176,7 +185,7 @@ export function TableView() {
         {canDraw && tool === 'draw' && (
           <>
             <span className="seg tt-kinds" role="group" aria-label="Kind of drawing">
-              {([['free', 'Pen'], ['line', 'Line'], ['rect', 'Box'], ['ellipse', 'Circle'], ['text', 'Text']] as const).map(([k, label]) => <button key={k} className={draw.kind === k ? 'on' : ''} onClick={() => setDraw({ ...draw, kind: k })}>{label}</button>)}
+              {([['free', 'Pen', 'Draw freehand'], ['line', 'Line', 'A straight line'], ['rect', 'Box', 'A rectangle'], ['ellipse', 'Circle', 'An ellipse'], ['text', 'Text', 'Write on the map'], ['cone', 'Cone', 'Spell area: a cone from the origin, as long as it is wide at the end'], ['beam', 'Ray', 'Spell area: a line one cell wide'], ['blast', 'Burst', 'Spell area: a circle from its centre'], ['cube', 'Cube', 'Spell area: a square from the middle of one side']] as const).map(([k, label, hint]) => <button key={k} className={draw.kind === k ? 'on' : ''} title={hint} onClick={() => setDraw({ ...draw, kind: k })}>{label}</button>)}
             </span>
             <span className="tt-swatches" role="group" aria-label="Colour">
               {['#ff5252', '#ffb300', '#66bb6a', '#29b6f6', '#ab47bc', '#ffffff', '#212121'].map((c) => <button key={c} className={`tt-swatch${draw.color === c ? ' on' : ''}`} style={{ background: c }} title={c} aria-label={`Colour ${c}`} onClick={() => setDraw({ ...draw, color: c })} />)}
@@ -217,7 +226,8 @@ export function TableView() {
               <button className={panel === 'chat' ? 'on' : ''} onClick={() => setPanel('chat')}><MessageSquare size={12} /> Chat{unread > 0 && panel !== 'chat' ? ` (${unread})` : ''}</button>
               <button className={panel === 'table' ? 'on' : ''} onClick={() => setPanel('table')}>Table</button>
             </div>
-            {panel === 'token' && <TokenPanel token={one} count={selected.length} />}
+            {panel === 'token' && (selectedTile && !selected.length && gm ? <TilePanel /> : <TokenPanel token={one} count={selected.length} />)}
+            {panel === 'scene' && gm && scene && <TilesSection scene={scene} wsId={wsId} centre={() => engine.current?.centre() ?? { x: scene.width / 2, y: scene.height / 2 }} />}
             {panel === 'scene' && gm && scene && <ScenePanel scene={scene} active={active === scene.id} wsId={wsId} />}
             {panel === 'table' && <TablePanel />}
             {panel === 'chat' && <ChatPanel />}

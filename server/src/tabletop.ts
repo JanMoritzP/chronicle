@@ -118,6 +118,11 @@ export const scenePatch = z.object({
 
 const point = z.object({ x: coord, y: coord })
 const wall = z.object({ x1: coord, y1: coord, x2: coord, y2: coord, kind: z.enum(['wall', 'door', 'secret', 'window']).default('wall') })
+const tileImage = imageUrl.refine((v) => v.length > 0, 'a tile needs an image')
+export const tilePatch = z.object({
+  x: coord, y: coord, w: z.number().min(8).max(20000), h: z.number().min(8).max(20000), rotation: z.number().finite().min(-3600).max(3600),
+  layer: z.enum(['bg', 'overhead', 'gm']), locked: z.boolean(), hidden: z.boolean(), z: z.number().int().min(-1000).max(1000),
+}).partial().strict()
 export const wallPatch = z.object({ x1: coord, y1: coord, x2: coord, y2: coord, kind: z.enum(['wall', 'door', 'secret', 'window']), open: z.boolean() }).partial().strict()
 const hpValue = z.number().int().min(-9999).max(99999)
 export const statPatch = z.object({
@@ -154,12 +159,15 @@ export const clientMessage = z.discriminatedUnion('t', [
   z.object({ t: z.literal('combat.control'), action: z.enum(['start', 'next', 'prev', 'end', 'clear']) }),
   z.object({ t: z.literal('encounter.stage'), id, sceneId: id, x: coord, y: coord, hidden: z.boolean().default(true), combat: z.boolean().default(false) }),
   z.object({
-    t: z.literal('draw.add'), sceneId: id, kind: z.enum(['free', 'line', 'rect', 'ellipse', 'text']), points: z.array(point).min(1).max(600),
+    t: z.literal('draw.add'), sceneId: id, kind: z.enum(['free', 'line', 'rect', 'ellipse', 'text', 'cone', 'beam', 'blast', 'cube']), points: z.array(point).min(1).max(600),
     color: z.string().regex(/^#[0-9a-fA-F]{3,8}$/), width: z.number().min(1).max(40), fill: z.string().regex(/^(#[0-9a-fA-F]{3,8}|)$/).optional(),
     text: z.string().max(200).optional(), gmOnly: z.boolean().optional(),
   }),
   z.object({ t: z.literal('draw.delete'), ids: z.array(id).min(1).max(100) }),
   z.object({ t: z.literal('draw.clear'), sceneId: id }),
+  z.object({ t: z.literal('tile.add'), sceneId: id, image: tileImage, x: coord, y: coord, w: z.number().min(8).max(20000).optional(), h: z.number().min(8).max(20000).optional(), layer: z.enum(['bg', 'overhead', 'gm']).optional() }),
+  z.object({ t: z.literal('tile.update'), id, patch: tilePatch }),
+  z.object({ t: z.literal('tile.delete'), ids: z.array(id).min(1).max(100) }),
   z.object({ t: z.literal('cursor'), x: coord, y: coord }),
   z.object({ t: z.literal('ping'), x: coord, y: coord }),
   z.object({ t: z.literal('ruler'), points: z.array(point).max(50).nullable() }),
