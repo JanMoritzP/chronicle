@@ -14,7 +14,7 @@ docker compose up -d --build
 
 Open `http://localhost:3000` and log in as `gm` with that password. Then change the password under Settings and remove `ADMIN_PASSWORD` from the compose file (it is only read when no user exists yet).
 
-The admin dashboard is on `http://localhost:3001`. Set `ADMIN_PANEL_PASSWORD` for the first start to create its account (user `admin`). The compose file publishes the port on the local machine only; do not forward it to the internet. See "People and world access" below.
+The admin dashboard is on `http://localhost:3001`. Set `ADMIN_PANEL_PASSWORD` for the first start to create its account (user `admin`). The compose file publishes the port to your network (use `127.0.0.1:3001:3001` to allow only the machine itself); do not forward it to the internet. See "People and world access" below.
 
 - Data lives in the named volume `chronicle-data` (`dnd.db`, `uploads/`, `maps/`, `backups/`). Use a named volume, not `./data`: SQLite is unreliable on bind mounts from the Windows file system.
 - The container has a health check (`docker ps` shows `healthy`) and stops cleanly (`docker stop` checkpoints the database first).
@@ -75,7 +75,7 @@ Keep HTTPS on in Cloudflare. The server trusts the proxy headers, so the session
 | `ADMIN_USER` | gm | first start only |
 | `ADMIN_PASSWORD` | | first start only, min 8 chars |
 | `ADMIN_PORT` | 3001 | port of the admin dashboard; `0` turns it off |
-| `ADMIN_HOST` | 127.0.0.1 | address the dashboard listens on (the Docker image uses 0.0.0.0, the compose file publishes it on 127.0.0.1 only) |
+| `ADMIN_HOST` | 127.0.0.1 | address the dashboard listens on (the Docker image uses 0.0.0.0, the compose file publishes it to your network) |
 | `ADMIN_PANEL_USER` | admin | first start only |
 | `ADMIN_PANEL_PASSWORD` | | first start only, min 8 chars. Without it, and with no admin account yet, the dashboard stays off |
 | `SESSION_DAYS` | 30 | |

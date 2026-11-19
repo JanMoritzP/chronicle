@@ -4,8 +4,9 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"
-      # The admin dashboard (who can open which world). Local machine only: do not forward this port to the internet.
-      - "127.0.0.1:3001:3001"
+      # The admin dashboard (who can open which world). Reachable from your network; never forward this port to the internet.
+      # To allow this machine only, use "127.0.0.1:3001:3001".
+      - "3001:3001"
     environment:
       # Only used on the very first start to create the owner account. Change it in the app afterwards, then remove it.
       ADMIN_PASSWORD: "password"
