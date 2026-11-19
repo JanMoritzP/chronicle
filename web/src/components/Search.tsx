@@ -33,6 +33,7 @@ export function SearchDialog() {
         { id: 'graph', label: 'Open graph', hint: bindings.graph[0], run: () => st.navigate({ type: 'graph' }) },
         { id: 'zettel', label: 'Open zettelkasten', hint: bindings.zettels[0], run: () => st.navigate({ type: 'zettels' }) },
         { id: 'maps', label: 'Open maps', run: () => st.navigate({ type: 'maps' }) },
+        { id: 'tabletop', label: 'Open the tabletop', run: () => st.navigate({ type: 'tabletop' }) },
         { id: 'timeline', label: 'Open timeline', run: () => st.navigate({ type: 'timeline' }) },
         { id: 'sessions', label: 'Open sessions and statistics', run: () => st.navigate({ type: 'sessions' }) },
         { id: 'templates', label: 'Open templates', run: () => st.navigate({ type: 'templates' }) },

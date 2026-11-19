@@ -391,6 +391,16 @@ areas:
         name: "A failing request shows a plain message"
         files: [web/src/lib/dialog.ts]
 
+  - id: table
+    name: Tabletop
+    features:
+      - id: table.live
+        name: "The GM adds a scene and tokens and a player sees them live, hidden ones excepted"
+        files: [web/src/components/Tabletop.tsx, web/src/tabletop/state.ts, web/src/tabletop/engine.ts]
+      - id: table.panel
+        name: "The GM edits a token from the panel"
+        files: [web/src/components/Tabletop.tsx]
+
   - id: admin
     name: Admin dashboard
     features:

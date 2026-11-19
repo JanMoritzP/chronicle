@@ -255,6 +255,19 @@ What it does: more than one person works in the same Chronicle at the same time,
 - **Tests.** `node scripts/smoke-multiuser.mjs <url> <user> <pass> <admin-url> <admin-user> <admin-pass>` (access, dashboard, live editing, live stream), `scripts/test-ydoc.ts` (conversion and merging).
 - **Not covered.** Maps, the timeline and relations refresh their lists live but an open map view does not follow another person's edits to its items. Offline edits to a page are kept and merged while the tab stays open; a page opened while offline is read-only.
 
+## Tabletop (phase 1, built)
+
+What it does: the GM and the players share a battle scene. The GM makes scenes and tokens, players move the tokens they own, and everyone sees changes as they happen. The plan for everything beyond this is in `docs/VTT-ROADMAP.md`.
+
+- **Where.** Sidebar, Play group: Tabletop (also "Open the tabletop" in the command list). One table per world. The owner account is the GM; accounts named in the table rules also run it; world editors are players; world viewers only watch.
+- **Scenes.** A scene has a map image (a world upload, up to 25 MB; its size becomes the scene size), a grid (square, hexes with a pointy or flat top, or none), a cell size in pixels, what a cell is worth (5 ft by default, any unit) and a diagonal rule (every second diagonal counts double, every diagonal one cell, straight line, across then down). The GM looks at any scene; "Move players here" brings everyone along, and players always follow the table's scene.
+- **Tokens.** Name, size in cells (half a cell to five), colour or picture, turn, hide, lock and who controls it. They snap to the grid while they are dragged. Players move and turn only the tokens they own (and not locked ones); hidden tokens are never sent to players unless they own them. The panel lists the tokens of the scene so they can be picked without the mouse. Keys: arrows nudge one cell, R turns, H hides, L locks, Delete removes (GM), F fits the scene, Esc clears the selection, Ctrl+A selects all.
+- **Seeing and measuring.** Drag empty ground to move the view, scroll or pinch to zoom, shift-drag to select several. Dragging a token shows the distance it travelled. The ruler tool measures a line and shares it with the others. Alt+click (or holding still on a touch screen) pings; everyone sees the ring. Other people's pointers are shown by name when the table allows it.
+- **Rules of the table.** The GM switches on or off: players move their own tokens, add tokens, ping, share their ruler, and see each other's pointers.
+- **Technical.** WebSocket `/api/table/:world` (`server/src/table.ts`, rules in `tabletop.ts`), the browser side in `web/src/tabletop/` (PixiJS scene in `engine.ts`, grid maths in `grid.ts`, live state in `state.ts`) and `web/src/components/Tabletop.tsx`. Tables `scenes`, `tokens`, `table_state` (backed up and restored with the rest). Not carried by world copy or export yet.
+- **Tests.** `scripts/smoke-table.mjs` (who sees and may do what), `scripts/test-grid.ts` (snapping and distances), `e2e/tests/tabletop.spec.ts`.
+- **Not done yet.** Actors on tokens, hit points, dice and chat (phase 2), walls, light and fog (phase 3), drawing and layers (phase 4), combat (phase 5).
+
 ## Page history (built)
 
 What it does: every edit to a page is recorded with who made it and when, and any earlier version can be restored in full. The clock button on a page opens the history.

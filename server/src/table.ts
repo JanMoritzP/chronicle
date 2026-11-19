@@ -94,12 +94,17 @@ function sendView(c: Conn) {
   send(c, { t: 'view', sceneId: c.scene, tokens: tokensFor(c, c.scene) })
 }
 
+/** Everyone who may open the world, so the GM can hand out tokens to people who are not online. */
+const membersOf = (ws: string) => db.prepare(
+  `SELECT u.id, u.username, u.role FROM users u WHERE u.role = 'owner' OR u.id IN (SELECT user_id FROM workspace_members WHERE workspace_id = ?) ORDER BY u.username`,
+).all(ws) as { id: string; username: string; role: string }[]
+
 function sendSnapshot(c: Conn) {
   const { active, settings } = stateOf(c.ws)
   viewFor(c, c.scene)
   send(c, {
     t: 'snapshot', you: { id: c.user.id, username: c.user.username, role: c.role }, settings, scenes: scenesOf(c.ws), active,
-    sceneId: c.scene, tokens: tokensFor(c, c.scene), online: onlineIn(c.ws),
+    sceneId: c.scene, tokens: tokensFor(c, c.scene), online: onlineIn(c.ws), members: membersOf(c.ws),
   })
 }
 

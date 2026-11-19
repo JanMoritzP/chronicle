@@ -6,6 +6,7 @@ import { GraphView } from './components/Graph'
 import { HoverPreview } from './components/HoverPreview'
 import { MapView } from './components/MapView'
 import { MapsView, TimelineView } from './components/MapsViews'
+import { TableView } from './components/Tabletop'
 import { RelationsView } from './components/Relations'
 import { SessionsView } from './components/Sessions'
 import { TemplateEditor, TemplatesView } from './components/Templates'
@@ -68,6 +69,7 @@ function viewTitle(v: View, pages: { id: string; title: string }[]) {
     case 'settings': return 'Settings'
     case 'manual': return 'Manual'
     case 'maps': return 'Maps'
+    case 'tabletop': return 'Tabletop'
     case 'timeline': return 'Timeline'
     case 'relations': return 'Relations'
     case 'sessions': return 'Sessions'
@@ -95,6 +97,7 @@ function ViewRouter({ view }: { view: View }) {
     case 'settings': return <SettingsView />
     case 'manual': return <ManualView />
     case 'maps': return <MapsView />
+    case 'tabletop': return <TableView />
     case 'timeline': return <TimelineView />
     case 'relations': return <RelationsView />
     case 'sessions': return <SessionsView />

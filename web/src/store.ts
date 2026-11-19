@@ -15,6 +15,7 @@ export type View =
   | { type: 'tag'; tag: string }
   | { type: 'trash' }
   | { type: 'maps' }
+  | { type: 'tabletop' }
   | { type: 'map'; id: string; item?: string; place?: string }
   | { type: 'timeline' }
   | { type: 'relations' }

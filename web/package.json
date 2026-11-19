@@ -30,6 +30,7 @@
     "lib0": "^0.2.120",
     "lucide-react": "^0.540.0",
     "minisearch": "^7.0.0",
+    "pixi.js": "^8.23.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "y-protocols": "^1.0.7",

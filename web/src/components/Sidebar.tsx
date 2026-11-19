@@ -1,6 +1,6 @@
 import { useUnreadComments } from './Comments'
 import {
-  BookOpen, CalendarDays, Check, ChevronDown, ChevronRight, ChevronsUpDown, CircleHelp, FilePlus2, FolderPlus, Hash, Home, Inbox, LayoutTemplate, Library, ListTodo, Map as MapIcon, MessageSquare, Network, Plus, ScrollText, Search, Settings, Shapes, Trash2, Users, Zap,
+  BookOpen, Swords, CalendarDays, Check, ChevronDown, ChevronRight, ChevronsUpDown, CircleHelp, FilePlus2, FolderPlus, Hash, Home, Inbox, LayoutTemplate, Library, ListTodo, Map as MapIcon, MessageSquare, Network, Plus, ScrollText, Search, Settings, Shapes, Trash2, Users, Zap,
 } from 'lucide-react'
 import { useMemo, useRef, useState } from 'react'
 import { api } from '../api'
@@ -211,6 +211,7 @@ export function Sidebar() {
       <div className="scroll">
         <nav className="nav-group" aria-label="Play">
           <NavItem icon={<Inbox size={15} />} label="Zettelkasten" badge={unprocessed} to={{ type: 'zettels' }} />
+          <NavItem icon={<Swords size={15} />} label="Tabletop" to={{ type: 'tabletop' }} />
           <NavItem icon={<BookOpen size={15} />} label="Sessions" to={{ type: 'sessions' }} />
           <NavItem icon={<ListTodo size={15} />} label="Todos" badge={openTodos} to={{ type: 'todos' }} />
           <NavItem icon={<MessageSquare size={15} />} label="Comments" badge={unreadComments} badgeTitle="Open comments for you" to={{ type: 'comments' }} />

@@ -8,7 +8,7 @@ Goal: run a complete D&D 5e game inside Chronicle (maps, tokens, vision, combat,
 
 - **Phase 2a:** model and storage done (see below); renderer next.
 - **Phase 0 and 1, server side: done.** `server/src/table.ts` is the table channel (WebSocket `/api/table/:world`), `server/src/tabletop.ts` holds the rules (roles, who sees and moves what, message shapes) and tables `scenes`, `tokens`, `table_state` came with the newest migration. One table per world for now (no separate `tables` row); the owner account and accounts named in the settings are GMs, world editors are players, world viewers are spectators. The server is the only writer and sends each connection only what it may see (hidden tokens reach only GMs and owners). A reconnect gets a fresh snapshot instead of a catch-up log. Messages: view, scene.create/update/delete/activate, token.add/update/move/delete, settings.set, and the short-lived cursor, ping and ruler. Test: `node scripts/smoke-table.mjs <url> gm <pass>`.
-- **Phase 1, web side:** the Pixi scene view comes next.
+- **Phase 1: done** (scenes, grid snapping and diagonal rules, tokens, ownership, hiding, ruler, pings, cursors, panel). Documented in ROADMAP.md under Tabletop. Missing from the phase 1 list: camera bookmarks, "bring players to my view", scene folders, undo of a move, multi-waypoint ruler.
 
 ## 1. What we already have and can reuse
 
