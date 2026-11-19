@@ -150,10 +150,32 @@ const js = String.raw`
     return call('GET', '/api/overview').then(function (d) { state.data = d; state.error = ''; render() }).catch(fail)
   }
   function fail(e) {
-    if (e.status === 401) { state.me = null; state.data = null; return render() }
+    if (e.status === 401) { stopEvents(); state.me = null; state.data = null; return render() }
     state.error = e.message
     render()
   }
+  // The server says when someone comes online or leaves; there is no timer.
+  var events = null
+  function connectEvents() {
+    if (events || !window.EventSource) return
+    var seen = false
+    events = new EventSource('/api/events')
+    // after a dropped connection the page missed notices, so it asks again once the stream is back
+    events.onopen = function () { if (seen) load(); seen = true }
+    events.onmessage = function () {
+      if (!state.me) return
+      if (state.tab === 'online') { if (!document.querySelector('dialog[open]')) load(); return }
+      // another tab: refresh the count in the tab bar without redrawing a form the person may be typing in
+      call('GET', '/api/overview').then(function (d) {
+        if (!state.data) return
+        state.data.online = d.online
+        var t = document.querySelectorAll('.tab')[2]
+        if (t) t.textContent = 'Online (' + d.online.length + ')'
+      }).catch(function () {})
+    }
+    events.onerror = function () { if (events && events.readyState === 2) stopEvents() }
+  }
+  function stopEvents() { if (events) { events.close(); events = null } }
   function act(promise) { return promise.then(load).catch(fail) }
 
   var ROLES = [['viewer', 'Viewer'], ['editor', 'Editor'], ['owner', 'Owner']]
@@ -309,7 +331,7 @@ const js = String.raw`
       h('h1', { class: 'grow' }, 'Chronicle admin'),
       h('span', { class: 'muted small' }, 'Signed in as ' + state.me.username),
       h('button', { class: 'btn sm', onclick: passwordDialog }, 'Change password'),
-      h('button', { class: 'btn sm', onclick: function () { call('POST', '/api/logout', {}).then(function () { state.me = null; state.data = null; render() }) } }, 'Sign out')))
+      h('button', { class: 'btn sm', onclick: function () { call('POST', '/api/logout', {}).then(function () { stopEvents(); state.me = null; state.data = null; render() }) } }, 'Sign out')))
     var tabs = [['worlds', 'Worlds'], ['people', 'People'], ['online', 'Online' + (d ? ' (' + d.online.length + ')' : '')]]
     app.appendChild(h('main', {},
       h('div', { class: 'tabs', role: 'tablist' }, tabs.map(function (t) {
@@ -328,6 +350,7 @@ const js = String.raw`
       e.preventDefault()
       call('POST', '/api/login', { username: u.value, password: p.value }).then(function (me) {
         state.me = me
+        connectEvents()
         load()
       }).catch(function (x) { err.textContent = x.message })
     } },
@@ -340,8 +363,7 @@ const js = String.raw`
     return form
   }
 
-  call('GET', '/api/me').then(function (me) { state.me = me; return load() }).catch(function () { render() })
-  setInterval(function () { if (state.me && state.tab === 'online' && !document.querySelector('dialog[open]')) load() }, 5000)
+  call('GET', '/api/me').then(function (me) { state.me = me; connectEvents(); return load() }).catch(function () { render() })
 })()
 `
 

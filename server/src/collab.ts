@@ -11,6 +11,7 @@ import { db, now } from './db.js'
 import { ensureHeadingIds } from './doc.js'
 import { publishWorld } from './live.js'
 import { applyContent, contentHooks, pageDerived, type Author, type PageRow } from './pages.js'
+import { presenceChanged } from './presence.js'
 import { editTodoIn, fragmentToDoc, seedFragment } from './ydoc.js'
 
 /**
@@ -115,6 +116,7 @@ function leave(room: Room, c: Conn) {
   // a room that was dropped or disposed already saved (or deliberately discarded) its document
   if (rooms.get(room.pageId) !== room) return
   room.conns.delete(c)
+  presenceChanged()
   awarenessProtocol.removeAwarenessStates(room.awareness, [...c.clientIds], null)
   if (!room.conns.size) { persist(room); disposeRoom(room) }
 }
@@ -140,6 +142,7 @@ function onMessage(room: Room, c: Conn, data: Uint8Array) {
 function connect(socket: WebSocket, room: Room, user: AuthUser, canWrite: boolean) {
   const c: Conn = { socket, user, canWrite, clientIds: new Set(), alive: true }
   room.conns.add(c)
+  presenceChanged()
   socket.on('message', (raw: RawData, isBinary: boolean) => {
     if (!isBinary) return
     try { onMessage(room, c, new Uint8Array(raw as Buffer)) } catch { socket.close(1003, 'bad message') }
@@ -209,6 +212,7 @@ function dropRoom(room: Room, save: boolean) {
     send(c, JSON.stringify({ t: 'reload' }))
     c.socket.close(CLOSE_RELOAD, 'page replaced')
   }
+  presenceChanged()
   disposeRoom(room)
 }
 
@@ -245,6 +249,7 @@ export function revalidateCollab(changedUsers?: string[]) {
       c.canWrite = role === 'editor'
     }
   }
+  presenceChanged()
 }
 
 /** Who is editing right now, for the admin dashboard. */

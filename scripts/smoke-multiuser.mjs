@@ -65,6 +65,28 @@ const ov = (await adm('GET', '/api/overview', null, ac)).data
 check('overview lists members and online people', ov.worlds.find((w) => w.id === world.id)?.members.length === 2 && Array.isArray(ov.online))
 check('last owner cannot be demoted', (await adm('PATCH', `/api/users/${ov.users.find((u) => u.role === 'owner').id}`, { role: 'editor' }, ac)).status === 400)
 
+// ---------- admin dashboard stream ----------
+check('the dashboard stream refuses anonymous requests', (await fetch(`${adminBase}/api/events`)).status === 401)
+const dash = new AbortController()
+const stream = await fetch(`${adminBase}/api/events`, { headers: { cookie: ac }, signal: dash.signal })
+check('the dashboard stream opens', stream.status === 200 && (stream.headers.get('content-type') ?? '').includes('text/event-stream'))
+let notices = 0
+;(async () => {
+  const rd = stream.body.getReader()
+  const dec = new TextDecoder()
+  try { for (;;) { const { done, value } = await rd.read(); if (done) break; notices += (dec.decode(value).match(/"k":"online"/g) ?? []).length } } catch { /* aborted */ }
+})()
+await sleep(400)
+const seenBefore = notices
+const comesOnline = await fetch(`${base}/api/live?c=smoke-dash`, { headers: { cookie: aliceC } })
+await sleep(700)
+check('someone coming online is announced to the dashboard', notices > seenBefore)
+const seenOnline = notices
+await comesOnline.body.cancel()
+await sleep(700)
+check('someone leaving is announced to the dashboard', notices > seenOnline)
+dash.abort()
+
 // ---------- live event stream ----------
 const events = []
 const live = await fetch(`${base}/api/live?ws=${world.id}&c=smoke-owner`, { headers: { cookie: owner } })

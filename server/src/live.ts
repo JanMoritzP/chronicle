@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify'
 import { requireUser, type AuthUser } from './auth.js'
 import { db } from './db.js'
 import { visibleWorldIds, worldRole } from './access.js'
+import { presenceChanged } from './presence.js'
 
 /**
  * One server-sent-events stream per open browser tab. It carries "something changed" notices for the world the tab is in,
@@ -55,6 +56,7 @@ export function revalidateLive(changedUsers?: string[]) {
     write(c, frame({ k: 'worlds', ids: visibleWorldIds(row) }))
   }
   for (const ws of touched) announce(ws)
+  presenceChanged()
 }
 
 function userRow(id: string): AuthUser | undefined {
@@ -85,11 +87,13 @@ export async function liveRoutes(app: FastifyInstance) {
     conns.add(conn)
     res.write('retry: 3000\n\n')
     announce(ws)
+    presenceChanged()
     const beat = setInterval(() => write(conn, ': keep-alive\n\n'), 25_000)
     req.raw.on('close', () => {
       clearInterval(beat)
       conns.delete(conn)
       announce(conn.ws)
+      presenceChanged()
     })
   })
 }

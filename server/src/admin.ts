@@ -11,6 +11,7 @@ import { config } from './config.js'
 import { db, now } from './db.js'
 import { onlineSnapshot, revalidateLive } from './live.js'
 import { uid } from './pages.js'
+import { onPresenceChange } from './presence.js'
 
 /**
  * The admin dashboard: a second server on its own port with its own account and login, so it can stay off the internet
@@ -153,6 +154,21 @@ export async function startAdmin() {
   })
 
   app.get('/api/overview', { preHandler: requireAdmin }, async () => overview())
+
+  // Pushes a notice whenever someone comes online, leaves or opens another page, so the Online tab never waits for a timer.
+  // The notice carries no data: the page asks for the overview again, so everything stays behind the same login check.
+  const streams = new Set<import('node:http').ServerResponse>()
+  onPresenceChange(() => { for (const r of streams) { try { r.write('data: {"k":"online"}\n\n') } catch { streams.delete(r) } } })
+  app.get('/api/events', { preHandler: requireAdmin }, async (req, reply) => {
+    reply.hijack()
+    const res = reply.raw
+    res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive', 'X-Accel-Buffering': 'no', 'X-Content-Type-Options': 'nosniff' })
+    res.write('retry: 3000\n\n')
+    streams.add(res)
+    const beat = setInterval(() => { try { res.write(': keep-alive\n\n') } catch { streams.delete(res) } }, 25_000)
+    req.raw.on('close', () => { clearInterval(beat); streams.delete(res) })
+  })
+  app.addHook('onClose', async () => { for (const r of streams) { try { r.end() } catch { /* already gone */ } } streams.clear() })
 
   // ---------- people ----------
   app.post('/api/users', { preHandler: requireAdmin }, async (req, reply) => {
