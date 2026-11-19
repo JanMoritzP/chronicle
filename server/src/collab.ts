@@ -174,7 +174,8 @@ export function attachCollab(server: HttpServer) {
   server.on('upgrade', (req, socket, head) => {
     const path = (req.url ?? '').split('?')[0]
     const m = /^\/api\/collab\/([^/]+)$/.exec(path)
-    if (!m) return refuse(socket, '404 Not Found')
+    // the table channel (table.ts) answers its own path
+    if (!m) return path.startsWith('/api/table/') ? undefined : refuse(socket, '404 Not Found')
     // same origin only: a page on another site must not be able to open an editing session with the visitor's cookie
     const origin = req.headers.origin
     if (origin) {

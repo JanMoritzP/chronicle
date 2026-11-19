@@ -7,6 +7,7 @@ import { addMember } from './access.js'
 import { adminUi } from './admin-ui.js'
 import { hashPassword, verifyPassword } from './auth.js'
 import { editorsSnapshot, revalidateCollab } from './collab.js'
+import { revalidateTable } from './table.js'
 import { config } from './config.js'
 import { db, now } from './db.js'
 import { onlineSnapshot, revalidateLive } from './live.js'
@@ -50,7 +51,7 @@ const requireAdmin = async (req: FastifyRequest, reply: FastifyReply) => {
   if (!req.admin) return reply.code(401).send({ error: 'unauthorized' })
 }
 
-const afterAccessChange = () => { revalidateLive(); revalidateCollab() }
+const afterAccessChange = () => { revalidateLive(); revalidateCollab(); revalidateTable() }
 
 function overview() {
   const users = db.prepare('SELECT id, username, role, created_at AS createdAt FROM users ORDER BY username COLLATE NOCASE').all() as

@@ -7,7 +7,7 @@ import { config } from '../config.js'
 import { db, now } from '../db.js'
 import { uid } from '../pages.js'
 
-const ALLOWED: Record<string, string> = {
+export const ALLOWED: Record<string, string> = {
   'image/png': '.png', 'image/jpeg': '.jpg', 'image/webp': '.webp', 'image/gif': '.gif', 'image/avif': '.avif',
 }
 

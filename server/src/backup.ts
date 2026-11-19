@@ -4,6 +4,7 @@ import Database from 'better-sqlite3'
 import type { FastifyInstance } from 'fastify'
 import { requireOwner } from './auth.js'
 import { resetCollab } from './collab.js'
+import { resetTable } from './table.js'
 import { config } from './config.js'
 import { db, migrate, SCHEMA_VERSION, schemaVersionOf } from './db.js'
 import { zipStream, type ZipEntry } from './zip.js'
@@ -130,6 +131,7 @@ export async function backupRoutes(app: FastifyInstance) {
     try {
       const restored = restoreFrom(file)
       resetCollab()
+      resetTable()
       return { ok: true, safety, restored }
     } catch (e: any) {
       return reply.code(400).send({ error: e.message ?? 'Restore failed', safety })

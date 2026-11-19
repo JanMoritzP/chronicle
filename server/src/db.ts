@@ -321,6 +321,51 @@ const migrations: string[] = [
   );
   CREATE INDEX comments_ws ON comments(workspace_id, done);
   `,
+  `
+  CREATE TABLE scenes (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    sort INTEGER NOT NULL DEFAULT 0,
+    bg TEXT NOT NULL DEFAULT '',
+    width INTEGER NOT NULL DEFAULT 2100,
+    height INTEGER NOT NULL DEFAULT 1400,
+    grid TEXT NOT NULL DEFAULT 'square',
+    grid_size REAL NOT NULL DEFAULT 70,
+    unit TEXT NOT NULL DEFAULT 'ft',
+    dist REAL NOT NULL DEFAULT 5,
+    diagonal TEXT NOT NULL DEFAULT '5-10-5',
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+  CREATE INDEX scenes_ws ON scenes(workspace_id, sort);
+  CREATE TABLE tokens (
+    id TEXT PRIMARY KEY,
+    scene_id TEXT NOT NULL REFERENCES scenes(id) ON DELETE CASCADE,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    name TEXT NOT NULL DEFAULT '',
+    x REAL NOT NULL DEFAULT 0,
+    y REAL NOT NULL DEFAULT 0,
+    size REAL NOT NULL DEFAULT 1,
+    rotation REAL NOT NULL DEFAULT 0,
+    image TEXT NOT NULL DEFAULT '',
+    color TEXT NOT NULL DEFAULT '',
+    page_id TEXT,
+    hidden INTEGER NOT NULL DEFAULT 0,
+    locked INTEGER NOT NULL DEFAULT 0,
+    owners TEXT NOT NULL DEFAULT '[]',
+    z INTEGER NOT NULL DEFAULT 0,
+    data TEXT NOT NULL DEFAULT '{}',
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+  CREATE INDEX tokens_scene ON tokens(scene_id);
+  CREATE TABLE table_state (
+    workspace_id TEXT PRIMARY KEY REFERENCES workspaces(id) ON DELETE CASCADE,
+    active_scene_id TEXT,
+    settings TEXT NOT NULL DEFAULT '{}'
+  );
+  `,
 ]
 
 export const SCHEMA_VERSION = migrations.length

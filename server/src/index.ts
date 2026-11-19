@@ -10,6 +10,7 @@ import { startAdmin } from './admin.js'
 import { authRoutes, ensureOwner } from './auth.js'
 import { attachCollab, closeAllCollab } from './collab.js'
 import { closeAllLive, liveRoutes } from './live.js'
+import { attachTable, closeAllTable } from './table.js'
 import { backupRoutes, scheduleBackups } from './backup.js'
 import { config } from './config.js'
 import { db, migrate } from './db.js'
@@ -96,6 +97,7 @@ if (fs.existsSync(config.webDist)) {
 scheduleBackups()
 resumeTiling()
 attachCollab(app.server)
+attachTable(app.server)
 await app.listen({ port: config.port, host: config.host })
 const admin = await startAdmin()
 
@@ -106,7 +108,7 @@ for (const sig of ['SIGTERM', 'SIGINT'] as const) {
     if (stopping) return
     stopping = true
     const force = setTimeout(() => process.exit(1), 8000)
-    try { closeAllCollab(); closeAllLive(); await admin?.close(); await app.close(); db.pragma('wal_checkpoint(TRUNCATE)'); db.close(); closeLibrary() } catch (e) { console.error(e) }
+    try { closeAllCollab(); closeAllTable(); closeAllLive(); await admin?.close(); await app.close(); db.pragma('wal_checkpoint(TRUNCATE)'); db.close(); closeLibrary() } catch (e) { console.error(e) }
     clearTimeout(force)
     process.exit(0)
   })
