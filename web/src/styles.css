@@ -884,3 +884,25 @@ button.cs-roll:disabled { cursor: default; }
 .cs-items .sv-text { flex: 1; }
 .cs-notes { margin: 4px 0; white-space: pre-wrap; }
 .cs-wrap, .cs-add { margin: 8px 0; }
+
+/* ---------- tabletop on a phone ---------- */
+.tt { overscroll-behavior: none; }
+.tt-strip { display: none; }
+.tt-nav { display: none; }
+@media (max-width: 900px) {
+  .tt-main { position: relative; }
+  .tt-panel.sheet { position: absolute; left: 0; right: 0; bottom: 0; height: 62%; max-height: none; width: auto; z-index: 6; border: 0; border-top: 1px solid var(--border); border-radius: 14px 14px 0 0; box-shadow: var(--shadow); }
+  .tt-strip { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-top: 1px solid var(--border); background: var(--panel); flex: none; }
+  .tt-strip b { max-width: 28%; }
+  .tt-strip .tt-hpbar { flex: 1; min-width: 40px; }
+  .tt-strip-hp { font-variant-numeric: tabular-nums; font-size: 13px; white-space: nowrap; }
+  .tt-nav { display: flex; flex: none; border-top: 1px solid var(--border); background: var(--panel); padding-bottom: env(safe-area-inset-bottom); }
+  .tt-nav button { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 52px; border: 0; background: transparent; color: var(--muted); font-size: 11px; cursor: pointer; }
+  .tt-nav button.on { color: var(--accent); font-weight: 600; }
+  .tt .btn.square { min-width: 40px; min-height: 40px; }
+  .tt-bar { padding: 6px 8px; }
+  .tt-bar .tt-scene { min-width: 120px; }
+  .tt .tt-panel .btn.sm, .tt .tt-panel .tt-chip, .tt .tt-panel .tt-roll { min-height: 36px; }
+  .tt-abil { gap: 6px; }
+  .cs-abilities { grid-template-columns: repeat(3, 1fr); }
+}

@@ -1,5 +1,5 @@
 import { Color } from 'pixi.js'
-import { BrickWall, Pencil, Crosshair, Eraser, Eye, MessageSquare, EyeOff, Lock, LockOpen, Maximize, Minus, Plus, Ruler, RotateCw, Swords, Trash2, UserPlus, MousePointer2, Users } from 'lucide-react'
+import { BrickWall, Dices, Map as MapIcon, Pencil, UserRound, Ellipsis, Crosshair, Eraser, Eye, MessageSquare, EyeOff, Lock, LockOpen, Maximize, Minus, Plus, Ruler, RotateCw, Swords, Trash2, UserPlus, MousePointer2, Users } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { askText, confirmDialog } from '../lib/dialog'
 import { colorFor } from '../lib/collab'
@@ -16,6 +16,19 @@ import { Select } from './Select'
 const PALETTE = ['#c0392b', '#2e86c1', '#27ae60', '#d68910', '#8e44ad', '#16a085', '#7f8c8d', '#d35400']
 const colorNum = (id: string) => new Color(colorFor(id)).toNumber()
 
+/** True on a phone-sized screen; follows a rotation or a resized window. */
+function useNarrow() {
+  const query = '(max-width: 900px)'
+  const [narrow, setNarrow] = useState(() => window.matchMedia(query).matches)
+  useEffect(() => {
+    const m = window.matchMedia(query)
+    const on = () => setNarrow(m.matches)
+    m.addEventListener('change', on)
+    return () => m.removeEventListener('change', on)
+  }, [])
+  return narrow
+}
+
 export function TableView() {
   const wsId = useStore((s) => s.wsId)
   const conn = useTable((s) => s.conn)
@@ -28,7 +41,9 @@ export function TableView() {
   const [panel, setPanel] = useState<'token' | 'scene' | 'table' | 'chat' | 'combat' | 'encounters'>('token')
   const combat = useTable((s) => s.combat)
   const unread = useTable((s) => s.unread)
-  const [panelOpen, setPanelOpen] = useState(true)
+  const narrow = useNarrow()
+  const [panelOpen, setPanelOpen] = useState(() => !window.matchMedia('(max-width: 900px)').matches)
+  useEffect(() => { setPanelOpen(!narrow) }, [narrow])
   const host = useRef<HTMLDivElement>(null)
   const styleRef = useRef({ color: '#ff5252', width: 4 })
   const gmOnlyRef = useRef(false)
@@ -209,7 +224,7 @@ export function TableView() {
         {scene && canAdd && <button className="btn sm" onClick={addToken}><UserPlus size={13} /> Token</button>}
         <span className="grow" />
         <span className={`tt-conn ${conn}`} title={conn === 'open' ? 'Connected' : 'Reconnecting'}>{conn === 'open' ? '' : conn === 'connecting' ? 'Connecting…' : 'Offline, reconnecting…'}</span>
-        <button className="btn sm tt-toggle" onClick={() => setPanelOpen(!panelOpen)}>{panelOpen ? 'Hide panel' : 'Panel'}</button>
+        {!narrow && <button className="btn sm tt-toggle" onClick={() => setPanelOpen(!panelOpen)}>{panelOpen ? 'Hide panel' : 'Panel'}</button>}
       </div>
       {error && <div className="tt-error" role="alert" onClick={() => useTable.setState({ error: '' })}>{error}</div>}
       <div className="tt-main">
@@ -217,7 +232,7 @@ export function TableView() {
           {!scene && <div className="tt-empty muted">{gm ? 'No scenes yet. Create one to start.' : 'The GM has not opened a scene yet.'}</div>}
         </div>
         {panelOpen && (
-          <aside className="tt-panel">
+          <aside className={`tt-panel${narrow ? ' sheet' : ''}`} aria-label="Table panel">
             <div className="seg">
               <button className={panel === 'token' ? 'on' : ''} onClick={() => setPanel('token')}>Token</button>
               {gm && <button className={panel === 'scene' ? 'on' : ''} onClick={() => setPanel('scene')}>Scene</button>}
@@ -236,6 +251,46 @@ export function TableView() {
           </aside>
         )}
       </div>
+      {narrow && <MyStrip />}
+      {narrow && (
+        <nav className="tt-nav" aria-label="Table sections">
+          <button className={!panelOpen ? 'on' : ''} aria-label="Map" onClick={() => setPanelOpen(false)}><MapIcon size={18} /><span>Map</span></button>
+          <button className={panelOpen && panel === 'token' ? 'on' : ''} aria-label="Me" onClick={() => {
+            const st = useTable.getState()
+            const mine = st.tokens.find((t) => st.you && t.owners.includes(st.you.id))
+            if (mine && !st.selected.length) useTable.setState({ selected: [mine.id], selectedTile: null })
+            setPanel('token'); setPanelOpen(true)
+          }}><UserRound size={18} /><span>Me</span></button>
+          <button className={panelOpen && panel === 'combat' ? 'on' : ''} aria-label="Combat" onClick={() => { setPanel('combat'); setPanelOpen(true) }}><Swords size={18} /><span>{combat.active ? `Round ${combat.round}` : 'Combat'}</span></button>
+          <button className={panelOpen && panel === 'chat' ? 'on' : ''} aria-label="Chat and dice" onClick={() => { setPanel('chat'); setPanelOpen(true) }}><Dices size={18} /><span>Chat{unread > 0 && !(panelOpen && panel === 'chat') ? ` (${unread})` : ''}</span></button>
+          <button className={panelOpen && (panel === 'table' || panel === 'scene' || panel === 'encounters') ? 'on' : ''} aria-label="More" onClick={() => { setPanel(gm ? 'scene' : 'table'); setPanelOpen(true) }}><Ellipsis size={18} /><span>More</span></button>
+        </nav>
+      )}
+    </div>
+  )
+}
+
+/** On a phone: your own character's hit points, always in reach, without opening anything. */
+function MyStrip() {
+  const you = useTable((s) => s.you)
+  const role = useTable((s) => s.role)
+  const settings = useTable((s) => s.settings)
+  const mine = useTable((s) => s.tokens.find((t) => !!you && t.owners.includes(you.id) && (t.data.hp as { max?: number } | undefined)?.max))
+  if (!mine) return null
+  const hp = mine.data.hp as { value?: number; max?: number; temp?: number }
+  const can = role === 'gm' || (role === 'player' && settings.playersEditOwnStats)
+  const ratio = hp.max ? Math.max(0, Math.min(1, (hp.value ?? 0) / hp.max)) : 0
+  const change = async (sign: 1 | -1) => {
+    const raw = await askText(sign === 1 ? 'Damage taken' : 'Healing received', { label: 'Amount', placeholder: '7', okLabel: sign === 1 ? 'Take damage' : 'Heal' })
+    const n = Math.abs(parseInt(raw ?? '', 10))
+    if (n) sendTable({ t: 'token.stat', id: mine.id, damage: sign * n })
+  }
+  return (
+    <div className="tt-strip" aria-label={`${mine.name} hit points`}>
+      <b className="ellipsis">{mine.name}</b>
+      <div className="tt-hpbar" aria-hidden><span style={{ width: `${ratio * 100}%`, background: ratio > 0.5 ? '#4caf50' : ratio > 0.25 ? '#f1c40f' : '#e74c3c' }} /></div>
+      <span className="tt-strip-hp">{hp.value ?? 0}/{hp.max}{hp.temp ? ` +${hp.temp}` : ''}</span>
+      {can && <><button className="btn sm" onClick={() => change(1)}>Damage</button><button className="btn sm" onClick={() => change(-1)}>Heal</button></>}
     </div>
   )
 }
