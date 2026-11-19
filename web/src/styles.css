@@ -806,3 +806,11 @@ input[type=color] { width: 34px; height: 24px; padding: 0; border: 1px solid var
 .tt-sightlight { display: flex; flex-direction: column; gap: 6px; }
 .tt-bar > * { flex: none; }
 .tt-bar > .grow { flex: 1 1 auto; }
+.tt-order { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.tt-order li { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 8px; border: 1px solid transparent; }
+.tt-order li.turn { border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+.tt-order li.done { opacity: .5; text-decoration: line-through; }
+.tt-init { width: 52px; text-align: center; flex: none; }
+.tt-row-actions { display: inline-flex; gap: 2px; }
+.tt-row-actions .btn { padding: 2px 6px; }
+.tt-panel > .seg { position: sticky; top: -10px; z-index: 2; flex: none; flex-wrap: wrap; background: var(--panel); padding: 10px 0 6px; margin: -10px 0 0; }

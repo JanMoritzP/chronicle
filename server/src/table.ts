@@ -11,6 +11,8 @@ import { uid } from './pages.js'
 import { presenceChanged } from './presence.js'
 import { ALLOWED } from './routes/uploads.js'
 import { parseChat, readable, type Kind, type Part } from './chat.js'
+import { advance, emptyCombat, end as endCombat, start as startCombat, visible as visibleCombat, withList, type Combat } from './combat.js'
+import { parseRoll } from './dice.js'
 import {
   canCreateToken, canEditStats, canMoveToken, canPing, canRuler, canSeeToken, clientMessage, makeLimiter, parseSettings, redact, roleAt, settingsSchema,
   type ClientMessage, type TableRole, type TableSettings, type TokenRow,
@@ -110,6 +112,31 @@ const fogOf = (c: Conn, scene: string | null) => {
   const r = db.prepare('SELECT mask FROM scene_fog WHERE scene_id = ? AND user_id = ?').get(scene, c.user.id) as { mask: Buffer } | undefined
   return r ? r.mask.toString('base64') : null
 }
+function combatOf(ws: string): Combat {
+  const row = db.prepare('SELECT combat FROM table_state WHERE workspace_id = ?').get(ws) as { combat: string } | undefined
+  const c = parse<Partial<Combat>>(row?.combat ?? '{}', {})
+  return { ...emptyCombat(), ...c, list: Array.isArray(c.list) ? c.list : [] }
+}
+function saveCombat(ws: string, combat: Combat) {
+  const st = stateOf(ws)
+  saveState(ws, st.active, st.settings)
+  db.prepare('UPDATE table_state SET combat = ? WHERE workspace_id = ?').run(JSON.stringify(combat), ws)
+  for (const x of inWorld(ws)) send(x, { t: 'combat', combat: visibleCombat(combat, x.role === 'gm') })
+}
+/** The initiative bonus of a creature, from the sheet on its page: its printed bonus, else its Dexterity modifier. */
+function initiativeBonus(ws: string, pageId: string | null) {
+  if (!pageId) return 0
+  const row = db.prepare('SELECT props FROM pages WHERE id = ? AND workspace_id = ?').get(pageId, ws) as { props: string } | undefined
+  const sheet = parse<{ sheet?: { initiative?: number; abilities?: { dex?: number } } }>(row?.props ?? '{}', {}).sheet
+  if (!sheet) return 0
+  return typeof sheet.initiative === 'number' ? sheet.initiative : Math.floor(((sheet.abilities?.dex ?? 10) - 10) / 2)
+}
+function postChat(ws: string, userId: string, name: string, kind: Kind, to: string[], parts: Part[]) {
+  const msg = { id: uid(), ts: now(), userId, name, kind, to, parts }
+  db.prepare('INSERT INTO chat_messages(id,workspace_id,user_id,name,ts,kind,to_ids,parts) VALUES(?,?,?,?,?,?,?,?)').run(msg.id, ws, userId, name, msg.ts, kind, JSON.stringify(to), JSON.stringify(parts))
+  for (const x of inWorld(ws)) if (readable(msg, x.user.id, x.role === 'gm')) send(x, { t: 'chat.msg', msg: { ...msg } })
+}
+
 const sceneState = (c: Conn) => ({ walls: wallsFor(c, c.scene), lights: lightsOf(c.ws, c.scene), fog: fogOf(c, c.scene) })
 
 function sendView(c: Conn) {
@@ -142,7 +169,7 @@ function sendSnapshot(c: Conn) {
   viewFor(c, c.scene)
   send(c, {
     t: 'snapshot', you: { id: c.user.id, username: c.user.username, role: c.role }, settings, scenes: scenesOf(c.ws), active,
-    sceneId: c.scene, tokens: tokensFor(c, c.scene), online: onlineIn(c.ws), members: membersOf(c.ws), chat: historyFor(c), ...sceneState(c),
+    sceneId: c.scene, tokens: tokensFor(c, c.scene), online: onlineIn(c.ws), members: membersOf(c.ws), chat: historyFor(c), combat: visibleCombat(combatOf(c.ws), c.role === 'gm'), ...sceneState(c),
   })
 }
 
@@ -372,6 +399,61 @@ async function handle(c: Conn, m: ClientMessage) {
       for (const x of inWorld(ws)) if (x.scene === m.sceneId) send(x, { t: 'fog.reset', sceneId: m.sceneId })
       return
     }
+    case 'combat.add': {
+      if (!gm) return nack(c, m, 'only the GM can do that')
+      const combat = combatOf(ws)
+      const have = new Set(combat.list.map((x) => x.tokenId))
+      const added = m.tokenIds.map((id) => tokenRow(id, ws)).filter((t): t is TokenRow => !!t && !have.has(t.id))
+      if (!added.length) return
+      return saveCombat(ws, withList(combat, [...combat.list, ...added.map((t) => ({ id: uid(), tokenId: t.id, name: t.name || 'Unnamed', init: null, hidden: t.hidden, done: false }))]))
+    }
+    case 'combat.remove': {
+      if (!gm) return nack(c, m, 'only the GM can do that')
+      const combat = combatOf(ws)
+      return saveCombat(ws, withList(combat, combat.list.filter((x) => !m.ids.includes(x.id))))
+    }
+    case 'combat.init': {
+      const combat = combatOf(ws)
+      const who = combat.list.find((x) => x.id === m.id)
+      if (!who) return nack(c, m, 'no such combatant')
+      const token = who.tokenId ? tokenRow(who.tokenId, ws) : undefined
+      if (!gm && !(c.role === 'player' && token && token.owners.includes(c.user.id))) return nack(c, m, 'not allowed')
+      return saveCombat(ws, withList(combat, combat.list.map((x) => (x.id === m.id ? { ...x, init: m.value } : x))))
+    }
+    case 'combat.roll': {
+      if (!gm) return nack(c, m, 'only the GM can do that')
+      const combat = combatOf(ws)
+      const targets = combat.list.filter((x) => (m.ids ? m.ids.includes(x.id) : x.init === null))
+      if (!targets.length) return
+      const rolled = new Map<string, number>()
+      for (const x of targets) {
+        const token = x.tokenId ? tokenRow(x.tokenId, ws) : undefined
+        const b = initiativeBonus(ws, token?.pageId ?? null)
+        const roll = parseRoll(`1d20${b >= 0 ? '+' : '-'}${Math.abs(b)} Initiative: ${x.name}`)
+        if (!roll) continue
+        rolled.set(x.id, roll.total)
+        // a hidden combatant rolls where only the GM sees it
+        postChat(ws, c.user.id, c.user.username, x.hidden ? 'gmroll' : 'roll', [], [{ t: 'roll', roll }])
+      }
+      return saveCombat(ws, withList(combat, combat.list.map((x) => (rolled.has(x.id) ? { ...x, init: rolled.get(x.id)! } : x))))
+    }
+    case 'combat.flag': {
+      if (!gm) return nack(c, m, 'only the GM can do that')
+      const combat = combatOf(ws)
+      return saveCombat(ws, withList(combat, combat.list.map((x) => (x.id === m.id ? { ...x, ...(m.hidden !== undefined ? { hidden: m.hidden } : {}), ...(m.done !== undefined ? { done: m.done } : {}) } : x))))
+    }
+    case 'combat.control': {
+      const combat = combatOf(ws)
+      // the person whose turn it is may end it
+      const turnToken = combat.turn ? tokenRow(combat.list.find((x) => x.id === combat.turn)?.tokenId ?? '', ws) : undefined
+      const ownsTurn = c.role === 'player' && !!turnToken && turnToken.owners.includes(c.user.id)
+      if (!gm && !(m.action === 'next' && ownsTurn)) return nack(c, m, 'only the GM can do that')
+      if (m.action === 'start') return saveCombat(ws, startCombat(combat))
+      if (m.action === 'next') return saveCombat(ws, advance(combat, 1))
+      if (m.action === 'prev') return saveCombat(ws, advance(combat, -1))
+      if (m.action === 'end') return saveCombat(ws, endCombat(combat))
+      return saveCombat(ws, emptyCombat())
+    }
     case 'token.delete': {
       if (!gm) return nack(c, m, 'only the GM can do that')
       for (const id of m.ids) {
@@ -379,6 +461,8 @@ async function handle(c: Conn, m: ClientMessage) {
         if (!before) continue
         db.prepare('DELETE FROM tokens WHERE id = ?').run(id)
         emitToken(ws, before, null)
+        const combat = combatOf(ws)
+        if (combat.list.some((x) => x.tokenId === id)) saveCombat(ws, withList(combat, combat.list.filter((x) => x.tokenId !== id)))
       }
       return
     }

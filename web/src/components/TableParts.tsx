@@ -211,3 +211,67 @@ export function SightLight({ token }: { token: Token }) {
     </div>
   )
 }
+
+// ---------- combat ----------
+
+export function CombatPanel() {
+  const combat = useTable((s) => s.combat)
+  const role = useTable((s) => s.role)
+  const you = useTable((s) => s.you)
+  const tokens = useTable((s) => s.tokens)
+  const selected = useTable((s) => s.selected)
+  const gm = role === 'gm'
+  const tokenOf = (id: string | null) => tokens.find((t) => t.id === id)
+  const turnToken = tokenOf(combat.list.find((x) => x.id === combat.turn)?.tokenId ?? null)
+  const myTurn = !!turnToken && !!you && turnToken.owners.includes(you.id)
+  const control = (action: 'start' | 'next' | 'prev' | 'end' | 'clear') => sendTable({ t: 'combat.control', action })
+  const onList = new Set(combat.list.map((x) => x.tokenId))
+  const addable = (gm ? tokens : []).filter((t) => !onList.has(t.id))
+  const addSelected = addable.filter((t) => selected.includes(t.id))
+  return (
+    <div className="tt-form">
+      <b><Swords size={13} /> {combat.active ? `Round ${combat.round}` : 'Order of play'}</b>
+      {gm && (
+        <div className="tt-row">
+          {!combat.active
+            ? <button className="btn sm primary" disabled={!combat.list.some((x) => x.init !== null)} onClick={() => control('start')}>Start combat</button>
+            : <><button className="btn sm" onClick={() => control('prev')}>Previous</button><button className="btn sm primary" onClick={() => control('next')}>Next turn</button><button className="btn sm danger" onClick={() => control('end')}>End combat</button></>}
+        </div>
+      )}
+      {!gm && combat.active && myTurn && <button className="btn sm primary" onClick={() => control('next')}>End my turn</button>}
+      {gm && (
+        <div className="tt-row">
+          <button className="btn sm" disabled={!addSelected.length} onClick={() => sendTable({ t: 'combat.add', tokenIds: addSelected.map((t) => t.id) })}>Add selected ({addSelected.length})</button>
+          <button className="btn sm" disabled={!addable.length} onClick={() => sendTable({ t: 'combat.add', tokenIds: addable.map((t) => t.id) })}>Add all ({addable.length})</button>
+          <button className="btn sm" disabled={!combat.list.some((x) => x.init === null)} title="Roll for everyone without an initiative, using the Dexterity bonus on their sheet" onClick={() => sendTable({ t: 'combat.roll' })}>Roll initiative</button>
+        </div>
+      )}
+      {combat.list.length === 0 && <p className="muted tt-hint">{gm ? 'Select tokens on the map and add them, or add everyone on the scene.' : 'No combat has started.'}</p>}
+      <ol className="tt-order" aria-label="Order of play">
+        {combat.list.map((x) => {
+          const t = tokenOf(x.tokenId)
+          const mine = !!t && !!you && t.owners.includes(you.id)
+          const hp = t?.data.hp as { value?: number; max?: number } | undefined
+          return (
+            <li key={x.id} className={`${combat.turn === x.id && combat.active ? 'turn' : ''}${x.done ? ' done' : ''}`} aria-current={combat.turn === x.id && combat.active ? 'step' : undefined}>
+              {gm || mine
+                ? <input className="input tt-init" type="number" aria-label={`Initiative of ${x.name}`} defaultValue={x.init ?? ''} key={`${x.id}${x.init}`}
+                    onBlur={(e) => { const raw = e.target.value.trim(); const n = raw === '' ? null : Math.round(Number(raw)); if (n === null ? x.init !== null : Number.isFinite(n) && n !== x.init) sendTable({ t: 'combat.init', id: x.id, value: n }) }}
+                    onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />
+                : <span className="tt-init">{x.init ?? '–'}</span>}
+              <span className="grow ellipsis">{x.name}{x.hidden ? ' (hidden)' : ''}{hp && hp.max ? <small className="muted"> {hp.value}/{hp.max}</small> : null}</span>
+              {gm && (
+                <span className="tt-row-actions">
+                  <button className="btn ghost sm" title={x.done ? 'Back in the fight' : 'Out of the fight'} aria-label={x.done ? 'Back in the fight' : 'Out of the fight'} onClick={() => sendTable({ t: 'combat.flag', id: x.id, done: !x.done })}>{x.done ? '↺' : '✕'}</button>
+                  <button className="btn ghost sm" title={x.hidden ? 'Show to players' : 'Hide from players'} aria-label={x.hidden ? 'Show to players' : 'Hide from players'} onClick={() => sendTable({ t: 'combat.flag', id: x.id, hidden: !x.hidden })}>{x.hidden ? 'Show' : 'Hide'}</button>
+                  <button className="btn ghost sm" title="Remove from the order" aria-label="Remove from the order" onClick={() => sendTable({ t: 'combat.remove', ids: [x.id] })}>–</button>
+                </span>
+              )}
+            </li>
+          )
+        })}
+      </ol>
+      {gm && combat.list.length > 0 && !combat.active && <button className="btn sm danger" onClick={() => control('clear')}>Clear the list</button>}
+    </div>
+  )
+}

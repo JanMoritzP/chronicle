@@ -63,6 +63,7 @@ export class TableEngine {
   private wallPoly: Pt[] = []
   private lastClick = { t: 0, x: 0, y: 0 }
   private fog!: FogLayer
+  private turnId: string | null = null
   private me = { id: '', gm: true, canDoors: false }
   private drag: null | { kind: 'pan' | 'tokens' | 'ruler' | 'marquee'; start: Pt; screen: Pt; origins?: Map<string, Pt>; lead?: string; moved: boolean; sent: number } = null
   private pointers = new Map<number, Pt>()
@@ -260,8 +261,14 @@ export class TableEngine {
 
   private drawSelection(v: TokenView) {
     v.box.getChildByLabel('sel')?.destroy()
-    if (!this.selected.has(v.token.id)) return
+    v.box.getChildByLabel('turn')?.destroy()
     const r = this.px(v.token) / 2
+    if (this.turnId === v.token.id) {
+      const t = new Graphics().circle(0, 0, r + 9).stroke({ width: 4, color: 0x4fc3f7 }).circle(0, 0, r + 14).stroke({ width: 2, color: 0x4fc3f7, alpha: 0.5 })
+      t.label = 'turn'
+      v.box.addChild(t)
+    }
+    if (!this.selected.has(v.token.id)) return
     const g = new Graphics().circle(0, 0, r + 4).stroke({ width: 3, color: 0xffd23f })
     g.label = 'sel'
     v.box.addChild(g)
@@ -273,7 +280,13 @@ export class TableEngine {
     v.box.rotation = 0
     v.box.alpha = t.hidden ? 0.45 : 1
     // the picture turns with the token; the name stays upright
-    for (const c of v.box.children) if (!['name', 'sel', 'hp', 'down', 'cond'].includes(c.label)) c.rotation = (t.rotation * Math.PI) / 180
+    for (const c of v.box.children) if (!['name', 'sel', 'hp', 'down', 'cond', 'turn'].includes(c.label)) c.rotation = (t.rotation * Math.PI) / 180
+  }
+
+  /** The token whose turn it is gets a blue ring. */
+  setTurn(id: string | null) {
+    this.turnId = id
+    if (this.ready) for (const v of this.views.values()) this.drawSelection(v)
   }
 
   setSelected(ids: string[]) {

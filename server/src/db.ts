@@ -391,6 +391,7 @@ const migrations: string[] = [
     open INTEGER NOT NULL DEFAULT 0
   );
   CREATE INDEX walls_scene ON scene_walls(scene_id);
+  ALTER TABLE table_state ADD COLUMN combat TEXT NOT NULL DEFAULT '{}';
   CREATE TABLE scene_fog (
     scene_id TEXT NOT NULL REFERENCES scenes(id) ON DELETE CASCADE,
     user_id TEXT NOT NULL,

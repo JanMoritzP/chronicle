@@ -410,6 +410,9 @@ areas:
         name: "Drawing walls, doors and windows on the canvas, and the fog a player sees"
         status: planned
         note: Needs canvas pixel checks; covered by hand and by scripts/test-visibility.ts for the maths.
+      - id: table.combat
+        name: "Combat: initiative, start, next turn and round, shown to players"
+        files: [web/src/components/TableParts.tsx]
       - id: table.panel
         name: "The GM edits a token from the panel"
         files: [web/src/components/Tabletop.tsx]

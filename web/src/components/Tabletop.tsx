@@ -8,7 +8,7 @@ import { TableEngine, type Tool } from '../tabletop/engine'
 import { snap } from '../tabletop/grid'
 import { joinTable, leaveTable, onTableMessage, sendTable, useTable, type Scene, type Token } from '../tabletop/state'
 import { pickImage, uploadImage } from '../tabletop/upload'
-import { ChatPanel, LinkPage, SightLight, TokenSheet, TokenStats } from './TableParts'
+import { ChatPanel, CombatPanel, LinkPage, SightLight, TokenSheet, TokenStats } from './TableParts'
 import { Select } from './Select'
 
 const PALETTE = ['#c0392b', '#2e86c1', '#27ae60', '#d68910', '#8e44ad', '#16a085', '#7f8c8d', '#d35400']
@@ -23,7 +23,8 @@ export function TableView() {
   const sceneId = useTable((s) => s.sceneId)
   const error = useTable((s) => s.error)
   const [tool, setTool] = useState<Tool>('select')
-  const [panel, setPanel] = useState<'token' | 'scene' | 'table' | 'chat'>('token')
+  const [panel, setPanel] = useState<'token' | 'scene' | 'table' | 'chat' | 'combat'>('token')
+  const combat = useTable((s) => s.combat)
   const unread = useTable((s) => s.unread)
   const [panelOpen, setPanelOpen] = useState(true)
   const host = useRef<HTMLDivElement>(null)
@@ -76,9 +77,12 @@ export function TableView() {
       e.setTokens(useTable.getState().tokens)
       e.setSelected(useTable.getState().selected)
       e.setExplored(useTable.getState().fog)
+      const turn = () => { const s = useTable.getState(); e.setTurn(s.combat.active ? s.combat.list.find((x) => x.id === s.combat.turn)?.tokenId ?? null : null) }
+      turn()
       const unsub = useTable.subscribe((s, prev) => {
         if (s.role !== prev.role || s.you !== prev.you || s.settings.playersOpenDoors !== prev.settings.playersOpenDoors) viewer()
         if (s.scenes !== prev.scenes || s.sceneId !== prev.sceneId) push()
+        if (s.combat !== prev.combat || s.tokens !== prev.tokens) turn()
         if (s.walls !== prev.walls) e.setWalls(s.walls)
         if (s.lights !== prev.lights) e.setLights(s.lights)
         if (s.sceneId !== prev.sceneId || s.fog !== prev.fog) e.setExplored(s.fog)
@@ -172,6 +176,7 @@ export function TableView() {
             <div className="seg">
               <button className={panel === 'token' ? 'on' : ''} onClick={() => setPanel('token')}>Token</button>
               {gm && <button className={panel === 'scene' ? 'on' : ''} onClick={() => setPanel('scene')}>Scene</button>}
+              <button className={panel === 'combat' ? 'on' : ''} onClick={() => setPanel('combat')}><Swords size={12} /> Combat{combat.active ? ` (R${combat.round})` : ''}</button>
               <button className={panel === 'chat' ? 'on' : ''} onClick={() => setPanel('chat')}><MessageSquare size={12} /> Chat{unread > 0 && panel !== 'chat' ? ` (${unread})` : ''}</button>
               <button className={panel === 'table' ? 'on' : ''} onClick={() => setPanel('table')}>Table</button>
             </div>
@@ -179,6 +184,7 @@ export function TableView() {
             {panel === 'scene' && gm && scene && <ScenePanel scene={scene} active={active === scene.id} wsId={wsId} />}
             {panel === 'table' && <TablePanel />}
             {panel === 'chat' && <ChatPanel />}
+            {panel === 'combat' && <CombatPanel />}
           </aside>
         )}
       </div>
