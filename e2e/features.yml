@@ -1,0 +1,395 @@
+# The catalog of what Chronicle can do, and whether an end-to-end test covers it.
+#
+# To say "this should be tested", add a line under an area:
+#
+#   - id: maps.journeys            # unique, lower case, dots and dashes
+#     name: Journeys on a line     # what you would call it
+#     files: [web/src/components/MapView.tsx]   # optional: where it lives, to show how much of that code ran
+#     status: planned              # optional: marks it as a known gap instead of an unnoticed one
+#     note: Needs a map with two pins first.    # optional
+#
+# A test covers a feature when it carries the same id: test('...', { tag: '@feature:maps.journeys' }, ...)
+# The dashboard (npm run report in e2e/) shows tested, failing, not tested yet and planned features.
+
+areas:
+  - id: auth
+    name: Sign in and accounts
+    features:
+      - id: auth.login
+        name: "Sign in with a wrong and a right password"
+        files: [web/src/App.tsx]
+      - id: auth.logout
+        name: "Log out"
+        files: [web/src/components/Views.tsx]
+      - id: settings.password
+        name: "Change my password (form rules)"
+        files: [web/src/components/Views.tsx]
+      - id: auth.password-success
+        name: "Change my password successfully and sign in with it"
+        status: planned
+      - id: settings.accounts
+        name: "Add, set a password for and remove accounts"
+        files: [web/src/components/Views.tsx]
+      - id: roles.viewer
+        name: "Viewers cannot edit"
+        files: [web/src/components/PageView.tsx]
+      - id: roles.access
+        name: "A person only reaches the worlds they were given"
+      - id: auth.rate-limit
+        name: "Too many sign in attempts are refused"
+        status: planned
+        note: "Shares the server limit with every other test, so it needs its own server."
+
+  - id: shell
+    name: App shell
+    features:
+      - id: shell.home
+        name: "Home with recent pages"
+        files: [web/src/components/Views.tsx]
+      - id: shell.navigation
+        name: "Every sidebar view opens"
+        files: [web/src/components/Sidebar.tsx]
+      - id: shell.sidebar
+        name: "Toggle the sidebar"
+        files: [web/src/components/Sidebar.tsx]
+      - id: shell.sidebar-pages
+        name: "Pages listed in the sidebar"
+        files: [web/src/components/Sidebar.tsx]
+      - id: shell.tabs
+        name: "Tabs, back and forward"
+        files: [web/src/App.tsx, web/src/store.ts]
+      - id: shell.split
+        name: "Show the active tab beside another"
+        files: [web/src/App.tsx]
+      - id: shell.split-button
+        name: "The Open in split view button on a page"
+        note: "Found by the suite. It opens a new tab but never shows two panes."
+      - id: shell.shortcuts
+        name: "Keyboard shortcuts"
+        files: [web/src/lib/keys.ts]
+      - id: shell.zen
+        name: "Zen mode"
+        files: [web/src/App.tsx]
+      - id: shell.manual
+        name: "Manual"
+        files: [web/src/components/Manual.tsx]
+      - id: mobile
+        name: "Phone layout"
+        files: [web/src/styles.css]
+      - id: shell.first-world
+        name: "First run with no world asks to create one"
+        status: planned
+        note: "Needs a server with no worlds, which this shared server never has."
+
+  - id: settings
+    name: Settings
+    features:
+      - id: settings.themes
+        name: "Ten themes"
+        files: [web/src/themes.ts, web/src/components/Views.tsx]
+      - id: settings.font
+        name: "Fonts and text size"
+        files: [web/src/components/Views.tsx]
+      - id: worlds
+        name: "Create, switch and delete worlds"
+        files: [web/src/components/Views.tsx, web/src/store.ts]
+      - id: settings.starter-todo
+        name: "The todo every new page starts with"
+        files: [web/src/components/Views.tsx]
+      - id: settings.shortcuts
+        name: "Rebind shortcuts"
+        files: [web/src/lib/keys.ts]
+      - id: backups
+        name: "Back up now"
+        files: [web/src/components/Backups.tsx]
+      - id: backups.restore
+        name: "Restore a backup"
+        status: planned
+        note: "Replaces the whole database, so it needs its own server."
+      - id: export
+        name: "Export a world as a zip"
+        files: [web/src/components/Views.tsx]
+
+  - id: pages
+    name: Pages and folders
+    features:
+      - id: pages.create
+        name: "Create a page"
+        files: [web/src/components/PageView.tsx, web/src/store.ts]
+      - id: pages.edit
+        name: "Type and keep text"
+        files: [web/src/components/PageView.tsx, web/src/lib/collab.ts]
+      - id: pages.rename
+        name: "Rename a page"
+        files: [web/src/components/PageView.tsx]
+      - id: pages.tags
+        name: "Tags and tag view"
+        files: [web/src/components/PageView.tsx, web/src/components/Views.tsx]
+      - id: pages.type
+        name: "Change the page type"
+        files: [web/src/components/PageView.tsx]
+      - id: pages.trash
+        name: "Trash and restore"
+        files: [web/src/components/Views.tsx]
+      - id: pages.purge
+        name: "Delete forever"
+        files: [web/src/components/Views.tsx]
+      - id: pages.folders
+        name: "Folders"
+        files: [web/src/components/Sidebar.tsx]
+      - id: pages.folders-manage
+        name: "Rename, move and delete folders"
+      - id: pages.history
+        name: "Version history"
+        files: [web/src/components/PageView.tsx]
+      - id: pages.history-restore
+        name: "Restore an older version"
+      - id: pages.search
+        name: "Search by title and text"
+        files: [web/src/components/Search.tsx]
+      - id: pages.search-commands
+        name: "Commands in search"
+        files: [web/src/components/Search.tsx]
+      - id: pages.search-tags
+        name: "Search for #tags"
+        files: [web/src/components/Search.tsx]
+      - id: zettels
+        name: "Quick capture"
+        files: [web/src/components/Capture.tsx, web/src/components/Views.tsx]
+      - id: zettels.manage
+        name: "Mark zettels read, unread and delete them"
+        files: [web/src/components/Views.tsx]
+      - id: zettels.process
+        name: "Turn a zettel into a page"
+
+  - id: editor
+    name: Editor
+    features:
+      - id: editor.format
+        name: "Bold, italic and markdown shortcuts"
+        files: [web/src/editor/extensions.ts]
+      - id: editor.slash
+        name: "Every slash command"
+        files: [web/src/editor/slash.ts]
+      - id: editor.presets
+        name: "NPC, place and encounter starters"
+        files: [web/src/editor/chain.ts]
+      - id: editor.chain
+        name: "Chains such as h2{Hooks}+ul>li*3"
+        files: [web/src/editor/chain.ts]
+      - id: editor.wikilinks
+        name: "Wikilinks"
+        files: [web/src/editor/wikilink.tsx]
+      - id: editor.wikilinks-missing
+        name: "Links to pages that do not exist yet"
+        files: [web/src/editor/wikilink.tsx]
+      - id: editor.wikilinks-anchor
+        name: "Links to a section"
+        files: [web/src/editor/wikilink.tsx]
+      - id: editor.hover-preview
+        name: "Hover preview"
+        files: [web/src/components/HoverPreview.tsx]
+      - id: editor.embed
+        name: "Embed a page"
+        files: [web/src/editor/Embed.tsx]
+      - id: editor.image
+        name: "Upload an image"
+        files: [web/src/components/PageView.tsx]
+      - id: editor.statblock
+        name: "Stat block in a page"
+        files: [web/src/editor/StatBlock.tsx]
+      - id: editor.statblock-fill
+        name: "Fill in a stat block"
+        files: [web/src/editor/StatBlock.tsx]
+      - id: todos
+        name: "Todos"
+        files: [web/src/editor/Todo.tsx, web/src/components/Todos.tsx]
+      - id: todos.filters
+        name: "Todo filters and search"
+        files: [web/src/components/Todos.tsx]
+      - id: comments
+        name: "Comments with @"
+        files: [web/src/editor/Comment.tsx, web/src/components/Comments.tsx]
+      - id: comments.filters
+        name: "Comment filters and resolving"
+      - id: editor.autolinks
+        name: "Automatic links to page names"
+        files: [web/src/components/useAutoLinks.tsx, web/src/lib/autolink.ts]
+        status: planned
+      - id: editor.tables
+        name: "Edit table rows and columns"
+
+  - id: special
+    name: Special pages, templates and stat forms
+    features:
+      - id: special-pages
+        name: "Person, monster and location pages"
+        files: [web/src/components/TypeLayout.tsx, web/src/lib/pageTypes.ts]
+      - id: page-types
+        name: "Design a custom page type"
+        files: [web/src/components/PageTypes.tsx]
+      - id: page-types.use
+        name: "Delete a custom page type"
+        files: [web/src/components/PageTypes.tsx]
+      - id: page-types.designer
+        name: "Add, move and remove blocks in the designer"
+        files: [web/src/components/PageTypes.tsx]
+      - id: page-types.source
+        name: "Edit a type as JSON, YAML or Markdown"
+        files: [web/src/lib/pageTypes.ts]
+        status: planned
+      - id: templates
+        name: "Templates"
+        files: [web/src/components/Templates.tsx]
+      - id: templates-from-page
+        name: "Save a page as a template"
+        files: [web/src/components/Templates.tsx]
+      - id: templates-new-page
+        name: "New page from a template"
+        files: [web/src/components/Templates.tsx]
+      - id: templates-edit
+        name: "Edit a template"
+        files: [web/src/components/Templates.tsx]
+      - id: stat-forms
+        name: "Stat block forms"
+        files: [web/src/components/StatTemplates.tsx]
+      - id: stat-forms.edit
+        name: "Add and reorder fields in a form"
+
+  - id: world
+    name: Maps, timeline and sessions
+    features:
+      - id: maps.upload
+        name: "Upload a map"
+        files: [web/src/components/MapsViews.tsx, web/src/lib/mapUpload.ts]
+      - id: maps.pins
+        name: "Markers"
+        files: [web/src/components/MapView.tsx]
+      - id: maps.shapes
+        name: "Lines and regions"
+        files: [web/src/components/MapView.tsx]
+      - id: maps.tools
+        name: "Select, measure, layers, settings and zoom"
+        files: [web/src/components/MapView.tsx]
+      - id: maps.page-pin
+        name: "Pin a page with /pin"
+        files: [web/src/components/PageWorld.tsx]
+      - id: maps.inspector
+        name: "Edit a marker in the inspector"
+        files: [web/src/components/MapInspector.tsx]
+      - id: maps.time
+        name: "Things that move or change over time"
+        files: [web/src/components/TimeBar.tsx]
+      - id: maps.child
+        name: "Child maps"
+      - id: timeline
+        name: "Timeline events"
+        files: [web/src/components/MapsViews.tsx]
+      - id: timeline.calendar
+        name: "Custom calendar"
+        files: [web/src/lib/calendar.ts]
+      - id: timeline.calendar-edit
+        name: "Edit and save the calendar"
+        files: [web/src/lib/calendar.ts]
+      - id: timeline.edit
+        name: "Events listed on the timeline"
+        files: [web/src/components/MapsViews.tsx]
+      - id: timeline.page-event
+        name: "Date a page with /teven"
+        files: [web/src/components/PageWorld.tsx]
+      - id: sessions
+        name: "Log a session"
+        files: [web/src/components/Sessions.tsx]
+      - id: sessions.stats
+        name: "Writing statistics"
+        files: [web/src/components/Sessions.tsx]
+      - id: sessions.edit
+        name: "Add more sessions"
+        files: [web/src/components/Sessions.tsx]
+      - id: relations
+        name: "Family trees and diagram"
+        files: [web/src/components/Relations.tsx, web/src/lib/family.ts]
+      - id: relations.dialog
+        name: "Add a relation with /relation"
+        files: [web/src/components/PageWorld.tsx]
+      - id: relations.create
+        name: "Create a relation between two pages"
+        files: [web/src/components/PageWorld.tsx, web/src/components/Relations.tsx]
+      - id: graph
+        name: "Page graph"
+        files: [web/src/components/Graph.tsx]
+      - id: graph.filter
+        name: "Filter the graph by tag"
+        files: [web/src/components/Graph.tsx]
+
+  - id: library
+    name: Library
+    features:
+      - id: library.download
+        name: "Download the library"
+        files: [web/src/components/Library.tsx]
+      - id: library.browse
+        name: "Browse and search entries"
+        files: [web/src/components/LibraryEntry.tsx]
+      - id: library.import
+        name: "Add an entry to the world"
+        files: [web/src/lib/open5e.ts]
+      - id: library.entries
+        name: "Open every kind of entry"
+        files: [web/src/components/LibraryEntry.tsx, web/src/components/LibraryField.tsx]
+      - id: library.wikilink
+        name: "Library entries in the {{ suggestions"
+        files: [web/src/editor/wikilink.tsx]
+      - id: library.link-terms
+        name: "Link library terms in a page"
+
+  - id: sharing
+    name: Sharing and copying
+    features:
+      - id: share
+        name: "Share a page publicly and stop sharing"
+        files: [web/src/components/ShareDialog.tsx, web/src/components/PublicPage.tsx]
+      - id: share.privacy
+        name: "Secrets stay out of public pages"
+        files: [web/src/components/PublicPage.tsx]
+      - id: share.list
+        name: "List of shared pages"
+        files: [web/src/components/Views.tsx]
+      - id: copy
+        name: "Copy a page to another world"
+        files: [web/src/components/CopyDialog.tsx]
+
+  - id: live
+    name: Working together and offline
+    features:
+      - id: collab.live
+        name: "Live editing between two people"
+        files: [web/src/lib/collab.ts]
+      - id: collab.presence
+        name: "See who else is in the page"
+        files: [web/src/lib/collab.ts]
+      - id: collab.viewer
+        name: "Viewers follow along read-only"
+      - id: collab.sidebar
+        name: "New pages appear without a reload"
+        files: [web/src/lib/live.ts]
+      - id: offline
+        name: "The cached world opens without a connection"
+        files: [web/src/lib/data.ts]
+      - id: offline.old-cache
+        name: "An old cache missing newer lists still loads"
+      - id: errors
+        name: "A failing request shows a plain message"
+        files: [web/src/lib/dialog.ts]
+
+  - id: admin
+    name: Admin dashboard
+    features:
+      - id: admin
+        name: "Sign in and see people and worlds"
+      - id: admin.access
+        name: "Grant and remove access to a world"
+        status: planned
+      - id: admin.people
+        name: "Add people and reset passwords"
+        status: planned

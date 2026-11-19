@@ -1,0 +1,59 @@
+name: End-to-end tests
+
+# Drives the real web app in Chromium against a throwaway server, then publishes the
+# test map (what is tested, what is not) and the coverage report as a download.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm install --prefix e2e
+      - run: npx --prefix e2e playwright install --with-deps chromium
+      - run: npm test --prefix e2e
+        env:
+          CI: 'true'
+      - name: Summarise
+        if: always()
+        run: |
+          if [ -f e2e/report/features.json ]; then
+            node -e "
+              const d = JSON.parse(require('fs').readFileSync('e2e/report/features.json', 'utf8'));
+              const n = (s) => d.features.filter((f) => f.status === s).length;
+              const lines = [
+                '### End-to-end tests',
+                '',
+                '| Features tested | Not tested yet | Failing | Planned |',
+                '| --- | --- | --- | --- |',
+                '| ' + (n('passed') + n('flaky')) + ' of ' + d.features.length + ' | ' + n('untested') + ' | ' + (n('failed') + n('flaky')) + ' | ' + n('planned') + ' |',
+                '',
+                'Coverage of web/src: lines ' + d.gate.lines + '%, statements ' + d.gate.statements + '%, functions ' + d.gate.functions + '%, branches ' + d.gate.branches + '% (gate ' + d.gate.threshold + '% on lines and statements).',
+              ];
+              require('fs').appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join('\n') + '\n');
+            "
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-report
+          path: |
+            e2e/report/features.html
+            e2e/report/features.json
+            e2e/report/coverage
+            e2e/report/tests
+            e2e/report/artifacts
+          retention-days: 14

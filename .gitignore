@@ -6,3 +6,7 @@ data
 
 electron/build
 electron/release-notes.md
+
+e2e/.run
+e2e/report
+e2e/monocart-report

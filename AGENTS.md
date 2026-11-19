@@ -46,6 +46,7 @@ Never test against the owner's real data directory.
 - Updater: `node scripts/test-update-logic.mjs` (no Electron), `node scripts/test-update-flow.mjs` (real Electron, fake GitHub; **unset `ELECTRON_RUN_AS_NODE` first**).
 - Desktop app: `node scripts/test-electron.mjs <server-url>`; the update button in real Electron against a fake server and GitHub: `node scripts/test-update-button.mjs` (**unset `ELECTRON_RUN_AS_NODE` first**).
 - Add a smoke script for every new server route family, in the same style (copy a small one such as `smoke-templates.mjs`).
+- **End-to-end UI tests** (`e2e/`, Playwright, own package like `electron/`): `npm run e2e:install` once, then `npm run test:e2e` and `npm run test:e2e:report`. They run the real app in Chromium against a throwaway server and show a dashboard of what is tested (`e2e/features.yml` is the catalog) plus web code coverage, gated at 70 percent of lines and statements. A new user-visible feature gets a line in `features.yml` and a test tagged `@feature:<id>`. Details in `docs/TESTING.md`.
 
 ## 3. Architecture rules (the important ones)
 
@@ -184,7 +185,7 @@ This covers UI text, docs, changelog, release notes and defaults.
 
 - [ ] Root cause understood (bugs) or behaviour specified (features).
 - [ ] `npm run typecheck` clean; `npm run build` succeeds.
-- [ ] Relevant smoke/unit scripts pass; new route family has a smoke script.
+- [ ] Relevant smoke/unit scripts pass; new route family has a smoke script; UI changes have an end-to-end test and `npm run test:e2e` passes.
 - [ ] UI checked in a browser (light and a dark theme, phone width for layout changes, viewer role if editing is involved).
 - [ ] Docs updated (ROADMAP / DEPLOY / electron README / CHANGELOG as applicable).
 - [ ] Old data still loads (migration or defensive default).

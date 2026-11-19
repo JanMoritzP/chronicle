@@ -6,7 +6,8 @@ import { config } from './config.js'
 
 // The Open5e library is reference data, not user content. It lives in its own file so backups,
 // restores, exports and world copies never touch it, and it can be rebuilt at any time.
-const API = 'https://api.open5e.com/v2'
+// OPEN5E_API lets the end-to-end tests point the download at a local stand-in; nobody else needs it.
+const API = process.env.OPEN5E_API ?? 'https://api.open5e.com/v2'
 
 export const CATEGORIES = [
   { id: 'creature', endpoint: 'creatures' },

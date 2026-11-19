@@ -1,0 +1,21 @@
+{
+  "name": "@dnd/e2e",
+  "private": true,
+  "version": "0.17.0",
+  "type": "module",
+  "description": "End-to-end tests for the Chronicle web app. Not an npm workspace, so the Docker build never installs it.",
+  "scripts": {
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "report": "node scripts/open-report.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.10.0",
+    "@playwright/test": "^1.55.0",
+    "@types/node": "^22.0.0",
+    "monocart-reporter": "^2.9.0",
+    "typescript": "~5.9.0",
+    "yaml": "^2.9.1"
+  }
+}

@@ -165,7 +165,7 @@ export function Sidebar() {
 
   const newFolder = async (parentId: string | null) => {
     const name = await askText('New folder', { label: 'Folder name', okLabel: 'Create' })
-    if (name?.trim()) await useStore.getState().addFolder(name.trim(), parentId)
+    if (name?.trim()) await useStore.getState().addFolder(name.trim(), parentId).catch((e) => alertDialog(e.message))
   }
 
   return (

@@ -152,7 +152,7 @@ export function TrashView() {
             <td style={{ textAlign: 'right' }}>
               {!readOnly && <>
                 <button className="btn sm" onClick={async () => { await api.restorePage(p.id); await useStore.getState().refresh(); load() }}>Restore</button>{' '}
-                <button className="btn sm danger" onClick={async () => { if (await confirmDialog('This page is deleted forever.', { title: 'Delete forever?', okLabel: 'Delete', danger: true })) { await api.purgePage(p.id); load() } }}><Trash2 size={13} /></button>
+                <button className="btn sm danger" onClick={async () => { if (await confirmDialog('This page is deleted forever.', { title: 'Delete forever?', okLabel: 'Delete', danger: true })) { await api.purgePage(p.id); load() } }} title="Delete forever" aria-label="Delete forever"><Trash2 size={13} /></button>
               </>}
             </td>
           </tr>
