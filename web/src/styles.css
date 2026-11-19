@@ -285,6 +285,10 @@ a.btn { display: inline-block; color: inherit; text-decoration: none; }
 .result .sub { font-size: 12.5px; color: var(--muted); }
 .result mark { background: transparent; color: var(--accent); font-weight: 700; }
 .suggest { position: fixed; z-index: 90; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); width: 340px; max-width: calc(100vw - 16px); max-height: 320px; overflow: auto; padding: 4px; }
+.suggest .result.disabled { cursor: default; opacity: .85; }
+.suggest .result.disabled:hover { background: transparent; }
+.suggest .result.disabled .sub { color: var(--danger); }
+.suggest .result.disabled.typing .sub { color: var(--muted); }
 .suggest .group { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); padding: 6px 8px 2px; }
 .hover-card { position: fixed; z-index: 95; width: 360px; max-width: calc(100vw - 16px); max-height: 420px; overflow: auto; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); padding: 12px 14px; animation: pop .12s ease-out; }
 .hover-card h4 { margin: 0 0 6px; font-size: 15px; }

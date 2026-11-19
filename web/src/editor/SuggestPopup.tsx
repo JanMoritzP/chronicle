@@ -31,8 +31,8 @@ export function SuggestPopup() {
         return (
           <div key={it.key}>
             {header && <div className="group">{header}</div>}
-            <div className={`result ${i === index ? 'sel' : ''}`} onMouseEnter={() => useSuggest.getState().set({ index: i })}
-              onClick={() => range && it.run(range)}>
+            <div className={`result ${i === index ? 'sel' : ''} ${it.disabled ? 'disabled' : ''} ${it.typing ? 'typing' : ''}`} onMouseEnter={() => !it.disabled && useSuggest.getState().set({ index: i })}
+              onClick={() => range && !it.disabled && it.run(range)}>
               {it.icon && <span className="muted row">{it.icon}</span>}
               <div className="grow">
                 <div className="ellipsis">{it.indices?.length ? highlight(it.label, it.indices).map((p, k) => typeof p === 'string' ? p : <mark key={k}>{p.m}</mark>) : it.label}</div>

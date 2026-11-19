@@ -3,11 +3,12 @@ import Suggestion from '@tiptap/suggestion'
 import { PluginKey } from '@tiptap/pm/state'
 import {
   AlignLeft, CalendarDays, CheckSquare, Code, FileInput, Heading1, Heading2, Heading3, Image as ImageIcon, LayoutTemplate, List, ListOrdered, ListTodo,
-  MapPin, Minus, Quote, Shield, Users, Table as TableIcon,
+  ChevronsRight, MapPin, Minus, Quote, Shield, Sparkles, Users, Table as TableIcon,
 } from 'lucide-react'
 import { createElement } from 'react'
 import { fuzzy } from '../lib/fuzzy'
 import { currentTemplates } from './useTemplates'
+import { CHAIN_TAGS, isChainSource, runChain, trailingToken, type ChainExtras } from './chain'
 import { suggestRender, type SuggestItem } from './suggest'
 import { useStore } from '../store'
 
@@ -45,6 +46,7 @@ const COMMANDS: Cmd[] = [
   { id: 'embed', label: 'Embed page', sub: 'Show another page or section here', keywords: 'transclude include', icon: FileInput, run: (e, r) => embedPicker.pick?.(e, r) },
   { id: 'pin', label: 'Pin on map', sub: 'Mark where this page is on a map', keywords: 'map marker location place', icon: MapPin, run: (e, r) => { e.chain().focus().deleteRange(r).run(); worldPicker.pin?.(e, r) } },
   { id: 'teven', label: 'Timeline event', sub: 'Give this page a date on the timeline', keywords: 'date calendar time when', icon: CalendarDays, run: (e, r) => { e.chain().focus().deleteRange(r).run(); worldPicker.event?.(e, r) } },
+  { id: 'chain', label: 'Chain blocks', sub: 'Combine blocks in one go, e.g. h2{Hooks}+ul>li*3', keywords: 'emmet abbreviation combine nest repeat', icon: Sparkles, run: (e, r) => { e.chain().focus().insertContentAt(r.to, 'h2{Title}+ul>li*3').run() } },
   { id: 'relation', label: 'Relation', sub: 'Link to a parent, spouse, sibling or custom relationship', keywords: 'family tree parent child spouse sibling rival ally', icon: Users, run: (e, r) => { e.chain().focus().deleteRange(r).run(); worldPicker.relation?.(e, r) } },
 ]
 
@@ -71,7 +73,55 @@ function templateCommands(): Cmd[] {
   }))
 }
 
+/** Dialog commands (image, embed, pin...) may end a chain; the dialog opens once the rest is inserted. */
+const ACTION_IDS = ['image', 'embed', 'pin', 'teven', 'relation']
+
+function chainExtras(): ChainExtras {
+  const out: ChainExtras = {}
+  for (const t of useStore.getState().data.templates ?? []) out[t.slug] = { label: t.name, nodes: () => structuredClone(t.content?.content ?? []) }
+  for (const t of currentTemplates()) out[`stat-${t.id}`] = { label: `Stat block: ${t.name}`, nodes: () => [{ type: 'statblock', attrs: { template: t.id, data: {} } }] }
+  for (const id of ACTION_IDS) {
+    const c = COMMANDS.find((x) => x.id === id)
+    if (c) out[id] = { label: c.label, action: id }
+  }
+  return out
+}
+
+function chainItems(editor: Editor, query: string): SuggestItem[] {
+  const extras = chainExtras()
+  const res = runChain(query, extras)
+  const out: SuggestItem[] = []
+  if (res.ok) {
+    out.push({
+      key: 'chain', label: query, sub: res.summary || 'Nothing to insert', icon: createElement(Sparkles, { size: 16 }),
+      run: (range) => {
+        editor.chain().focus().deleteRange(range).insertContent(res.nodes).run()
+        const act = res.action && COMMANDS.find((c) => c.id === res.action)
+        const at = editor.state.selection.from
+        if (act) act.run(editor, { from: at, to: at })
+      },
+    })
+  } else {
+    out.push({ key: 'chain-error', label: query, sub: res.error, icon: createElement(Sparkles, { size: 16 }), disabled: true, typing: res.partial, run: () => {} })
+  }
+  // finish the block name being typed: "ul>l" offers li
+  const tok = trailingToken(query)
+  if (tok) {
+    const lower = tok.token.toLowerCase()
+    const names = [...CHAIN_TAGS, ...Object.entries(extras).map(([name, e]) => ({ name, label: e.label }))]
+    for (const t of names.filter((n) => n.name.startsWith(lower) && n.name !== lower).slice(0, 6)) {
+      out.push({
+        key: `chain-${t.name}`, label: query.slice(0, tok.start) + t.name, sub: t.label, icon: createElement(ChevronsRight, { size: 16 }),
+        run: (range) => { editor.chain().focus().insertContentAt({ from: range.to - tok.token.length, to: range.to }, t.name).run() },
+      })
+    }
+  }
+  return out
+}
+
 function items(editor: Editor, query: string): SuggestItem[] {
+  if (isChainSource(query)) return chainItems(editor, query)
+  if (/\s/.test(query)) return []
   const out: { cmd: Cmd; score: number; indices: number[] }[] = []
   const all = [...templateCommands(), ...COMMANDS, ...statCommands()]
   for (const [order, cmd] of all.entries()) {
@@ -102,6 +152,8 @@ export const SlashCommands = Extension.create({
         pluginKey: new PluginKey('slash'),
         char: '/',
         startOfLine: false,
+        // a chain may hold spaces inside {text}; items() returns nothing for any other query with a space
+        allowSpaces: true,
         allowedPrefixes: [' ', '\n'],
         allow: ({ state }) => !state.selection.$from.parent.type.spec.code,
         items: ({ query }) => items(this.editor, query),

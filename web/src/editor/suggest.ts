@@ -8,6 +8,10 @@ export interface SuggestItem {
   group?: string
   indices?: number[]
   icon?: ReactNode
+  /** Shown but not selectable, e.g. the reason a chain cannot be inserted yet. */
+  disabled?: boolean
+  /** With disabled: the input is only unfinished, so the note is not styled as an error. */
+  typing?: boolean
   run: (range: { from: number; to: number }) => void
 }
 
@@ -33,7 +37,7 @@ export function suggestRender() {
     useSuggest.getState().set({
       open: true, items: p.items, range: p.range,
       rect: r ? { left: r.left, top: r.top, bottom: r.bottom } : null,
-      ...(resetIndex ? { index: 0 } : {}),
+      ...(resetIndex ? { index: Math.max(0, p.items.findIndex((it) => !it.disabled)) } : {}),
     })
   }
   return {
@@ -50,7 +54,7 @@ export function suggestRender() {
       if (event.key === 'ArrowUp') { s.set({ index: (s.index - 1 + s.items.length) % s.items.length }); return true }
       if (event.key === 'Enter' || event.key === 'Tab') {
         const it = s.items[s.index]
-        if (it && s.range) { it.run(s.range); return true }
+        if (it && !it.disabled && s.range) { it.run(s.range); return true }
       }
       return false
     },

@@ -134,6 +134,18 @@ A World Anvil-style worldbuilding notebook. Self-hosted, React frontend, Node + 
 - Editors and owners create, edit and delete; viewers can read only.
 - API: `POST /api/workspaces/:ws/templates`, `PATCH|DELETE /api/templates/:id`. Tests: `scripts/smoke-templates.mjs` (29 checks).
 
+## Slash chains (built)
+
+What it does: the slash menu understands short chains in the style of Emmet, so `/h2{Plot hooks}+ul>li*3` inserts a heading and a three item list in one step.
+
+- **Syntax.** `a>b` puts b inside a, `a+b` puts b after a (after `>`, a `+` stays inside the nest, as in Emmet: `ul>li+li` is a list of two). `a*3` repeats, `(a+b)*3` repeats a group, `a{text}` sets the text; text may hold spaces. In text `$` is the number of the repeat (`$$` pads to two digits), `\$` and `\}` are literal. Order of `{}` and `*` after a name does not matter. A leaf block that gets children places them after itself, so `h2{Hooks}>ul>li*3` works like `h2{Hooks}+ul>li*3`.
+- **Blocks.** `h1` to `h4`, `p`, `ul`, `ol`, `task` (checklist), `li`, `quote`, `code`, `hr`, `todo`, `table` (`table3x4` is 3 rows by 4 columns, with a header row), plus the names of the slash menu (`bullet`, `number`, `checklist`, `divider`, `text`). The world's templates (`npc`) and stat blocks (`stat-5e-monster`) can be chained by their slash name. Dialog commands (`image`, `embed`, `pin`, `teven`, `relation`) may end a chain: everything before is inserted, then the dialog opens.
+- **In the menu.** A query with an operator (or a table size) is a chain; any other query is a normal command search. A chain shows one entry that says what it will insert ("Heading 2, Bullet list (3 items)"). While it is not valid the entry is greyed with the reason, and the name being typed is offered as a completion (`ul>l` offers `ul>li`). Enter or Tab inserts; one undo removes the whole chain. "Chain blocks" in the menu types an example to start from.
+- **Limits.** 50 repeats, 300 blocks per chain, tables up to 20 by 20.
+- **Code.** `web/src/editor/chain.ts` (pure: parser and expansion to TipTap JSON), `slash.ts` (menu wiring), `suggest.ts` (`disabled` items). The slash plugin now allows spaces in its query; a query with a space that is not a chain shows nothing, as before.
+- **Tests.** `scripts/test-chain.ts` (bundle with esbuild, run with node).
+- **Not done.** No custom named chains, no `^` to climb up a level, no inline formatting or links inside `{text}`.
+
 ## Special pages (built)
 - A special page is a normal page with a fixed layout next to its text and an automatic tag. Built-in types: Person, Monster, Location. Custom types are per world and can be created, duplicated and deleted. Deleting a type makes its pages plain pages (the text and field values are kept).
 - Layout: four zones (top, side, main, bottom), columns side-left / side-right / single (with one column, side blocks merge into main), side width in px (160 to 520). `flow: wrap` lets the text run on underneath the side column once its blocks end (the side floats); `flow: columns` keeps the text in its own column, and `sticky: true` then keeps the side in view while a long text scrolls. Person, Monster and Location use `wrap`; layouts saved before the option exist keep `columns`. On phones the side stacks above the text either way. Blocks: image (key, shape square/circle/wide/tall), statblock (any stat block form), fields (labelled key/value pairs, optionally long text), body (the normal page text). An image with the key `portrait` doubles as the page thumbnail.
