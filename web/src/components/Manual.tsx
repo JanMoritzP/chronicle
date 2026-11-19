@@ -92,7 +92,7 @@ const SECTIONS: Section[] = [
             <tr><td><Code>a+b</Code></td><td>b after a</td></tr>
             <tr><td><Code>a*3</Code></td><td>a three times</td></tr>
             <tr><td><Code>(a+b)*3</Code></td><td>the pair three times</td></tr>
-            <tr><td><Code>a{'{text}'}</Code></td><td>text for a. Text may hold spaces.</td></tr>
+            <tr><td><Code>a{'{text}'}</Code></td><td>text for a. Text may hold spaces. A missing closing brace at the end is added for you.</td></tr>
             <tr><td><Code>$</Code></td><td>inside text: the number of the repeat. <Code>$$</Code> pads to two digits.</td></tr>
           </tbody>
         </table>

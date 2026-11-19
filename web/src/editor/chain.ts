@@ -93,9 +93,9 @@ function parse(src: string): Item[] {
         while (j < src.length && src[j] !== '}') {
           if (src[j] === '\\' && j + 1 < src.length) { text += src[j] + src[j + 1]; j += 2 } else text += src[j++]
         }
-        if (j >= src.length) return fail('Close the text with }', true)
+        // a brace left open at the end of the chain closes itself, so Enter works without typing }
         node.text = text
-        i = j + 1
+        i = Math.min(j + 1, src.length)
       } else {
         i++
         const s = i
