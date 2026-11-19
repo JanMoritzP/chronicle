@@ -7,7 +7,8 @@ import { embedPicker, imagePicker, worldPicker } from '../editor/slash'
 import { EventDialog, PageWorldSection, PinDialog } from './PageWorld'
 import { PageRelationsSection, RelationDialog } from './Relations'
 import { ShareDialog } from './ShareDialog'
-import { pageSavedBus, todoBus } from '../lib/bus'
+import { liveBus } from '../lib/bus'
+import { CollabProvider, colorFor, type CollabStatus } from '../lib/collab'
 import { ago, backlinksOf } from '../lib/data'
 import { autolinkDoc, buildMatcher } from '../lib/autolink'
 import { useLibrary } from '../lib/library'
@@ -26,20 +27,27 @@ type SaveState = 'saved' | 'saving' | 'dirty' | 'error'
 export function PageView({ id, anchor }: { id: string; anchor?: string }) {
   const [page, setPage] = useState<FullPage | null>(null)
   const [error, setError] = useState('')
+  // bumped when the page was replaced behind our back (version restore, backup restore): load it again
+  const [epoch, setEpoch] = useState(0)
   useEffect(() => {
     let alive = true
     setPage(null)
     setError('')
     api.getPage(id, true).then((p) => alive && setPage(p)).catch((e) => alive && setError(e instanceof ApiError && e.status === 404 ? 'This page no longer exists.' : e.message))
     return () => { alive = false }
-  }, [id])
+  }, [id, epoch])
   if (error) return <div className="view muted">{error}</div>
   if (!page) return <div className="view muted">Loading…</div>
-  return <PageEditor key={id} page={page} anchor={anchor} />
+  return <PageEditor key={`${id}:${epoch}`} page={page} anchor={anchor} onReload={() => setEpoch((e) => e + 1)} />
 }
 
-function PageEditor({ page, anchor }: { page: FullPage; anchor?: string }) {
+type PropsPatch = { data?: Record<string, any>; portrait?: string | null; type?: string | null }
+type Pending = { title?: string; tags?: string[]; propsPatch?: PropsPatch }
+
+function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: string; onReload: () => void }) {
   const user = useStore((s) => s.user)!
+  const online = useStore((s) => s.online)
+  const others = online.filter((o) => o.id !== user.id)
   const readOnly = user.role === 'viewer'
   const zen = useStore((s) => s.zen)
   const meta = useStore((s) => s.data.pages.find((p) => p.id === page.id))
@@ -54,7 +62,7 @@ function PageEditor({ page, anchor }: { page: FullPage; anchor?: string }) {
   const [showHistory, setShowHistory] = useState(false)
   const [showMenu, setShowMenu] = useState(false)
   const [showShare, setShowShare] = useState(false)
-  const pending = useRef<{ title?: string; tags?: string[]; content?: any; props?: Record<string, any> }>({})
+  const pending = useRef<Pending>({})
   const [props, setProps] = useState<Record<string, any>>(page.props ?? {})
   const types = useTypes()
   const pageType = typeOf(types, { type: props.type ?? null })
@@ -73,16 +81,14 @@ function PageEditor({ page, anchor }: { page: FullPage; anchor?: string }) {
     try {
       const r = await api.patchPage(page.id, body)
       const st = useStore.getState()
+      // the text itself is saved by the server from the shared document; only the page's own fields go through here
       st.patchPageMeta(page.id, {
         ...(body.title !== undefined ? { title: body.title } : {}),
         ...(body.tags ? { tags: body.tags } : {}),
-        ...(body.props ? { type: r.type ?? null } : {}),
-        outline: r.outline, text: r.text, wordCount: r.wordCount, hasStats: r.hasStats, portrait: r.portrait, updatedAt: r.updatedAt,
-        ...(body.content ? { todos: r.todos } : {}),
+        ...(body.propsPatch ? { type: r.type ?? null, portrait: r.portrait } : {}),
+        updatedAt: r.updatedAt,
       })
-      if (body.content) st.setLinksFor(page.id, r.links)
       if (body.title !== undefined) st.refresh()
-      pageSavedBus.emit(page.id)
       setSave(Object.keys(pending.current).length ? 'dirty' : 'saved')
     } catch {
       pending.current = { ...body, ...pending.current }
@@ -91,8 +97,14 @@ function PageEditor({ page, anchor }: { page: FullPage; anchor?: string }) {
     }
   }, [page.id])
 
-  const schedule = useCallback((patch: typeof pending.current, delay = 700) => {
-    pending.current = { ...pending.current, ...patch }
+  const schedule = useCallback((patch: Pending, delay = 700) => {
+    const cur = pending.current
+    pending.current = { ...cur, ...patch }
+    // field changes pile up until the save goes out, so none is lost
+    if (patch.propsPatch) {
+      const data = cur.propsPatch?.data || patch.propsPatch.data ? { data: { ...cur.propsPatch?.data, ...patch.propsPatch.data } } : {}
+      pending.current.propsPatch = { ...cur.propsPatch, ...patch.propsPatch, ...data }
+    }
     setSave('dirty')
     clearTimeout(timer.current)
     timer.current = window.setTimeout(flush, delay)
@@ -109,18 +121,33 @@ function PageEditor({ page, anchor }: { page: FullPage; anchor?: string }) {
     }
   }, [flush])
 
-  const extensions = useMemo(() => buildExtensions(), [])
+  // The text lives in a shared document that everyone editing this page is connected to. Until it has loaded the page
+  // shows the last saved text, read-only, so nobody types into a document that is about to be replaced.
+  const reloadRef = useRef(onReload)
+  reloadRef.current = onReload
+  const [provider, setProvider] = useState<CollabProvider | null>(null)
+  const [live, setLive] = useState(false)
+  const [conn, setConn] = useState<CollabStatus>('connecting')
+  useEffect(() => {
+    const p = new CollabProvider(page.id)
+    const offs = [
+      p.subscribe(() => { setConn(p.status); if (p.synced) setLive(true) }),
+      p.onReloadNotice(() => { api.invalidate(page.id); reloadRef.current() }),
+    ]
+    setProvider(p)
+    return () => { offs.forEach((off) => off()); setProvider(null); setLive(false); p.destroy() }
+  }, [page.id])
+
+  const collab = live && provider ? { provider, user: { name: user.username, color: colorFor(user.username) } } : undefined
+  const extensions = useMemo(() => buildExtensions({ collab }), [collab?.provider])
+  const countWords = (text: string) => text.trim().split(/\s+/).filter(Boolean).length
   const editor = useEditor({
     extensions,
-    content: page.content,
-    editable: !readOnly,
-    onUpdate: ({ editor }) => {
-      const json = editor.getJSON()
-      api.setCachedContent(page.id, json)
-      setWords(editor.getText().trim().split(/\s+/).filter(Boolean).length)
-      schedule({ content: json })
-    },
-  }, [page.id])
+    content: collab ? undefined : page.content,
+    editable: !readOnly && !!collab,
+    onCreate: ({ editor }) => setWords(countWords(editor.getText())),
+    onUpdate: ({ editor }) => setWords(countWords(editor.getText())),
+  }, [page.id, collab?.provider])
 
   // images
   const upload = useCallback(async (file: File) => {
@@ -180,22 +207,16 @@ function PageEditor({ page, anchor }: { page: FullPage; anchor?: string }) {
     return () => clearTimeout(t)
   }, [anchor, editor])
 
-  // a todo changed in the Todos tab while this page is open (e.g. in a split pane)
-  useEffect(() => {
-    if (!editor) return
-    return todoBus.on(({ pageId, todoId, change }) => {
-      if (pageId !== page.id) return
-      let found: { pos: number; size: number; attrs: any } | null = null
-      editor.state.doc.descendants((n, pos) => {
-        if (n.type.name === 'todo' && n.attrs.id === todoId) found = { pos, size: n.nodeSize, attrs: n.attrs }
-        return !found
-      })
-      if (!found) return
-      const f = found as { pos: number; size: number; attrs: any }
-      const tr = change ? editor.state.tr.setNodeMarkup(f.pos, undefined, { ...f.attrs, ...change }) : editor.state.tr.delete(f.pos, f.pos + f.size)
-      editor.view.dispatch(tr)
-    })
-  }, [editor, page.id])
+  // someone else changed this page's title, tags or fields: show it unless we have our own change on its way
+  useEffect(() => liveBus.on((c) => {
+    if (c.pageId !== page.id) return
+    api.getPage(page.id, true).then((p) => {
+      const mine = pending.current
+      if (mine.title === undefined && document.activeElement !== titleRef.current) setTitle(p.title)
+      if (!mine.tags) setTags(p.tags)
+      if (!mine.propsPatch) setProps(p.props ?? {})
+    }).catch(() => {})
+  }), [page.id])
 
   // focus empty new pages on the title
   const titleRef = useRef<HTMLInputElement>(null)
@@ -233,7 +254,7 @@ function PageEditor({ page, anchor }: { page: FullPage; anchor?: string }) {
       if (value == null || value === '') delete next.data[key]; else next.data[key] = value
     }
     setProps(next)
-    schedule({ props: next }, 500)
+    schedule({ propsPatch: key === 'portrait' ? { portrait: value || null } : { data: { [key]: value == null || value === '' ? null : value } } }, 500)
   }
   const pickImage = () => new Promise<string | null>((resolve) => {
     const el = document.createElement('input')
@@ -252,7 +273,7 @@ function PageEditor({ page, anchor }: { page: FullPage; anchor?: string }) {
     if (pageType?.tag && pageType.tag !== newTag) nextTags = nextTags.filter((t) => t !== pageType.tag)
     if (newTag && !nextTags.includes(newTag)) nextTags = [...nextTags, newTag]
     if (nextTags !== tags) setTags(nextTags)
-    schedule({ props: next, ...(nextTags !== tags ? { tags: nextTags } : {}) }, 100)
+    schedule({ propsPatch: { type: id || null }, ...(nextTags !== tags ? { tags: nextTags } : {}) }, 100)
   }
 
   const nav = useStore.getState().navigate
@@ -263,7 +284,13 @@ function PageEditor({ page, anchor }: { page: FullPage; anchor?: string }) {
       {!zen && (
         <div className="toolbar">
           <span className="muted ellipsis grow" style={{ fontSize: 13 }}>{folderName ? `${folderName} /` : ''} {title || 'Untitled'}</span>
-          <span className="save-state">{readOnly ? 'Read-only' : save === 'saved' ? 'Saved' : save === 'saving' ? 'Saving…' : save === 'error' ? 'Offline, retrying…' : 'Unsaved'}</span>
+          {others.length > 0 && (
+            <span className="presence" title={`Also here: ${others.map((o) => o.username).join(', ')}`}>
+              {others.slice(0, 4).map((o) => <span key={o.id} className="avatar" style={{ background: colorFor(o.username) }}>{o.username.slice(0, 1).toUpperCase()}</span>)}
+              {others.length > 4 && <span className="avatar more">+{others.length - 4}</span>}
+            </span>
+          )}
+          <span className="save-state">{readOnly ? (conn === 'offline' ? 'Offline' : 'Read-only') : conn === 'offline' ? 'Offline, changes sync later' : !live ? 'Connecting…' : save === 'saved' ? 'Saved' : save === 'saving' ? 'Saving…' : save === 'error' ? 'Offline, retrying…' : 'Unsaved'}</span>
           <button className="icon-btn" title="Zen mode (Alt+Z)" onClick={() => useStore.getState().setUi({ zen: true })}><Maximize2 size={16} /></button>
           <button className="icon-btn" title="Open in split view" onClick={() => nav({ type: 'page', id: page.id }, { split: true })}><PanelRightOpen size={16} /></button>
           <button className="icon-btn" title="Version history" onClick={() => setShowHistory(true)}><Clock size={16} /></button>
@@ -412,7 +439,7 @@ function PageEditor({ page, anchor }: { page: FullPage; anchor?: string }) {
           await api.patchPage(page.id, { content, title: t })
           api.invalidate(page.id)
           setShowHistory(false)
-          location.reload()
+          onReload()
         }} />}
     </div>
   )

@@ -3,6 +3,7 @@ import path from 'node:path'
 import Database from 'better-sqlite3'
 import type { FastifyInstance } from 'fastify'
 import { requireOwner } from './auth.js'
+import { resetCollab } from './collab.js'
 import { config } from './config.js'
 import { db, migrate, SCHEMA_VERSION, schemaVersionOf } from './db.js'
 import { zipStream, type ZipEntry } from './zip.js'
@@ -10,7 +11,7 @@ import { zipStream, type ZipEntry } from './zip.js'
 const dir = () => path.join(config.dataDir, 'backups')
 const NAME = /^[\w.-]+\.db$/
 // Accounts and logins belong to the installation, not to the content, so a restore leaves them alone.
-const KEEP_TABLES = new Set(['users', 'sessions', 'meta'])
+const KEEP_TABLES = new Set(['users', 'sessions', 'meta', 'admins', 'admin_sessions', 'workspace_members'])
 const KEEP_PRE_RESTORE = 5
 
 export async function runBackup(prefix = 'dnd'): Promise<string> {
@@ -69,6 +70,8 @@ export function restoreFrom(file: string) {
           const shared = cols('main').filter((c) => cols('bk').includes(c)).map((c) => `"${c}"`).join(',')
           restored[t] = db.prepare(`INSERT INTO main."${t}"(${shared}) SELECT ${shared} FROM bk."${t}"`).run().changes
         }
+        // access follows the accounts; worlds that no longer exist take their members with them
+        db.exec('DELETE FROM main.workspace_members WHERE workspace_id NOT IN (SELECT id FROM main.workspaces)')
         const bad = db.pragma('foreign_key_check') as unknown[]
         if (bad.length) throw new Error('The backup is inconsistent and was not restored')
       })()
@@ -126,6 +129,7 @@ export async function backupRoutes(app: FastifyInstance) {
     const safety = await runBackup('pre-restore')
     try {
       const restored = restoreFrom(file)
+      resetCollab()
       return { ok: true, safety, restored }
     } catch (e: any) {
       return reply.code(400).send({ error: e.message ?? 'Restore failed', safety })

@@ -29,13 +29,18 @@ export type View =
   | { type: 'stattemplate'; id: string }
   | { type: 'settings' }
 
+export interface OnlinePerson { id: string; username: string }
+
 export interface Tab { id: string; history: View[]; index: number }
 
 const tid = () => Math.random().toString(36).slice(2, 9)
 const viewKey = (v: View) => JSON.stringify(v)
 
 interface State {
+  /** The signed-in account with its real role. `user` is the same account as it behaves in the open world: a viewer there is read-only everywhere in the app. */
+  account: User | null
   user: User | null
+  online: OnlinePerson[]
   authChecked: boolean
   workspaces: Workspace[]
   wsId: string | null
@@ -60,6 +65,7 @@ interface State {
   login: (u: string, p: string) => Promise<void>
   logout: () => Promise<void>
   selectWorkspace: (id: string) => Promise<void>
+  refreshWorlds: () => Promise<void>
   createWorkspace: (name: string) => Promise<void>
   deleteWorkspace: (id: string) => Promise<void>
   setWorldSettings: (id: string, patch: Partial<WorldSettings>) => Promise<void>
@@ -94,13 +100,16 @@ interface State {
   setBindings: (b: Record<Action, string[]>) => void
 }
 
+const roleIn = (account: User | null, world: Workspace | undefined): User | null =>
+  account && world?.role === 'viewer' && account.role !== 'viewer' ? { ...account, role: 'viewer' } : account
+
 const emptyData: Bootstrap = { pages: [], folders: [], links: [], zettels: [], templates: [], pageTypes: [], statTemplates: [] }
 const initialTab = (): Tab => ({ id: tid(), history: [{ type: 'home' }], index: 0 })
 const firstTab = initialTab()
 const resolveActive = (s: Pick<State, 'tabs' | 'activeTab'>) => s.tabs.find((t) => t.id === s.activeTab) ?? s.tabs[0]
 
 export const useStore = create<State>((set, get) => ({
-  user: null, authChecked: false, workspaces: [], wsId: null, data: emptyData, loaded: false, offline: false,
+  account: null, user: null, online: [], authChecked: false, workspaces: [], wsId: null, data: emptyData, loaded: false, offline: false,
   tabs: [firstTab], activeTab: firstTab.id, splitTab: null,
   sidebarOpen: window.innerWidth > 900, zen: false, searchOpen: false, searchInitial: '', captureOpen: false, libraryOpen: false, copyPages: null,
   bindings: loadBindings(),
@@ -108,7 +117,7 @@ export const useStore = create<State>((set, get) => ({
   async init() {
     try {
       const user = await api.me()
-      set({ user, authChecked: true })
+      set({ user, account: user, authChecked: true })
       const workspaces = await api.workspaces()
       set({ workspaces })
       if (workspaces.length) {
@@ -120,7 +129,7 @@ export const useStore = create<State>((set, get) => ({
         // offline start: reuse the last known session + data
         const cached = await idbGet<{ user: User; workspaces: Workspace[] }>('session')
         if (cached) {
-          set({ user: cached.user, workspaces: cached.workspaces, authChecked: true, offline: true })
+          set({ user: cached.user, account: cached.user, workspaces: cached.workspaces, authChecked: true, offline: true })
           const last = localStorage.getItem('workspace')
           if (last) await get().selectWorkspace(last)
           return
@@ -139,11 +148,12 @@ export const useStore = create<State>((set, get) => ({
   async logout() {
     await api.logout().catch(() => {})
     await idbSet('session', null)
-    set({ user: null, wsId: null, data: emptyData, loaded: false, workspaces: [] })
+    set({ user: null, account: null, online: [], wsId: null, data: emptyData, loaded: false, workspaces: [] })
   },
 
   async selectWorkspace(id) {
     localStorage.setItem('workspace', id)
+    set((s) => ({ user: roleIn(s.account, s.workspaces.find((w) => w.id === id)), online: [] }))
     const cacheKey = `bootstrap:${id}`
     const cached = await idbGet<Bootstrap>(cacheKey)
     const saved = (() => { try { return JSON.parse(localStorage.getItem(`tabs:${id}`) ?? 'null') } catch { return null } })()
@@ -162,6 +172,17 @@ export const useStore = create<State>((set, get) => ({
       if (e instanceof ApiError && e.status === 0) set({ offline: true })
       else throw e
     }
+  },
+
+  /** The list of worlds changed on the server (an admin changed who can open what): follow it. */
+  async refreshWorlds() {
+    const workspaces = await api.workspaces()
+    set({ workspaces })
+    const { wsId, account } = get()
+    if (wsId && workspaces.some((w) => w.id === wsId)) { set({ user: roleIn(account, workspaces.find((w) => w.id === wsId)) }); return }
+    if (workspaces.length) return get().selectWorkspace(workspaces[0].id)
+    localStorage.removeItem('workspace')
+    set({ wsId: null, data: emptyData, loaded: false })
   },
 
   /** Everything lives inside a world; with none yet, offer to create one instead of calling /api/workspaces/null/... */

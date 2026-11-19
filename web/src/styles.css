@@ -134,6 +134,13 @@ a.btn { display: inline-block; color: inherit; text-decoration: none; }
 .backlink { display: block; padding: 6px 10px; border-radius: 8px; text-decoration: none; color: var(--text); cursor: pointer; }
 .backlink:hover { background: var(--bg-hover); }
 .save-state { font-size: 12px; color: var(--muted); }
+.presence { display: inline-flex; align-items: center; }
+.presence .avatar { width: 22px; height: 22px; border-radius: 50%; color: #fff; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; margin-left: -6px; border: 2px solid var(--bg); }
+.presence .avatar:first-child { margin-left: 0; }
+.presence .avatar.more { background: var(--muted); }
+.collaboration-carets__caret { position: relative; margin-left: -1px; margin-right: -1px; border-left: 1px solid; border-right: 1px solid; word-break: normal; pointer-events: none; }
+.collaboration-carets__label { position: absolute; top: -1.4em; left: -1px; font-size: 11px; font-weight: 600; line-height: 1; color: #fff; padding: 2px 6px; border-radius: 3px 3px 3px 0; white-space: nowrap; user-select: none; pointer-events: none; }
+.collaboration-carets__selection { border-radius: 2px; }
 .zen .page { padding-top: 12vh; max-width: 720px; }
 .zen-bar { position: fixed; top: 10px; right: 14px; display: flex; gap: 6px; opacity: 0; transition: opacity .3s; z-index: 20; }
 .zen:hover .zen-bar, .zen-bar:focus-within { opacity: 1; }

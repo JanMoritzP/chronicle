@@ -10,6 +10,12 @@ export const config = {
   webDist: path.resolve(process.env.WEB_DIST ?? path.join(here, '..', '..', 'web', 'dist')),
   adminUser: process.env.ADMIN_USER ?? 'gm',
   adminPassword: process.env.ADMIN_PASSWORD,
+  /** Port of the admin dashboard (people and world access). 0 turns it off. */
+  adminPort: Number(process.env.ADMIN_PORT ?? 3001),
+  adminHost: process.env.ADMIN_HOST ?? '127.0.0.1',
+  /** Creates the dashboard's admin account on first start, like ADMIN_PASSWORD does for the owner. */
+  adminPanelUser: process.env.ADMIN_PANEL_USER ?? 'admin',
+  adminPanelPassword: process.env.ADMIN_PANEL_PASSWORD,
   sessionDays: Number(process.env.SESSION_DAYS ?? 30),
   backupKeep: Number(process.env.BACKUP_KEEP ?? 14),
   isProd: process.env.NODE_ENV === 'production',

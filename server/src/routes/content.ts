@@ -1,38 +1,23 @@
 ﻿import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
-import { requireEditor, requireUser } from '../auth.js'
+import { addMember, visibleWorldIds, worldRole } from '../access.js'
+import { requireEditor, requireOwner, requireUser } from '../auth.js'
 import { db, now } from '../db.js'
-import { emptyDoc, ensureHeadingIds, extract, type DocNode } from '../doc.js'
+import { emptyDoc, ensureHeadingIds, type DocNode } from '../doc.js'
 import { templatesOf } from './templates.js'
 import { pageTypesOf } from './pagetypes.js'
 import { statTemplatesOf } from './stattemplates.js'
-import { pageSummary, recordActivity, reindexLinks, relinkByName, setTags, snapshotIfDue, uid, type PageRow } from '../pages.js'
+import { contentHooks, pageDerived, pageSummary, portraitOf, recordActivity, reindexLinks, relinkByName, setTags, snapshotIfDue, uid, type PageRow } from '../pages.js'
 
 const docSchema = z.custom<DocNode>((v) => typeof v === 'object' && v !== null && (v as DocNode).type === 'doc')
 
-function portraitOf(p: PageRow, props: any = JSON.parse(p.props)): string | null {
-  if (props?.portrait) return String(props.portrait)
-  return extract(JSON.parse(p.content)).firstImage
-}
-
-function pageDerived(id: string) {
-  const p = db.prepare('SELECT * FROM pages WHERE id = ?').get(id) as PageRow
-  const todos = (db.prepare('SELECT COUNT(*) n FROM todos WHERE page_id = ? AND done = 0').get(id) as { n: number }).n
-  const props = JSON.parse(p.props)
-  return {
-    ok: true, updatedAt: p.updated_at, outline: JSON.parse(p.outline), text: p.text.slice(0, 4000),
-    wordCount: p.word_count, hasStats: !!p.has_stats, portrait: portraitOf(p, props), type: props?.type ?? null, links: linksOf(id), todos,
-  }
-}
-
-function linksOf(sourceId: string) {
-  return db.prepare(
-    'SELECT source_id AS sourceId, target_id AS targetId, target_name AS targetName, anchor, embed, lib_key AS libKey FROM links WHERE source_id = ?',
-  ).all(sourceId)
-}
-
 function wsExists(id: string) {
   return !!db.prepare('SELECT 1 FROM workspaces WHERE id = ? AND deleted_at IS NULL').get(id)
+}
+
+/** True when the row with this id belongs to the given world, so ids sent by a client can never pull in another world's data. */
+function sameWorld(table: 'folders' | 'pages' | 'zettels', id: string, ws: string) {
+  return !!db.prepare(`SELECT 1 FROM ${table} WHERE id = ? AND workspace_id = ?`).get(id, ws)
 }
 
 const settingsSchema = z.object({
@@ -59,16 +44,22 @@ function withStarterTodo(doc: DocNode, ws: string, hasContent: boolean): DocNode
 
 export async function contentRoutes(app: FastifyInstance) {
   // ---------- workspaces ----------
-  app.get('/api/workspaces', { preHandler: requireUser }, async () =>
-    (db.prepare('SELECT id, name, settings, created_at AS createdAt FROM workspaces WHERE deleted_at IS NULL ORDER BY created_at').all() as { id: string; name: string; settings: string; createdAt: number }[])
-      .map((w) => ({ ...w, settings: worldSettings(w.settings) })))
+  app.get('/api/workspaces', { preHandler: requireUser }, async (req) => {
+    const user = req.user!
+    const mine = new Set(visibleWorldIds(user))
+    return (db.prepare('SELECT id, name, settings, created_at AS createdAt FROM workspaces WHERE deleted_at IS NULL ORDER BY created_at').all() as { id: string; name: string; settings: string; createdAt: number }[])
+      .filter((w) => mine.has(w.id))
+      .map((w) => ({ ...w, settings: worldSettings(w.settings), role: worldRole(user, w.id) }))
+  })
 
   app.post('/api/workspaces', { preHandler: requireEditor }, async (req, reply) => {
     const b = z.object({ name: z.string().min(1).max(100) }).safeParse(req.body)
     if (!b.success) return reply.code(400).send({ error: 'name required' })
     const id = uid()
     db.prepare('INSERT INTO workspaces(id,name,created_at) VALUES(?,?,?)').run(id, b.data.name, now())
-    return { id, name: b.data.name, settings: worldSettings('{}') }
+    // the creator can open it; owners reach every world anyway
+    if (req.user!.role !== 'owner') addMember(id, req.user!.id, 'editor', now())
+    return { id, name: b.data.name, settings: worldSettings('{}'), role: 'editor' }
   })
 
   app.patch('/api/workspaces/:id', { preHandler: requireEditor }, async (req, reply) => {
@@ -82,7 +73,7 @@ export async function contentRoutes(app: FastifyInstance) {
     return { ok: true, settings: worldSettings((db.prepare('SELECT settings FROM workspaces WHERE id = ?').get(id) as { settings: string }).settings) }
   })
 
-  app.delete('/api/workspaces/:id', { preHandler: requireEditor }, async (req) => {
+  app.delete('/api/workspaces/:id', { preHandler: requireOwner }, async (req) => {
     const { id } = req.params as { id: string }
     db.prepare('UPDATE workspaces SET deleted_at = ? WHERE id = ?').run(now(), id)
     return { ok: true }
@@ -143,6 +134,7 @@ export async function contentRoutes(app: FastifyInstance) {
     const { ws } = req.params as { ws: string }
     const b = z.object({ name: z.string().min(1).max(100), parentId: z.string().nullable().optional() }).safeParse(req.body)
     if (!b.success) return reply.code(400).send({ error: 'bad request' })
+    if (b.data.parentId && !sameWorld('folders', b.data.parentId, ws)) return reply.code(400).send({ error: 'bad request' })
     const id = uid()
     db.prepare('INSERT INTO folders(id,workspace_id,parent_id,name) VALUES(?,?,?,?)').run(id, ws, b.data.parentId ?? null, b.data.name)
     return { id, parentId: b.data.parentId ?? null, name: b.data.name, sort: 0 }
@@ -152,6 +144,8 @@ export async function contentRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string }
     const b = z.object({ name: z.string().min(1).max(100).optional(), parentId: z.string().nullable().optional(), sort: z.number().optional() }).safeParse(req.body)
     if (!b.success) return reply.code(400).send({ error: 'bad request' })
+    const own = db.prepare('SELECT workspace_id AS w FROM folders WHERE id = ?').get(id) as { w: string } | undefined
+    if (own && b.data.parentId && !sameWorld('folders', b.data.parentId, own.w)) return reply.code(400).send({ error: 'bad request' })
     if (b.data.parentId) {
       // refuse to move a folder inside itself or its own descendants
       let cur: string | null = b.data.parentId
@@ -191,6 +185,8 @@ export async function contentRoutes(app: FastifyInstance) {
       sourceZettelId: z.string().optional(),
     }).safeParse(req.body)
     if (!b.success) return reply.code(400).send({ error: 'bad request' })
+    if (b.data.folderId && !sameWorld('folders', b.data.folderId, ws)) return reply.code(400).send({ error: 'bad request' })
+    if (b.data.sourceZettelId && !sameWorld('zettels', b.data.sourceZettelId, ws)) return reply.code(400).send({ error: 'bad request' })
     const id = uid()
     const doc = ensureHeadingIds(withStarterTodo(b.data.content ?? emptyDoc(), ws, !!b.data.content))
     const t = now()
@@ -228,11 +224,31 @@ export async function contentRoutes(app: FastifyInstance) {
       tags: z.array(z.string().max(100)).optional(),
       content: docSchema.optional(),
       props: z.record(z.string(), z.any()).optional(),
+      /** Changes to single fields, merged into the stored props, so two people editing different fields do not overwrite each other. A null value removes the field. */
+      propsPatch: z.object({
+        data: z.record(z.string(), z.any()).optional(),
+        portrait: z.string().nullable().optional(),
+        type: z.string().nullable().optional(),
+      }).optional(),
     }).safeParse(req.body)
     if (!b.success) return reply.code(400).send({ error: 'bad request' })
     const p = db.prepare('SELECT * FROM pages WHERE id = ?').get(id) as PageRow | undefined
     if (!p) return reply.code(404).send({ error: 'not found' })
     const d = b.data
+    if (d.folderId && !sameWorld('folders', d.folderId, p.workspace_id)) return reply.code(400).send({ error: 'bad request' })
+    if (d.propsPatch) {
+      const merged: any = { ...(d.props ?? JSON.parse(p.props)) }
+      const pp = d.propsPatch
+      if (pp.data) {
+        merged.data = { ...(merged.data ?? {}) }
+        for (const [k, v] of Object.entries(pp.data)) { if (v === null || v === '') delete merged.data[k]; else merged.data[k] = v }
+      }
+      for (const k of ['portrait', 'type'] as const) {
+        if (pp[k] === undefined) continue
+        if (pp[k]) merged[k] = pp[k]; else delete merged[k]
+      }
+      d.props = merged
+    }
     if (d.content) ensureHeadingIds(d.content)
 
     db.transaction(() => {
@@ -258,6 +274,8 @@ export async function contentRoutes(app: FastifyInstance) {
       if (d.tags) setTags(id, d.tags)
       if (d.title !== undefined || d.aliases) relinkByName(p.workspace_id, id, title, aliases)
     })()
+    // a document sent over REST replaces whatever is being edited live; open editors reload it
+    if (d.content) contentHooks.replaced(id)
     return pageDerived(id)
   })
 

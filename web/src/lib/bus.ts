@@ -12,16 +12,16 @@ export const pageSavedBus = {
   },
 }
 
-export interface TodoChange { pageId: string; todoId: string; change: { done?: boolean; message?: string } | null }
-const todoHandlers = new Set<(c: TodoChange) => void>()
+/** A change made by someone else in the current world: `area` is the part of the app it touched (pages, maps, folders...), `pageId` the page when it was one. */
+export interface LiveChange { k: 'refresh'; area: string; pageId?: string }
+const liveHandlers = new Set<(c: LiveChange) => void>()
 
-/** Fired when a todo is changed or deleted from the Todos tab, so an editor that has the page open can apply the same change (otherwise its next autosave would undo it). */
-export const todoBus = {
-  emit: (c: TodoChange) => todoHandlers.forEach((h) => h(c)),
-  on: (h: (c: TodoChange) => void) => {
-    todoHandlers.add(h)
+export const liveBus = {
+  emit: (c: LiveChange) => liveHandlers.forEach((h) => h(c)),
+  on: (h: (c: LiveChange) => void) => {
+    liveHandlers.add(h)
     return () => {
-      todoHandlers.delete(h)
+      liveHandlers.delete(h)
     }
   },
 }

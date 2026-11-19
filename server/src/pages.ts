@@ -49,6 +49,37 @@ export function todosOf(pageId: string) {
   ).all(pageId).map((r: any) => ({ ...r, done: !!r.done }))
 }
 
+export function portraitOf(p: PageRow, props: any = JSON.parse(p.props)): string | null {
+  if (props?.portrait) return String(props.portrait)
+  return extract(JSON.parse(p.content)).firstImage
+}
+
+export function linksOf(sourceId: string) {
+  return db.prepare(
+    'SELECT source_id AS sourceId, target_id AS targetId, target_name AS targetName, anchor, embed, lib_key AS libKey FROM links WHERE source_id = ?',
+  ).all(sourceId)
+}
+
+/** What the client needs to refresh after a page was saved: the derived fields (outline, text, links...). */
+export function pageDerived(id: string) {
+  const p = db.prepare('SELECT * FROM pages WHERE id = ?').get(id) as PageRow
+  const todos = (db.prepare('SELECT COUNT(*) n FROM todos WHERE page_id = ? AND done = 0').get(id) as { n: number }).n
+  const props = JSON.parse(p.props)
+  return {
+    ok: true, updatedAt: p.updated_at, outline: JSON.parse(p.outline), text: p.text.slice(0, 4000),
+    wordCount: p.word_count, hasStats: !!p.has_stats, portrait: portraitOf(p, props), type: props?.type ?? null, links: linksOf(id), todos,
+  }
+}
+
+/** Set by the collaboration layer: called when page content is rewritten outside a live editing session, so open editors reload. */
+export const contentHooks: { replaced: (pageId: string) => void } = { replaced: () => {} }
+
+/** Replaces a page's document from the outside (restore, bulk relink). Anyone editing it live is told to reload. */
+export function replaceContent(p: PageRow, doc: DocNode) {
+  applyContent(p, doc)
+  contentHooks.replaced(p.id)
+}
+
 /** Writes a changed document back to a page the same way an editor save does (index, statistics, history). */
 export function applyContent(p: PageRow, doc: DocNode) {
   ensureHeadingIds(doc)

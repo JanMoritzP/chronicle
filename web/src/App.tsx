@@ -23,6 +23,7 @@ import { Sidebar } from './components/Sidebar'
 import { HomeView, SettingsView, TagView, TrashView, ZettelView } from './components/Views'
 import { SuggestPopup } from './editor/SuggestPopup'
 import { eventToCombo, matchAction } from './lib/keys'
+import { openLive } from './lib/live'
 import { currentView, useStore, type Tab, type View } from './store'
 
 function Login() {
@@ -121,8 +122,9 @@ function Pane({ tab, active }: { tab: Tab; active: boolean }) {
 }
 
 function Shell() {
-  const { tabs, activeTab, splitTab, sidebarOpen, zen, data, offline, user } = useStore()
+  const { tabs, activeTab, splitTab, sidebarOpen, zen, data, offline, user, wsId } = useStore()
   useWorld((s) => s.maps)
+  useEffect(() => openLive(wsId), [wsId])
   const current = tabs.find((t) => t.id === activeTab) ?? tabs[0]
   const split = tabs.find((t) => t.id === splitTab)
   const canBack = current.index > 0

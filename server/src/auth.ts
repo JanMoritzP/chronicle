@@ -2,7 +2,9 @@ import crypto from 'node:crypto'
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { z } from 'zod'
 import { config } from './config.js'
+import { addMember } from './access.js'
 import { db, now } from './db.js'
+import { revalidateLive } from './live.js'
 
 export type Role = 'owner' | 'editor' | 'viewer'
 export interface AuthUser { id: string; username: string; role: Role }
@@ -20,7 +22,7 @@ export function hashPassword(pw: string): string {
   return `${salt.toString('hex')}:${hash.toString('hex')}`
 }
 
-function verifyPassword(pw: string, stored: string): boolean {
+export function verifyPassword(pw: string, stored: string): boolean {
   const [saltHex, hashHex] = stored.split(':')
   if (!saltHex || !hashHex) return false
   const expected = Buffer.from(hashHex, 'hex')
@@ -40,8 +42,7 @@ export function ensureOwner() {
   console.log(`Created owner account "${config.adminUser}"`)
 }
 
-function userFromRequest(req: FastifyRequest): AuthUser | undefined {
-  const token = req.cookies[COOKIE]
+function userForToken(token: string | undefined): AuthUser | undefined {
   if (!token) return
   const row = db.prepare(
     `SELECT u.id, u.username, u.role FROM sessions s JOIN users u ON u.id = s.user_id
@@ -50,19 +51,27 @@ function userFromRequest(req: FastifyRequest): AuthUser | undefined {
   return row
 }
 
+export const userFromRequest = (req: FastifyRequest): AuthUser | undefined => userForToken(req.cookies[COOKIE])
+
+/** The user behind a raw Cookie header (WebSocket upgrades bypass Fastify's cookie handling). */
+export function userFromCookieHeader(header: string | undefined): AuthUser | undefined {
+  const m = new RegExp(`(?:^|;\\s*)${COOKIE}=([^;]+)`).exec(header ?? '')
+  return userForToken(m ? decodeURIComponent(m[1]) : undefined)
+}
+
 export const requireUser = async (req: FastifyRequest, reply: FastifyReply) => {
-  req.user = userFromRequest(req)
+  req.user ??= userFromRequest(req)
   if (!req.user) return reply.code(401).send({ error: 'unauthorized' })
 }
 
 export const requireEditor = async (req: FastifyRequest, reply: FastifyReply) => {
-  req.user = userFromRequest(req)
+  req.user ??= userFromRequest(req)
   if (!req.user) return reply.code(401).send({ error: 'unauthorized' })
   if (req.user.role === 'viewer') return reply.code(403).send({ error: 'read-only account' })
 }
 
 export const requireOwner = async (req: FastifyRequest, reply: FastifyReply) => {
-  req.user = userFromRequest(req)
+  req.user ??= userFromRequest(req)
   if (!req.user) return reply.code(401).send({ error: 'unauthorized' })
   if (req.user.role !== 'owner') return reply.code(403).send({ error: 'owner only' })
 }
@@ -126,12 +135,19 @@ export async function authRoutes(app: FastifyInstance) {
       username: z.string().min(2).max(50),
       password: z.string().min(8).max(500),
       role: z.enum(['editor', 'viewer']),
+      /** worlds the account can open; by default every world, like before worlds had members */
+      worldIds: z.array(z.string()).optional(),
     }).safeParse(req.body)
     if (!body.success) return reply.code(400).send({ error: 'Username min 2 chars, password min 8 chars' })
     try {
       const id = crypto.randomUUID()
-      db.prepare('INSERT INTO users(id,username,pass_hash,role,created_at) VALUES(?,?,?,?,?)').run(
-        id, body.data.username, hashPassword(body.data.password), body.data.role, now())
+      db.transaction(() => {
+        db.prepare('INSERT INTO users(id,username,pass_hash,role,created_at) VALUES(?,?,?,?,?)').run(
+          id, body.data.username, hashPassword(body.data.password), body.data.role, now())
+        const worlds = db.prepare('SELECT id FROM workspaces WHERE deleted_at IS NULL').all() as { id: string }[]
+        const chosen = body.data.worldIds ? new Set(body.data.worldIds) : null
+        for (const w of worlds) if (!chosen || chosen.has(w.id)) addMember(w.id, id, body.data.role, now())
+      })()
       return { id, username: body.data.username, role: body.data.role }
     } catch {
       return reply.code(409).send({ error: 'Username already taken' })
@@ -142,6 +158,7 @@ export async function authRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string }
     if (id === req.user!.id) return reply.code(400).send({ error: "You can't delete yourself" })
     db.prepare('DELETE FROM users WHERE id = ?').run(id)
+    revalidateLive([id])
     return { ok: true }
   })
 }

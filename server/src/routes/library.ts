@@ -4,7 +4,7 @@ import { requireEditor, requireOwner, requireUser } from '../auth.js'
 import { db, now } from '../db.js'
 import type { DocNode } from '../doc.js'
 import { libraryEntry, libraryIndex, libraryStatus, refreshLibrary } from '../library.js'
-import { applyContent, type PageRow } from '../pages.js'
+import { replaceContent, type PageRow } from '../pages.js'
 import { propsStatData, rewriteDataRefs } from '../refs.js'
 
 export async function libraryRoutes(app: FastifyInstance) {
@@ -65,7 +65,7 @@ export async function libraryRoutes(app: FastifyInstance) {
         n.content?.forEach(walk)
       }
       walk(doc)
-      if (hit || fieldHit) { applyContent(p, doc); changed++ }
+      if (hit || fieldHit) { replaceContent(p, doc); changed++ }
     }
     return { changed }
   })

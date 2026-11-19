@@ -5,7 +5,11 @@ import cookie from '@fastify/cookie'
 import multipart from '@fastify/multipart'
 import rateLimit from '@fastify/rate-limit'
 import fstatic from '@fastify/static'
+import { accessRoutes } from './access.js'
+import { startAdmin } from './admin.js'
 import { authRoutes, ensureOwner } from './auth.js'
+import { attachCollab, closeAllCollab } from './collab.js'
+import { closeAllLive, liveRoutes } from './live.js'
 import { backupRoutes, scheduleBackups } from './backup.js'
 import { config } from './config.js'
 import { db, migrate } from './db.js'
@@ -55,7 +59,11 @@ app.addHook('onRequest', async (req, reply) => {
   if (origin && new URL(origin).host !== req.headers.host) return reply.code(403).send({ error: 'bad origin' })
 })
 
+// registered without encapsulation: its hooks must cover every route below
+accessRoutes(app)
+
 await app.register(authRoutes)
+await app.register(liveRoutes)
 await app.register(contentRoutes)
 await app.register(uploadRoutes)
 await app.register(mapRoutes)
@@ -85,7 +93,9 @@ if (fs.existsSync(config.webDist)) {
 
 scheduleBackups()
 resumeTiling()
+attachCollab(app.server)
 await app.listen({ port: config.port, host: config.host })
+const admin = await startAdmin()
 
 // Docker sends SIGTERM on stop/update: finish requests, then fold the WAL into the main database file.
 let stopping = false
@@ -94,7 +104,7 @@ for (const sig of ['SIGTERM', 'SIGINT'] as const) {
     if (stopping) return
     stopping = true
     const force = setTimeout(() => process.exit(1), 8000)
-    try { await app.close(); db.pragma('wal_checkpoint(TRUNCATE)'); db.close(); closeLibrary() } catch (e) { console.error(e) }
+    try { closeAllCollab(); closeAllLive(); await admin?.close(); await app.close(); db.pragma('wal_checkpoint(TRUNCATE)'); db.close(); closeLibrary() } catch (e) { console.error(e) }
     clearTimeout(force)
     process.exit(0)
   })

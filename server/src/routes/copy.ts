@@ -2,7 +2,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
-import { requireEditor } from '../auth.js'
+import { worldRole } from '../access.js'
+import { requireEditor, type AuthUser } from '../auth.js'
 import { config } from '../config.js'
 import { db, now } from '../db.js'
 import type { DocNode } from '../doc.js'
@@ -59,13 +60,19 @@ function titlesIn(ws: string): Set<string> {
   return used
 }
 
+/** Copying needs to read every source world and write the target world. */
+function mayCopy(user: AuthUser, pages: PageRow[], target: string) {
+  if (worldRole(user, target) !== 'editor') return false
+  return [...new Set(pages.map((p) => p.workspace_id))].every((w) => worldRole(user, w))
+}
+
 export async function copyRoutes(app: FastifyInstance) {
   /** What a copy would bring along: pages these pages link to, and titles that already exist in the target world. */
   app.post('/api/copy/preview', { preHandler: requireEditor }, async (req, reply) => {
     const b = sel.safeParse(req.body)
     if (!b.success) return reply.code(400).send({ error: 'bad request' })
     const pages = livePages(b.data.pageIds)
-    if (!pages.length) return reply.code(404).send({ error: 'no such pages' })
+    if (!pages.length || !mayCopy(req.user!, pages, b.data.targetWorkspaceId)) return reply.code(404).send({ error: 'no such pages' })
     const chosen = new Set(pages.map((p) => p.id))
     const linked = new Map<string, { id: string; title: string; mentions: number }>()
     const q = db.prepare(
@@ -96,7 +103,7 @@ export async function copyRoutes(app: FastifyInstance) {
     const target = b.data.targetWorkspaceId
     if (!db.prepare('SELECT 1 FROM workspaces WHERE id = ? AND deleted_at IS NULL').get(target)) return reply.code(404).send({ error: 'target world not found' })
     const pages = livePages(b.data.pageIds)
-    if (!pages.length) return reply.code(404).send({ error: 'no such pages' })
+    if (!pages.length || !mayCopy(req.user!, pages, target)) return reply.code(404).send({ error: 'no such pages' })
     const srcWs = pages[0].workspace_id
     if (pages.some((p) => p.workspace_id !== srcWs)) return reply.code(400).send({ error: 'Pages must come from one world' })
     if (srcWs === target) return reply.code(400).send({ error: 'Choose a different world' })

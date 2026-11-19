@@ -266,6 +266,36 @@ const migrations: string[] = [
   ALTER TABLE links ADD COLUMN lib_key TEXT;
   CREATE INDEX links_lib ON links(lib_key);
   `,
+  `
+  CREATE TABLE workspace_members (
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    role TEXT NOT NULL CHECK (role IN ('editor','viewer')),
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (workspace_id, user_id)
+  );
+  CREATE INDEX workspace_members_user ON workspace_members(user_id);
+  INSERT INTO workspace_members(workspace_id, user_id, role, created_at)
+    SELECT w.id, u.id, CASE WHEN u.role = 'viewer' THEN 'viewer' ELSE 'editor' END, CAST(strftime('%s','now') AS INTEGER) * 1000
+    FROM workspaces w CROSS JOIN users u WHERE u.role != 'owner';
+  CREATE TABLE admins (
+    id TEXT PRIMARY KEY,
+    username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    pass_hash TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+  CREATE TABLE admin_sessions (
+    token_hash TEXT PRIMARY KEY,
+    admin_id TEXT NOT NULL REFERENCES admins(id) ON DELETE CASCADE,
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL
+  );
+  CREATE TABLE page_docs (
+    page_id TEXT PRIMARY KEY REFERENCES pages(id) ON DELETE CASCADE,
+    state BLOB NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+  `,
 ]
 
 export const SCHEMA_VERSION = migrations.length

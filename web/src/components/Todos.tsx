@@ -1,7 +1,7 @@
 import { ListTodo, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../api'
-import { pageSavedBus, todoBus } from '../lib/bus'
+import { pageSavedBus } from '../lib/bus'
 import { ago } from '../lib/data'
 import { useStore } from '../store'
 import type { TodoItem } from '../types'
@@ -16,7 +16,6 @@ function Row({ t, readOnly, onChange }: { t: TodoItem; readOnly: boolean; onChan
     const m = text.trim()
     if (m === t.message || !m) return setText(t.message)
     await api.patchTodo(t.pageId, t.id, { message: m })
-    todoBus.emit({ pageId: t.pageId, todoId: t.id, change: { message: m } })
     onChange()
   }
   return (
@@ -24,7 +23,6 @@ function Row({ t, readOnly, onChange }: { t: TodoItem; readOnly: boolean; onChan
       <input type="checkbox" checked={t.done} disabled={readOnly} onChange={async (e) => {
         const done = e.target.checked
         await api.patchTodo(t.pageId, t.id, { done })
-        todoBus.emit({ pageId: t.pageId, todoId: t.id, change: { done } })
         onChange()
       }} />
       <div className="grow" style={{ minWidth: 0 }}>
@@ -36,7 +34,6 @@ function Row({ t, readOnly, onChange }: { t: TodoItem; readOnly: boolean; onChan
       {!readOnly && (
         <button className="icon-btn" title="Delete this todo" onClick={async () => {
           await api.deleteTodo(t.pageId, t.id)
-          todoBus.emit({ pageId: t.pageId, todoId: t.id, change: null })
           onChange()
         }}><Trash2 size={15} /></button>
       )}

@@ -9,12 +9,15 @@ export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message) }
 }
 
+/** Tells the server which tab a change came from, so it is not echoed back to the tab that made it. */
+export const clientId = Math.random().toString(36).slice(2, 12)
+
 async function req<T>(method: string, url: string, body?: unknown): Promise<T> {
   let r: Response
   try {
     r = await fetch(url, {
       method,
-      headers: body !== undefined ? { 'content-type': 'application/json' } : undefined,
+      headers: { 'x-client-id': clientId, ...(body !== undefined ? { 'content-type': 'application/json' } : {}) },
       body: body !== undefined ? JSON.stringify(body) : undefined,
       keepalive: method !== 'GET' && body !== undefined && JSON.stringify(body).length < 60_000,
     })
@@ -40,8 +43,7 @@ export const api = {
   createPage: (ws: string, b: any) => req<any>('POST', `/api/workspaces/${ws}/pages`, b),
   patchPage: async (id: string, b: any) => {
     const r = await req<any>('PATCH', `/api/pages/${id}`, b)
-    const c = pageCache.get(id)
-    if (c) pageCache.set(id, { ...c, ...b, ...(b.content ? { content: b.content } : {}) })
+    pageCache.delete(id)
     return r
   },
   deletePage: (id: string) => req('DELETE', `/api/pages/${id}`),
@@ -155,10 +157,6 @@ export const api = {
       }
       throw e
     }
-  },
-  setCachedContent(id: string, content: any) {
-    const c = pageCache.get(id)
-    if (c) pageCache.set(id, { ...c, content })
   },
   invalidate(id: string) { pageCache.delete(id) },
 }

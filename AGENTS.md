@@ -4,7 +4,7 @@ Guide for any AI agent (or human) taking over this repo. Read it fully before ch
 
 ## 1. What this is
 
-**Chronicle** is a self-hosted, World Anvil-style worldbuilding notebook for tabletop RPG campaigns (D&D). One owner (the GM, user `gm`) plus optional editor/viewer accounts for players.
+**Chronicle** is a self-hosted, World Anvil-style worldbuilding notebook for tabletop RPG campaigns (D&D). An owner (the GM, user `gm`) plus editor/viewer accounts for players, who can work in the same world at the same time. A separate admin dashboard decides who may open which world.
 
 | Part | Where | Stack |
 |---|---|---|
@@ -30,7 +30,7 @@ npm start                    # run the built server
 
 PowerShell env: `$env:ADMIN_PASSWORD='x'; $env:DATA_DIR="$env:TEMP\test-data"; $env:PORT='3222'`.
 
-Config env: `PORT`, `HOST`, `DATA_DIR`, `ADMIN_USER`, `ADMIN_PASSWORD` (first start only), `SESSION_DAYS`, `BACKUP_KEEP`, `WEB_DIST`.
+Config env: `PORT`, `HOST`, `DATA_DIR`, `ADMIN_USER`, `ADMIN_PASSWORD` (first start only), `SESSION_DAYS`, `BACKUP_KEEP`, `WEB_DIST`, `ADMIN_PORT`, `ADMIN_HOST`, `ADMIN_PANEL_USER`, `ADMIN_PANEL_PASSWORD` (dashboard account, first start only; the dashboard stays off without it).
 
 ### Running a throwaway server for testing
 Never test against the owner's real data directory.
@@ -41,8 +41,8 @@ Never test against the owner's real data directory.
 5. Stop it afterwards (`Get-Process node | Stop-Process`) and delete the temp data dir.
 
 ### Tests (all plain Node scripts; each prints PASS/FAIL and exits non-zero on failure)
-- API smoke tests against a running throwaway server: `node scripts/smoke-<area>.mjs http://localhost:3222 gm testpass123`. Areas: `auth`, `copy`, `export`, `library` (downloads the real Open5e data, needs internet), `maps`, `pagetypes`, `relations`, `sessions`, `share`, `stattemplates`, `templates`, `todos`, `worlds`, plus `smoke.mjs` (core).
-- Pure logic: `scripts/test-family.ts`, `scripts/test-time.ts`, `scripts/test-autolink.ts` (bundle with esbuild, run with node).
+- API smoke tests against a running throwaway server: `node scripts/smoke-<area>.mjs http://localhost:3222 gm testpass123`. Areas: `auth`, `copy`, `export`, `library` (downloads the real Open5e data, needs internet), `maps`, `multiuser` (needs the admin URL and account too), `pagetypes`, `relations`, `sessions`, `share`, `stattemplates`, `templates`, `todos`, `worlds`, plus `smoke.mjs` (core).
+- Pure logic: `scripts/test-ydoc.ts`, `scripts/test-family.ts`, `scripts/test-time.ts`, `scripts/test-autolink.ts` (bundle with esbuild, run with node).
 - Updater: `node scripts/test-update-logic.mjs` (no Electron), `node scripts/test-update-flow.mjs` (real Electron, fake GitHub; **unset `ELECTRON_RUN_AS_NODE` first**).
 - Desktop app: `node scripts/test-electron.mjs <server-url>`.
 - Add a smoke script for every new server route family, in the same style (copy a small one such as `smoke-templates.mjs`).
@@ -61,6 +61,8 @@ Never test against the owner's real data directory.
 ### Server
 - **Migrations are append-only.** `server/src/db.ts` has `const migrations: string[]`; `SCHEMA_VERSION = migrations.length`. Never edit or reorder a shipped migration; add a new one at the end. A backup from a newer schema is refused on restore; keep backup/restore, export (`export.ts`, `markdown.ts`), and copy (`copy.ts`) in step when you add tables that hold user content (update restore's table list, `world.json`, copy logic or document that it is not copied in ROADMAP).
 - **Routes** live in `server/src/routes/*.ts`, one Fastify plugin per area, registered in `server/src/index.ts`. Validate every body with **zod** (`safeParse`, reply 400 `{error: 'bad request'}`). Mutations use `preHandler: requireEditor`; viewers are read-only. Check workspace/page ownership on every id from the client (`wsExists`, same-workspace checks) so one world can never touch another's rows.
+- **World access is enforced centrally** in `server/src/access.ts` (global `onRequest` hook, registered without encapsulation): any route under `/api/workspaces/:ws/...` or addressed by the id of a row inside a world is checked there. A new id-addressed route family must be added to `OWNER_OF`, and a client-sent id that points into a world (folder, page, zettel...) must be checked with `sameWorld`. Never read a world's data without it.
+- **Page text is a shared Yjs document** while anyone has the page open (`server/src/collab.ts`, `ydoc.ts`); the database JSON follows it within 1.5 seconds. Code that rewrites `pages.content` outside an editor session must call `replaceContent` (drops the live room so editors reload), not `applyContent`; to change a todo use `editTodoLive` first. Page fields that two people may edit at once go through `propsPatch`, not a whole `props` object.
 - Error shape is `{ error: string }`. The client `api.ts` turns non-2xx into `ApiError(status, message)`.
 - Writes touching several tables go in `db.transaction(...)`.
 - Public (unauthenticated) surface is only `/api/public/*` and the `/s/:token` page. Anything leaving through it must pass `publicDoc` so nothing private leaks. `smoke-share.mjs` tests this; do not widen it casually.

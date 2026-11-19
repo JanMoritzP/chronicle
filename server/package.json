@@ -16,12 +16,17 @@
     "@fastify/static": "^10.0.0",
     "better-sqlite3": "^13.0.0",
     "fastify": "^5.0.0",
+    "lib0": "^0.2.120",
     "sharp": "^0.35.5",
+    "ws": "^8.23.0",
+    "y-protocols": "^1.0.7",
+    "yjs": "^13.6.33",
     "zod": "^4.0.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.0.0",
+    "@types/ws": "^8.18.2",
     "esbuild": "^0.25.0",
     "tsx": "^4.20.0",
     "typescript": "~5.9.0"

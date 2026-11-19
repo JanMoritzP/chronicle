@@ -1,6 +1,6 @@
 # Deploying Chronicle
 
-Three ways to run it, from simplest to most involved. All of them serve the same thing: one Node process that serves the web app and the API on port 3000.
+Three ways to run it, from simplest to most involved. All of them serve the same thing: one Node process that serves the web app and the API on port 3000, plus the admin dashboard on its own port (3001).
 
 ## 1. Docker Compose (recommended, also on a Windows machine)
 
@@ -13,6 +13,8 @@ docker compose up -d --build
 ```
 
 Open `http://localhost:3000` and log in as `gm` with that password. Then change the password under Settings and remove `ADMIN_PASSWORD` from the compose file (it is only read when no user exists yet).
+
+The admin dashboard is on `http://localhost:3001`. Set `ADMIN_PANEL_PASSWORD` for the first start to create its account (user `admin`). The compose file publishes the port on the local machine only; do not forward it to the internet. See "People and world access" below.
 
 - Data lives in the named volume `chronicle-data` (`dnd.db`, `uploads/`, `maps/`, `backups/`). Use a named volume, not `./data`: SQLite is unreliable on bind mounts from the Windows file system.
 - The container has a health check (`docker ps` shows `healthy`) and stops cleanly (`docker stop` checkpoints the database first).
@@ -72,8 +74,23 @@ Keep HTTPS on in Cloudflare. The server trusts the proxy headers, so the session
 | `DATA_DIR` | `/data` in Docker | database, uploads, maps, backups, the Open5e library (`library.db`, `library.log`) |
 | `ADMIN_USER` | gm | first start only |
 | `ADMIN_PASSWORD` | | first start only, min 8 chars |
+| `ADMIN_PORT` | 3001 | port of the admin dashboard; `0` turns it off |
+| `ADMIN_HOST` | 127.0.0.1 | address the dashboard listens on (the Docker image uses 0.0.0.0, the compose file publishes it on 127.0.0.1 only) |
+| `ADMIN_PANEL_USER` | admin | first start only |
+| `ADMIN_PANEL_PASSWORD` | | first start only, min 8 chars. Without it, and with no admin account yet, the dashboard stays off |
 | `SESSION_DAYS` | 30 | |
 | `BACKUP_KEEP` | 14 | daily snapshots kept |
+
+## People and world access
+
+Several people can use one Chronicle at the same time. Who may open which world is decided in the admin dashboard, which runs on its own port with its own account, separate from the accounts people use in the notebook.
+
+- Keep the dashboard port off the internet: expose only port 3000 (for example through cloudflared) and reach port 3001 from your own machine or network.
+- Owner accounts open every world and manage backups. Editors and viewers open only the worlds they were added to. A viewer account is read-only everywhere.
+- Accounts made in the dashboard start with no world. Accounts made by the owner under Settings can open every world, as before.
+- Changes apply at once: a person who loses a world is moved out of it while they are working.
+- Editing is live: people on the same page see each other's cursors and changes as they type. This uses a WebSocket on the normal port, so a reverse proxy must pass WebSocket upgrades (cloudflared does) and must not buffer `/api/live` (server-sent events).
+- If you forget the admin password, empty the `admins` table in `dnd.db`, set `ADMIN_PANEL_PASSWORD` and restart.
 
 ## Backups
 

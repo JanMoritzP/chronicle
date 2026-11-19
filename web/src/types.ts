@@ -27,7 +27,7 @@ export interface Folder { id: string; parentId: string | null; name: string; sor
 export interface LinkRow { sourceId: string; targetId: string | null; targetName: string; anchor: string | null; embed: number; /** set when the link points into the Open5e library */ libKey?: string | null }
 export interface Zettel { id: string; body: string; tags: string[]; createdAt: number; pageId: string | null; processedAt: number | null }
 export interface WorldSettings { newPageTodo: string }
-export interface Workspace { id: string; name: string; settings?: WorldSettings }
+export interface Workspace { id: string; name: string; settings?: WorldSettings; /** what this account may do in the world; viewers get a read-only app */ role?: 'editor' | 'viewer' }
 export interface User { id: string; username: string; role: 'owner' | 'editor' | 'viewer' }
 export interface FullPage extends PageMeta { content: any; props: Record<string, any> }
 export type Pt = [number, number]

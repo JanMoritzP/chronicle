@@ -283,6 +283,7 @@ function FontSettings() {
 function WorldOptions({ id }: { id: string }) {
   const world = useStore((s) => s.workspaces.find((w) => w.id === id))
   const readOnly = useStore((s) => s.user?.role === 'viewer')
+  const owner = useStore((s) => s.account?.role === 'owner')
   const saved = world?.settings?.newPageTodo ?? 'Fill me'
   const [text, setText] = useState(saved)
   useEffect(() => setText(saved), [id, saved])
@@ -298,7 +299,7 @@ function WorldOptions({ id }: { id: string }) {
         <input className="input" value={text} disabled={readOnly} placeholder="Fill me" onChange={(e) => setText(e.target.value)} onBlur={save} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }} />
       </label>
       <p className="muted" style={{ fontSize: 13, margin: '4px 0 0' }}>Added to each new page in “{world.name}”. Leave it empty to start pages without one.</p>
-      {!readOnly && (
+      {owner && (
         <p style={{ marginTop: 14 }}>
           <button className="btn sm danger" onClick={async () => {
             if (!(await confirmDialog(`Delete the world “${world.name}”? Its pages, maps, templates and everything else in it disappear from the app. Export it first if you may want it back.`, { okLabel: 'Delete world', danger: true }))) return
@@ -357,6 +358,7 @@ export function SettingsView() {
       {owner && (
         <>
           <h3 className="muted" style={{ marginTop: 28 }}>Accounts</h3>
+          <p className="muted" style={{ fontSize: 13, margin: '0 0 8px' }}>New accounts can open every world. To limit a person to some worlds, use the admin dashboard.</p>
           <table className="simple"><tbody>
             {users.map((u) => (
               <tr key={u.id}><td>{u.username}</td><td className="muted">{u.role}</td>
