@@ -435,6 +435,9 @@ areas:
       - id: table.tiles
         name: "Layers and templates: tiles, their layers, and spell areas"
         files: [web/src/components/TableTiles.tsx, web/src/tabletop/engine.ts]
+      - id: table.rules-2024
+        name: "A world on the 2024 rules rates a fight against an XP budget"
+        files: [web/src/tabletop/encounter.ts, web/src/components/TableEncounters.tsx]
       - id: table.panel
         name: "The GM edits a token from the panel"
         files: [web/src/components/Tabletop.tsx]

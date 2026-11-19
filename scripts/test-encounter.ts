@@ -1,4 +1,4 @@
-import { multiplier, partyThresholds, rate, xpOfCr } from '../web/src/tabletop/encounter'
+import { multiplier, partyBudget, partyThresholds, rate, xpOfCr } from '../web/src/tabletop/encounter'
 
 let failed = 0
 const check = (name: string, ok: boolean, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name} ${extra}`); if (!ok) failed++ }
@@ -26,6 +26,20 @@ check('two CR 3 monsters are deadly', r.adjusted === 2100 && r.difficulty === 'd
 r = rate([{ xp: 10, count: 1 }], [10, 10, 10, 10])
 check('a fight far below easy is trivial', r.difficulty === 'trivial')
 check('without a party it cannot be rated', rate([{ xp: 50, count: 2 }], []).difficulty === 'trivial')
+
+// 2024: no multiplier, a budget per character
+const b4 = partyBudget([3, 3, 3, 3])
+check('the 2024 budget adds up per character', b4.low === 600 && b4.moderate === 900 && b4.high === 1600)
+check('the 2024 budget at the checked levels', JSON.stringify(partyBudget([1])) === '{"low":50,"moderate":75,"high":100}' && JSON.stringify(partyBudget([5])) === '{"low":500,"moderate":750,"high":1100}' && JSON.stringify(partyBudget([10])) === '{"low":1600,"moderate":2300,"high":3100}' && JSON.stringify(partyBudget([20])) === '{"low":6400,"moderate":13200,"high":22000}')
+let q = rate([{ xp: 50, count: 4 }], [3, 3, 3, 3], '5e-2024')
+check('2024: four goblins are not multiplied and stay within the low budget', q.method === '5e-2024' && q.adjusted === 200 && q.difficulty === 'low')
+q = rate([{ xp: 700, count: 1 }], [3, 3, 3, 3], '5e-2024')
+check('2024: 700 XP is above the low budget of 600 and within moderate', q.difficulty === 'moderate')
+q = rate([{ xp: 450, count: 2 }], [3, 3, 3, 3], '5e-2024')
+check('2024: 900 XP is the top of moderate, 1,350 would be high', q.difficulty === 'moderate' && rate([{ xp: 450, count: 3 }], [3, 3, 3, 3], '5e-2024').difficulty === 'high')
+check('2024: past the high budget is flagged', rate([{ xp: 700, count: 3 }], [3, 3, 3, 3], '5e-2024').difficulty === 'over')
+check('2024: the same fight in 2014 is rated with the multiplier', rate([{ xp: 450, count: 2 }], [3, 3, 3, 3], '5e').difficulty === 'hard' && rate([{ xp: 450, count: 2 }], [3, 3, 3, 3]).method === '5e')
+check('2024: no party, no rating', rate([{ xp: 50, count: 2 }], [], '5e-2024').difficulty === 'trivial')
 
 console.log(failed ? `\n${failed} failed` : '\nall passed')
 process.exit(failed ? 1 : 0)

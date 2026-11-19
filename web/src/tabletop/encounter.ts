@@ -1,6 +1,7 @@
 // Encounter difficulty by the 5e (2014) method: add up the monsters' XP, multiply by how many there are, compare with the party's thresholds.
 
-export type Difficulty = 'trivial' | 'easy' | 'medium' | 'hard' | 'deadly'
+export type Difficulty = 'trivial' | 'easy' | 'medium' | 'hard' | 'deadly' | 'low' | 'moderate' | 'high' | 'over'
+export type RuleSystem = '5e' | '5e-2024'
 
 /** XP of a creature by challenge rating. */
 export const XP_BY_CR: Record<string, number> = {
@@ -38,13 +39,38 @@ export function multiplier(monsters: number, partySize: number) {
   return MULTIPLIERS[Math.min(MULTIPLIERS.length - 1, Math.max(0, step + 1))]
 }
 
+/**
+ * 2024: XP a character adds to the budget at Low, Moderate and High difficulty, by level.
+ * Levels 1, 3, 5, 10 and 20 were checked against the published table, the others are from the book as remembered.
+ */
+const BUDGET_2024: [number, number, number][] = [
+  [50, 75, 100], [100, 150, 200], [150, 225, 400], [250, 375, 500], [500, 750, 1100], [600, 1000, 1400], [750, 1300, 1700], [1000, 1700, 2100], [1300, 2000, 2600], [1600, 2300, 3100],
+  [1900, 2900, 4100], [2200, 3700, 4700], [2600, 4200, 5400], [2900, 4900, 6200], [3300, 5400, 7800], [3800, 6100, 9800], [4500, 7200, 11700], [5000, 8700, 14200], [5500, 10700, 17200], [6400, 13200, 22000],
+]
+
+export function partyBudget(levels: number[]) {
+  const sum = [0, 0, 0]
+  for (const l of levels) { const t = BUDGET_2024[Math.min(20, Math.max(1, Math.round(l))) - 1]; for (let i = 0; i < 3; i++) sum[i] += t[i] }
+  return { low: sum[0], moderate: sum[1], high: sum[2] }
+}
+
 export interface Rated { xp: number; count: number }
 
-export function rate(monsters: Rated[], levels: number[]) {
+/** The 2024 method: no multiplier, the creatures' XP is compared with the party's budget. */
+function rate2024(monsters: Rated[], levels: number[]) {
+  const total = monsters.reduce((n, m) => n + m.xp * m.count, 0)
+  const count = monsters.reduce((n, m) => n + m.count, 0)
+  const b = partyBudget(levels)
+  const difficulty: Difficulty = !levels.length || !count ? 'trivial' : total > b.high ? 'over' : total > b.moderate ? 'high' : total > b.low ? 'moderate' : 'low'
+  return { method: '5e-2024' as const, total, count, adjusted: total, thresholds: { easy: b.low, medium: b.moderate, hard: b.high, deadly: 0 }, budget: b, difficulty, perCharacter: levels.length ? Math.floor(total / levels.length) : 0 }
+}
+
+export function rate(monsters: Rated[], levels: number[], system: RuleSystem = '5e') {
+  if (system === '5e-2024') return rate2024(monsters, levels)
   const total = monsters.reduce((n, m) => n + m.xp * m.count, 0)
   const count = monsters.reduce((n, m) => n + m.count, 0)
   const adjusted = Math.round(total * (levels.length ? multiplier(count, levels.length) : 1))
   const t = partyThresholds(levels)
   const difficulty: Difficulty = !levels.length || !count ? 'trivial' : adjusted >= t.deadly ? 'deadly' : adjusted >= t.hard ? 'hard' : adjusted >= t.medium ? 'medium' : adjusted >= t.easy ? 'easy' : 'trivial'
-  return { total, count, adjusted, thresholds: t, difficulty, /** XP shared out when the fight is won */ perCharacter: levels.length ? Math.floor(total / levels.length) : 0 }
+  return { method: '5e' as const, budget: null, total, count, adjusted, thresholds: t, difficulty, /** XP shared out when the fight is won */ perCharacter: levels.length ? Math.floor(total / levels.length) : 0 }
 }

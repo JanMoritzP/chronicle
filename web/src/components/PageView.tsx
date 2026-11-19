@@ -269,7 +269,7 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
     schedule({ propsPatch: { sheet: props.sheet ? patch : { ...wholeSheetPatch(base), ...patch } } }, 500)
   }
   const addCharacterSheet = () => {
-    const sheet = { ...emptyCharacter(), name: title }
+    const sheet = { ...emptyCharacter(useStore.getState().workspaces.find((w) => w.id === useStore.getState().wsId)?.settings?.system ?? '5e'), name: title }
     setProps({ ...props, sheet })
     schedule({ propsPatch: { sheet: wholeSheetPatch(sheet) } }, 200)
   }

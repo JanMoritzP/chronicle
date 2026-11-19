@@ -87,7 +87,7 @@ export function CharacterSheet({ sheet, set, roll }: { sheet: Sheet; set?: (patc
         </div>
         <div className="cs-line cs-facts">
           <span><b>Level</b> {level}</span><span><b>Proficiency</b> {signed(pb)}</span>
-          <label className="sv-mini"><input type="checkbox" disabled={!edit} checked={!!sheet.inspiration} onChange={(e) => act({ inspiration: e.target.checked })} />Inspiration</label>
+          <label className="sv-mini"><input type="checkbox" disabled={!edit} checked={!!sheet.inspiration} onChange={(e) => act({ inspiration: e.target.checked })} />{sheet.ruleset === '5e-2024' ? 'Heroic Inspiration' : 'Inspiration'}</label>
           <label className="sv-mini">XP<Num label="Experience points" value={sheet.xp} width={80} onChange={(n) => act({ xp: n })} /></label>
           {edit && <button className="btn sm" title="Full hit points, every spell slot back, half the hit dice back" onClick={() => act(longRestPatch(sheet))}><Moon size={12} /> Long rest</button>}
         </div>

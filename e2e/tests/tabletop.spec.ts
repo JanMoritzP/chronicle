@@ -323,3 +323,34 @@ test('layers and templates: place a tile, move it to another layer, and draw a s
   await app.mouse.click(cx - 100, cy + 4)
   expect(errors).toEqual([])
 })
+
+test('a world that plays by the 2024 rules rates a fight against a budget', { tag: '@feature:table.rules-2024' }, async ({ app, api, world, makePage }) => {
+  const sheet = {
+    v: 1, ruleset: '5e-2024', name: 'Ogre', size: 'Large', type: 'giant', alignment: 'chaotic evil',
+    abilities: { str: 19, dex: 8, con: 16, int: 5, wis: 7, cha: 7 }, ac: { value: 11, note: '' }, hp: { max: 59, formula: '7d10 + 21' },
+    speed: { walk: 40 }, saves: {}, skills: {}, senses: {}, vulnerabilities: '', resistances: '', immunities: '', conditionImmunities: '', languages: '', cr: 2, xp: 450,
+    features: { traits: [], actions: [], bonus: [], reactions: [], legendary: [] },
+  }
+  await makePage('Ogre', { props: { type: 'monster', sheet } })
+  await api.json('patch', `/api/workspaces/${world.id}`, { settings: { system: '5e-2024' } })
+  await app.reload()
+  await openTable(app)
+  await makeScene(app, 'Ford')
+  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Encounters' }).click()
+  await app.getByRole('button', { name: 'New encounter' }).click()
+  await app.getByPlaceholder('Goblin ambush on the road').fill('Ogres')
+  await app.getByRole('button', { name: 'Create' }).click()
+  await app.getByLabel('Party levels').fill('3, 3, 3, 3')
+  await app.getByLabel('Party levels').press('Tab')
+  await app.getByRole('button', { name: 'Add a creature' }).click()
+  await app.getByPlaceholder('Find a monster page…').fill('Ogre')
+  await app.getByPlaceholder('Find a monster page…').press('Enter')
+  const meter = app.getByRole('group', { name: 'Difficulty' })
+  await expect(meter).toContainText('2024 rules')
+  await expect(meter).toContainText('Budget: Low 600 · Moderate 900 · High 1600')
+  await expect(meter).toContainText('Low')
+  for (let i = 0; i < 2; i++) await app.getByRole('button', { name: 'One more Ogre' }).click()
+  // three ogres are 1,350 XP: above the moderate budget of 900, within the high budget of 1,600
+  await expect(meter).toContainText('1350 XP of creatures')
+  await expect(meter).toContainText('High')
+})

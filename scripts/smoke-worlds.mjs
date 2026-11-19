@@ -56,6 +56,14 @@ if (token) {
   r = await call('GET', `/api/public/${token}`)
   check('shared page is public', r.status === 200, String(r.status))
 }
+// rules system
+let rs = await call('PATCH', `/api/workspaces/${ws}`, { settings: { system: '5e-2024' } })
+check('a world can play by the 2024 rules', rs.status === 200 && rs.data.settings.system === '5e-2024' && rs.data.settings.newPageTodo !== undefined)
+rs = await call('PATCH', `/api/workspaces/${ws}`, { settings: { system: 'pf2e' } })
+check('an unknown rules system is refused', rs.status === 400)
+rs = await call('PATCH', `/api/workspaces/${ws}`, { settings: { newPageTodo: 'Look around' } })
+check('changing another setting keeps the rules', rs.data.settings.system === '5e-2024' && rs.data.settings.newPageTodo === 'Look around')
+
 r = await call('DELETE', `/api/workspaces/${ws}`)
 check('delete world', r.status === 200)
 r = await call('GET', '/api/workspaces')

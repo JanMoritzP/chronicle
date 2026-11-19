@@ -31,10 +31,11 @@ function useInfo(ids: string[]) {
   return info
 }
 
-const LABEL = { trivial: 'Trivial', easy: 'Easy', medium: 'Medium', hard: 'Hard', deadly: 'Deadly' } as const
+const LABEL = { trivial: 'Trivial', easy: 'Easy', medium: 'Medium', hard: 'Hard', deadly: 'Deadly', low: 'Low', moderate: 'Moderate', high: 'High', over: 'Beyond High: more than the party should face' } as const
 
 export function EncounterPanel() {
   const wsId = useStore((s) => s.wsId)!
+  const system = useStore((s) => s.workspaces.find((w) => w.id === s.wsId)?.settings?.system ?? '5e')
   const sceneId = useTable((s) => s.sceneId)
   const scene = useTable((s) => s.scenes.find((x) => x.id === s.sceneId) ?? null)
   const [list, setList] = useState<Encounter[] | null>(null)
@@ -48,7 +49,7 @@ export function EncounterPanel() {
     setList((l) => l?.map((e) => (e.id === next.id ? next : e)) ?? l)
     api.patchEncounter(next.id, { name: next.name, party: next.party, notes: next.notes, monsters: next.monsters }).catch((e) => alertDialog(e.message))
   }
-  const rated = useMemo(() => enc ? rate(enc.monsters.map((m) => ({ xp: info[m.pageId]?.xp ?? 0, count: m.count })), enc.party) : null, [enc, info])
+  const rated = useMemo(() => enc ? rate(enc.monsters.map((m) => ({ xp: info[m.pageId]?.xp ?? 0, count: m.count })), enc.party, system) : null, [enc, info, system])
 
   const create = async () => {
     const name = await askText('New encounter', { label: 'Name', placeholder: 'Goblin ambush on the road', okLabel: 'Create' })
@@ -99,9 +100,13 @@ export function EncounterPanel() {
             : <button className="btn sm" onClick={() => setAdding(true)}><Plus size={13} /> Add a creature</button>}
           <p className="muted tt-hint">Missing a creature? Add it to the world from the Library first (Alt+L).</p>
           <div className={`tt-meter ${rated.difficulty}`} role="group" aria-label="Difficulty">
-            <b>{enc.party.length ? LABEL[rated.difficulty] : 'Add the party to rate it'}</b>
-            <span>{rated.total} XP × {rated.count ? (rated.adjusted / (rated.total || 1)).toFixed(1).replace(/\.0$/, '') : 0} = {rated.adjusted} adjusted XP</span>
-            {enc.party.length > 0 && <small className="muted">Easy {rated.thresholds.easy} · Medium {rated.thresholds.medium} · Hard {rated.thresholds.hard} · Deadly {rated.thresholds.deadly}</small>}
+            <b>{enc.party.length ? LABEL[rated.difficulty] : 'Add the party to rate it'} <small className="muted">{system === '5e-2024' ? '2024 rules' : '2014 rules'}</small></b>
+            {rated.method === '5e-2024'
+              ? <span>{rated.total} XP of creatures</span>
+              : <span>{rated.total} XP × {rated.count ? (rated.adjusted / (rated.total || 1)).toFixed(1).replace(/\.0$/, '') : 0} = {rated.adjusted} adjusted XP</span>}
+            {enc.party.length > 0 && (rated.budget
+              ? <small className="muted">Budget: Low {rated.budget.low} · Moderate {rated.budget.moderate} · High {rated.budget.high}</small>
+              : <small className="muted">Easy {rated.thresholds.easy} · Medium {rated.thresholds.medium} · Hard {rated.thresholds.hard} · Deadly {rated.thresholds.deadly}</small>)}
             {rated.total > 0 && enc.party.length > 0 && <small className="muted">{rated.perCharacter} XP for each character</small>}
           </div>
           <label className="tt-check"><input type="checkbox" checked={hidden} onChange={(e) => setHidden(e.target.checked)} />Place them hidden from the players</label>

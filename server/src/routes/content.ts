@@ -33,14 +33,20 @@ function validSheetProps(props: Record<string, any>) {
 const settingsSchema = z.object({
   /** Text of the todo every new page starts with; empty turns it off. */
   newPageTodo: z.string().max(200),
-})
+  /** The rules the world plays by: the 2014 or the 2024 edition of 5e. */
+  system: z.enum(['5e', '5e-2024']),
+}).partial()
 
-export const DEFAULT_WORLD_SETTINGS = { newPageTodo: 'Fill me' }
+export const DEFAULT_WORLD_SETTINGS = { newPageTodo: 'Fill me', system: '5e' as '5e' | '5e-2024' }
 
 export function worldSettings(raw: string | null | undefined) {
   let saved: any = {}
   try { saved = JSON.parse(raw || '{}') } catch { /* keep the defaults */ }
-  return { ...DEFAULT_WORLD_SETTINGS, ...(typeof saved.newPageTodo === 'string' ? { newPageTodo: saved.newPageTodo } : {}) }
+  return {
+    ...DEFAULT_WORLD_SETTINGS,
+    ...(typeof saved.newPageTodo === 'string' ? { newPageTodo: saved.newPageTodo } : {}),
+    ...(saved.system === '5e' || saved.system === '5e-2024' ? { system: saved.system as '5e' | '5e-2024' } : {}),
+  }
 }
 
 /** A new page starts with the world's default todo: alone in a blank page, after the content when a template or capture supplied some. */

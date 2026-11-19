@@ -329,6 +329,14 @@ function WorldOptions({ id }: { id: string }) {
         <input className="input" value={text} disabled={readOnly} placeholder="Fill me" onChange={(e) => setText(e.target.value)} onBlur={save} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }} />
       </label>
       <p className="muted" style={{ fontSize: 13, margin: '4px 0 0' }}>Added to each new page in “{world.name}”. Leave it empty to start pages without one.</p>
+      <label className="field" style={{ maxWidth: 420, marginTop: 14 }}>
+        <span>Rules</span>
+        <Select className="input" value={world.settings?.system ?? '5e'} disabled={readOnly} onChange={(v) => useStore.getState().setWorldSettings(id, { system: v as '5e' | '5e-2024' }).catch((e) => alertDialog(e.message))}>
+          <option value="5e">D&amp;D 5e, 2014 rules</option>
+          <option value="5e-2024">D&amp;D 5e, 2024 rules</option>
+        </Select>
+      </label>
+      <p className="muted" style={{ fontSize: 13, margin: '4px 0 0' }}>Decides how the tabletop rates a fight (a budget of XP in 2024, thresholds and a multiplier in 2014) and which rules new character sheets follow.</p>
       {owner && (
         <p style={{ marginTop: 14 }}>
           <button className="btn sm danger" onClick={async () => {

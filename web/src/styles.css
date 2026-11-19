@@ -823,7 +823,10 @@ input[type=color] { width: 34px; height: 24px; padding: 0; border: 1px solid var
 .tt-meter.easy { border-left-color: #4caf50; }
 .tt-meter.medium { border-left-color: #f1c40f; }
 .tt-meter.hard { border-left-color: #e67e22; }
-.tt-meter.deadly { border-left-color: var(--danger); }
+.tt-meter.deadly, .tt-meter.over { border-left-color: var(--danger); }
+.tt-meter.low { border-left-color: #4caf50; }
+.tt-meter.moderate { border-left-color: #f1c40f; }
+.tt-meter.high { border-left-color: #e67e22; }
 .tt-swatches { display: inline-flex; gap: 3px; align-items: center; }
 .tt-swatch { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--border); cursor: pointer; padding: 0; }
 .tt-swatch.on { border-color: var(--accent); outline: 2px solid var(--accent); outline-offset: 1px; }

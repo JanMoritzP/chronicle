@@ -201,6 +201,15 @@ What it does: a Monster page shows and edits its creature as a real sheet instea
 - **Not done yet.** Removing a character sheet again, rolling from the page itself (the roll buttons are on the table card), spell and item pickers from the Library, the same sheet in hover previews and the Library view, 2024 species and background rules, custom stat block forms.
 - **Tests.** `scripts/test-sheet.ts` (derived numbers, rests), `scripts/smoke-sheet.mjs`, `scripts/smoke-table.mjs` (hit points follow the token), `e2e/tests/content.spec.ts` (creature and character sheets).
 
+## Rules system: D&D 5e 2014 or 2024 (built, first step)
+
+A world plays by one set of rules: Settings, Worlds, **Rules** (`workspaces.settings.system`, `5e` or `5e-2024`, default 2014; any editor of the world can change it). What it decides today:
+
+- **Encounter difficulty.** 2014: the creatures' XP times a multiplier for how many there are, against easy, medium, hard and deadly thresholds. 2024: no multiplier; the creatures' XP is compared with the party's budget (XP per character, summed) at Low, Moderate and High, and anything above High is flagged as more than the party should face. The budget table is in `web/src/tabletop/encounter.ts`. Levels 1, 3, 5, 10 and 20 were checked against the published table; the other rows are from the book as remembered, so check them before relying on them at the table.
+- **New character sheets** start with the world's ruleset, and the sheet says "Heroic Inspiration" instead of "Inspiration" under 2024. Creature sheets already carry their own ruleset (a 2024 creature shows the 2024 stat block layout).
+- **Not done yet.** Species and background rules, weapon mastery, 2024 exhaustion, 2024 class features, and further systems (Pathfinder 2e next). A system is still a setting plus a few branches, not a loadable pack; the pack format of the roadmap comes when the second system needs it.
+- **Tests.** `scripts/test-encounter.ts`, `scripts/smoke-worlds.mjs`, `e2e/tests/tabletop.spec.ts` (2024 rules).
+
 ## Library (Open5e, built)
 
 A read-only reference library of everything Open5e publishes (api.open5e.com/v2): creatures, magic items, equipment (weapons and armor are part of it), spells, classes and subclasses, species, backgrounds, feats and conditions. It belongs to the server, not to a world, and is opened at any time from the sidebar ("Library") or the command list.
