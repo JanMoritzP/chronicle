@@ -1,6 +1,6 @@
 import { test as base, expect, request, type APIRequestContext, type Browser, type BrowserContext, type Page } from '@playwright/test'
 import { addCoverageReport } from 'monocart-reporter'
-import { ACCOUNTS, ADMIN_PANEL, ADMIN_URL, BASE_URL, authFile, type Role } from '../lib/env'
+import { ACCOUNTS, ADMIN_URL, BASE_URL, adminAuthFile, authFile, type Role } from '../lib/env'
 
 export type Api = APIRequestContext & {
   json: <T = any>(method: 'get' | 'post' | 'patch' | 'put' | 'delete', url: string, data?: unknown) => Promise<T>
@@ -120,9 +120,7 @@ export async function grantAccess(worldId: string, role: Exclude<Role, 'owner'>)
   const users = await owner.json<{ id: string; username: string }[]>('get', '/api/users')
   const user = users.find((u) => u.username === username)
   if (!user) throw new Error(`No ${role} account`)
-  const panel = await request.newContext({ baseURL: ADMIN_URL })
-  const login = await panel.post('/api/login', { data: ADMIN_PANEL })
-  if (!login.ok()) throw new Error('Admin dashboard login failed')
+  const panel = await request.newContext({ baseURL: ADMIN_URL, storageState: adminAuthFile })
   const r = await panel.put(`/api/worlds/${worldId}/members/${user.id}`, { data: { role } })
   if (!r.ok()) throw new Error(`Granting access failed: ${await r.text()}`)
   await panel.dispose()

@@ -26,6 +26,7 @@ export const VIEWER = { username: 'e2e-viewer', password: 'e2e-viewer-pass' }
 export type Role = 'owner' | 'editor' | 'viewer'
 export const ACCOUNTS = { owner: OWNER, editor: EDITOR, viewer: VIEWER } as const
 export const authFile = (role: Role) => path.join(AUTH_DIR, `${role}.json`)
+export const adminAuthFile = path.join(AUTH_DIR, 'admin-panel.json')
 
 /** Coverage gate in percent. Lines and statements must reach it; functions and branches are reported only. */
 export const COVERAGE_THRESHOLD = Number(process.env.E2E_COVERAGE_THRESHOLD ?? 70)

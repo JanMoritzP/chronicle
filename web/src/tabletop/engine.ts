@@ -1,5 +1,6 @@
 import { Application, Color, Container, Graphics, Sprite, Text, Texture } from 'pixi.js'
 import { FogLayer, type Light, type Wall } from './fog'
+import type { DrawKind, Drawing } from './state'
 import { formatDistance, hexCentres, hexCorners, measure, snap, tokenPixels, type Pt } from './grid'
 import type { Cursor, Ruler, Scene, Token } from './state'
 
@@ -17,9 +18,12 @@ export interface Hooks {
   onWallErase(id: string): void
   onDoor(id: string): void
   onExplored(png: string): void
+  onDraw(d: { kind: DrawKind; points: Pt[]; color: string; width: number; fill: string }): void
+  onText(p: Pt, done: (text: string | null) => void): void
+  onDrawErase(id: string): void
   colorOf(userId: string): number
 }
-export type Tool = 'select' | 'ruler' | 'wall' | 'erase'
+export type Tool = 'select' | 'ruler' | 'wall' | 'erase' | 'draw'
 
 const textures = new Map<string, Promise<Texture | null>>()
 /** Images come from our own server behind the login cookie, so they are fetched rather than handed to the loader by address. */
@@ -57,6 +61,11 @@ export class TableEngine {
   private ruleLabel = new Text({ text: '', style: { fontSize: 14, fill: 0xffffff, fontFamily: 'sans-serif', stroke: { color: 0x000000, width: 3 } } })
   private marquee = new Graphics()
   private wallG = new Graphics()
+  private drawLayer = new Container()
+  private drawStyle: { kind: DrawKind; color: string; width: number; fill: string } = { kind: 'free', color: '#ff5252', width: 4, fill: '' }
+  private drawings: Drawing[] = []
+  private stroke: Pt[] = []
+  private strokeG = new Graphics()
   private wallPreview = new Graphics()
   private walls: Wall[] = []
   private wallKind: Wall['kind'] = 'wall'
@@ -65,11 +74,13 @@ export class TableEngine {
   private fog!: FogLayer
   private turnId: string | null = null
   private me = { id: '', gm: true, canDoors: false }
-  private drag: null | { kind: 'pan' | 'tokens' | 'ruler' | 'marquee'; start: Pt; screen: Pt; origins?: Map<string, Pt>; lead?: string; moved: boolean; sent: number } = null
+  private drag: null | { kind: 'pan' | 'tokens' | 'ruler' | 'marquee' | 'draw'; start: Pt; screen: Pt; origins?: Map<string, Pt>; lead?: string; moved: boolean; sent: number } = null
   private pointers = new Map<number, Pt>()
   private pinch: null | { dist: number; scale: number } = null
   private longPress: number | undefined
   private lastCursor = 0
+  private raf = 0
+  private activeUntil = 0
 
   constructor(private host: HTMLElement, private hooks: Hooks) {}
 
@@ -82,7 +93,8 @@ export class TableEngine {
     this.app.canvas.style.touchAction = 'none'
     this.fog = new FogLayer(this.app)
     this.fog.onExplored = (png) => this.hooks.onExplored(png)
-    this.world.addChild(this.bg, this.gridG, this.tokenLayer, this.fog.view, this.wallG, this.others, this.ruleG, this.ruleLabel, this.overlay, this.wallPreview, this.marquee)
+    this.fog.onDrawn = () => this.poke()
+    this.world.addChild(this.bg, this.gridG, this.drawLayer, this.tokenLayer, this.fog.view, this.wallG, this.others, this.ruleG, this.ruleLabel, this.overlay, this.wallPreview, this.strokeG, this.marquee)
     this.ruleLabel.visible = false
     this.app.stage.addChild(this.world)
     const c = this.app.canvas
@@ -92,7 +104,10 @@ export class TableEngine {
     c.addEventListener('pointercancel', this.up)
     c.addEventListener('wheel', this.wheel, { passive: false })
     c.addEventListener('contextmenu', (e) => e.preventDefault())
-    this.app.ticker.add(this.tick)
+    // the picture is painted only while something is happening, so an idle table costs nothing
+    this.app.ticker.stop()
+    window.addEventListener('resize', this.poke)
+    this.raf = requestAnimationFrame(this.loop)
     if (this.scene) this.setScene(this.scene)
     this.drawWalls()
     this.setTokens([...this.tokens.values()])
@@ -102,14 +117,15 @@ export class TableEngine {
     this.gone = true
     clearTimeout(this.longPress)
     if (!this.ready) return
-    this.app.ticker.remove(this.tick)
+    cancelAnimationFrame(this.raf)
+    window.removeEventListener('resize', this.poke)
     this.fog.destroy()
     this.app.destroy(true, { children: true })
   }
 
   // ---------- what to show ----------
 
-  setScene(scene: Scene | null) {
+  setScene(scene: Scene | null) { this.poke();
     const changed = this.scene?.id !== scene?.id || this.scene?.bg !== scene?.bg
     this.scene = scene
     if (!this.ready) return
@@ -129,6 +145,7 @@ export class TableEngine {
     this.bg.addChild(base)
     if (!scene.bg) return
     const tex = await loadTexture(scene.bg)
+    this.poke()
     if (!tex || this.scene?.id !== scene.id || this.scene.bg !== scene.bg || this.gone) return
     const sprite = new Sprite(tex)
     sprite.width = scene.width
@@ -164,7 +181,7 @@ export class TableEngine {
     }
   }
 
-  setTokens(list: Token[]) {
+  setTokens(list: Token[]) { this.poke();
     this.tokens = new Map(list.map((t) => [t.id, t]))
     if (!this.ready) return
     for (const [id, v] of this.views) if (!this.tokens.has(id)) { v.box.destroy({ children: true }); this.views.delete(id) }
@@ -173,7 +190,7 @@ export class TableEngine {
     this.refreshVision()
   }
 
-  upsert(t: Token) {
+  upsert(t: Token) { this.poke();
     this.tokens.set(t.id, t)
     if (!this.ready) return
     const key = [t.image, t.color, t.name, t.size, t.hidden, t.locked, JSON.stringify(t.data.hp ?? null), (t.data.conditions ?? []).join(',')].join('|')
@@ -210,6 +227,7 @@ export class TableEngine {
       v.box.addChild(initial)
     } else {
       loadTexture(t.image).then((tex) => {
+        this.poke()
         if (!tex || v.box.destroyed) return
         const sprite = new Sprite(tex)
         sprite.anchor.set(0.5)
@@ -284,18 +302,18 @@ export class TableEngine {
   }
 
   /** The token whose turn it is gets a blue ring. */
-  setTurn(id: string | null) {
+  setTurn(id: string | null) { this.poke();
     this.turnId = id
     if (this.ready) for (const v of this.views.values()) this.drawSelection(v)
   }
 
-  setSelected(ids: string[]) {
+  setSelected(ids: string[]) { this.poke();
     this.selected = new Set(ids)
     if (this.ready) for (const v of this.views.values()) this.drawSelection(v)
   }
 
   /** Who is looking: the GM sees everything, a player sees what their own tokens see. */
-  setViewer(me: { id: string; gm: boolean; spectator: boolean; canDoors: boolean }) {
+  setViewer(me: { id: string; gm: boolean; spectator: boolean; canDoors: boolean }) { this.poke();
     this.me = { id: me.id, gm: me.gm || me.spectator, canDoors: me.canDoors || me.gm }
     if (!this.ready) return
     this.fog.configure(this.scene, !this.me.gm)
@@ -303,10 +321,71 @@ export class TableEngine {
     this.refreshVision()
   }
 
-  setWalls(walls: Wall[]) { this.walls = walls; if (this.ready) { this.fog.setWalls(walls); this.drawWalls() } }
-  setLights(lights: Light[]) { if (this.ready) this.fog.setLights(lights) }
-  setExplored(png: string | null) { if (this.ready) void this.fog.loadExplored(png) }
+  setWalls(walls: Wall[]) { this.walls = walls; if (this.ready) { this.poke(); this.fog.setWalls(walls); this.drawWalls() } }
+  setLights(lights: Light[]) { this.poke(); if (this.ready) this.fog.setLights(lights) }
+  setExplored(png: string | null) { this.poke(); if (this.ready) void this.fog.loadExplored(png) }
   setWallKind(kind: Wall['kind']) { this.wallKind = kind }
+  setDrawStyle(style: { kind: DrawKind; color: string; width: number; fill: string }) { this.poke(); this.drawStyle = style }
+
+  setDrawings(list: Drawing[]) { this.poke();
+    this.drawings = list
+    if (!this.ready) return
+    this.drawLayer.removeChildren().forEach((c) => c.destroy({ children: true }))
+    for (const d of list) this.drawLayer.addChild(this.shape(d.kind, d.points, d.color, d.width, d.fill, d.text, d.gmOnly ? 0.6 : 1))
+  }
+
+  /** One drawing as a picture. */
+  private shape(kind: DrawKind, pts: Pt[], color: string, width: number, fill: string, text = '', alpha = 1): Container {
+    const box = new Container()
+    box.alpha = alpha
+    const c = new Color(color).toNumber()
+    if (kind === 'text') {
+      const t = new Text({ text, style: { fontSize: 14 + width * 3, fill: c, fontFamily: 'sans-serif', fontWeight: '700', stroke: { color: 0x000000, width: 4 } } })
+      t.position.set(pts[0].x, pts[0].y)
+      box.addChild(t)
+      return box
+    }
+    const g = new Graphics()
+    const a = pts[0], b = pts[pts.length - 1]
+    if (kind === 'free') {
+      g.moveTo(a.x, a.y)
+      for (const p of pts.slice(1)) g.lineTo(p.x, p.y)
+      if (pts.length === 1) g.circle(a.x, a.y, width / 2).fill({ color: c })
+    } else if (kind === 'line') g.moveTo(a.x, a.y).lineTo(b.x, b.y)
+    else if (kind === 'rect') g.rect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y))
+    else g.ellipse((a.x + b.x) / 2, (a.y + b.y) / 2, Math.abs(b.x - a.x) / 2, Math.abs(b.y - a.y) / 2)
+    if (fill && (kind === 'rect' || kind === 'ellipse')) g.fill({ color: new Color(fill).toNumber(), alpha: 0.35 })
+    g.stroke({ width, color: c, cap: 'round', join: 'round' })
+    box.addChild(g)
+    return box
+  }
+
+  /** The drawing under a point, for the eraser. */
+  private nearDrawing(p: Pt): Drawing | null {
+    const reach = 10 / this.world.scale.x
+    const dist = (a: Pt, b: Pt) => {
+      const dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy
+      const t = l2 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2)) : 0
+      return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy))
+    }
+    for (const d of [...this.drawings].reverse()) {
+      const a = d.points[0], b = d.points[d.points.length - 1]
+      let near = false
+      if (d.kind === 'text') near = Math.abs(p.x - a.x - 40) < 60 + reach && Math.abs(p.y - a.y - 10) < 20 + reach
+      else if (d.kind === 'free') near = d.points.length === 1 ? Math.hypot(p.x - a.x, p.y - a.y) <= reach : d.points.some((q, i) => i > 0 && dist(d.points[i - 1], q) <= reach)
+      else if (d.kind === 'line') near = dist(a, b) <= reach
+      else if (d.kind === 'rect') {
+        const [x0, x1, y0, y1] = [Math.min(a.x, b.x), Math.max(a.x, b.x), Math.min(a.y, b.y), Math.max(a.y, b.y)]
+        near = d.fill ? p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1 : [[{ x: x0, y: y0 }, { x: x1, y: y0 }], [{ x: x1, y: y0 }, { x: x1, y: y1 }], [{ x: x1, y: y1 }, { x: x0, y: y1 }], [{ x: x0, y: y1 }, { x: x0, y: y0 }]].some(([s, e]) => dist(s, e) <= reach)
+      } else {
+        const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2, rx = Math.abs(b.x - a.x) / 2 || 1, ry = Math.abs(b.y - a.y) / 2 || 1
+        const k = Math.hypot((p.x - cx) / rx, (p.y - cy) / ry)
+        near = d.fill ? k <= 1 : Math.abs(k - 1) * Math.min(rx, ry) <= reach
+      }
+      if (near) return d
+    }
+    return null
+  }
 
   /** Tokens that give their owner sight, and who is hidden by the dark. */
   private refreshVision() {
@@ -328,7 +407,7 @@ export class TableEngine {
   }
 
   /** Ends the wall being drawn and sends it. */
-  finishWalls() {
+  finishWalls() { this.poke();
     const p = this.wallPoly
     this.wallPoly = []
     this.wallPreview.clear()
@@ -380,9 +459,9 @@ export class TableEngine {
     }
   }
 
-  setTool(tool: Tool) { this.tool = tool; this.wallPoly = []; this.wallPreview.clear(); this.drawWalls(); if (this.ready) this.app.canvas.style.cursor = tool === 'ruler' ? 'crosshair' : '' }
+  setTool(tool: Tool) { this.poke(); this.tool = tool; this.wallPoly = []; this.wallPreview.clear(); this.drawWalls(); if (this.ready) this.app.canvas.style.cursor = tool === 'ruler' ? 'crosshair' : '' }
 
-  setOthers(cursors: Record<string, Cursor>, rulers: Record<string, Ruler>) {
+  setOthers(cursors: Record<string, Cursor>, rulers: Record<string, Ruler>) { this.poke();
     if (!this.ready) return
     this.others.removeChildren().forEach((c) => c.destroy({ children: true }))
     for (const c of Object.values(cursors)) {
@@ -397,7 +476,7 @@ export class TableEngine {
     for (const r of Object.values(rulers)) this.drawRuler(r.points, this.hooks.colorOf(r.user), this.others, r.name)
   }
 
-  ping(p: Pt, userId: string) {
+  ping(p: Pt, userId: string) { this.poke();
     const g = new Graphics()
     g.position.set(p.x, p.y)
     g.label = String(this.hooks.colorOf(userId))
@@ -407,7 +486,7 @@ export class TableEngine {
 
   // ---------- camera ----------
 
-  fit() {
+  fit() { this.poke();
     const s = this.scene
     if (!s || !this.ready) return
     const w = this.host.clientWidth || 800, h = this.host.clientHeight || 600
@@ -420,12 +499,12 @@ export class TableEngine {
     return this.toWorld({ x: (this.host.clientWidth || 0) / 2, y: (this.host.clientHeight || 0) / 2 })
   }
 
-  centreOn(p: Pt) {
+  centreOn(p: Pt) { this.poke();
     const k = this.world.scale.x
     this.world.position.set((this.host.clientWidth || 0) / 2 - p.x * k, (this.host.clientHeight || 0) / 2 - p.y * k)
   }
 
-  zoomBy(f: number, at: Pt = { x: (this.host.clientWidth || 0) / 2, y: (this.host.clientHeight || 0) / 2 }) {
+  zoomBy(f: number, at: Pt = { x: (this.host.clientWidth || 0) / 2, y: (this.host.clientHeight || 0) / 2 }) { this.poke();
     const before = this.toWorld(at)
     const k = Math.min(4, Math.max(0.05, this.world.scale.x * f))
     this.world.scale.set(k)
@@ -454,11 +533,13 @@ export class TableEngine {
   }
 
   private wheel = (e: WheelEvent) => {
+    this.poke()
     e.preventDefault()
     this.zoomBy(Math.pow(1.0015, -e.deltaY), this.local(e))
   }
 
   private down = (e: PointerEvent) => {
+    this.poke()
     const screen = this.local(e)
     this.app.canvas.setPointerCapture(e.pointerId)
     this.pointers.set(e.pointerId, screen)
@@ -482,9 +563,17 @@ export class TableEngine {
       this.wallPoly.push(pt)
       return
     }
-    if (!pan && this.me.gm && this.tool === 'erase') {
-      const w = this.nearWall(world)
+    if (!pan && this.tool === 'erase') {
+      const d = this.nearDrawing(world)
+      if (d) { this.hooks.onDrawErase(d.id); return }
+      const w = this.me.gm ? this.nearWall(world) : null
       if (w) this.hooks.onWallErase(w.id)
+      return
+    }
+    if (!pan && this.tool === 'draw') {
+      if (this.drawStyle.kind === 'text') { this.hooks.onText(world, () => {}); return }
+      this.stroke = [world]
+      this.drag = { kind: 'draw', start: world, screen, moved: false, sent: 0 }
       return
     }
     const tok = pan ? null : this.hit(world)
@@ -518,6 +607,7 @@ export class TableEngine {
   }
 
   private move = (e: PointerEvent) => {
+    this.poke()
     const screen = this.local(e)
     if (this.pointers.has(e.pointerId)) this.pointers.set(e.pointerId, screen)
     if (this.pinch && this.pointers.size >= 2) {
@@ -562,6 +652,14 @@ export class TableEngine {
         if (now - d.sent > 70) { d.sent = now; this.hooks.onRuler(path) }
         break
       }
+      case 'draw': {
+        const last = this.stroke[this.stroke.length - 1]
+        if (this.drawStyle.kind === 'free') { if (Math.hypot(world.x - last.x, world.y - last.y) > 3 / this.world.scale.x && this.stroke.length < 590) this.stroke.push(world) }
+        else this.stroke = [d.start, world]
+        this.strokeG.removeChildren().forEach((c) => c.destroy({ children: true }))
+        this.strokeG.addChild(this.shape(this.drawStyle.kind, this.stroke, this.drawStyle.color, this.drawStyle.width, this.drawStyle.fill, '', 0.8))
+        break
+      }
       case 'marquee': {
         this.marquee.clear().rect(Math.min(d.start.x, world.x), Math.min(d.start.y, world.y), Math.abs(world.x - d.start.x), Math.abs(world.y - d.start.y)).fill({ color: 0xffd23f, alpha: 0.12 }).stroke({ width: 1 / this.world.scale.x, color: 0xffd23f })
         break
@@ -580,6 +678,7 @@ export class TableEngine {
   }
 
   private up = (e: PointerEvent) => {
+    this.poke()
     this.pointers.delete(e.pointerId)
     clearTimeout(this.longPress)
     if (this.pointers.size < 2) this.pinch = null
@@ -587,6 +686,12 @@ export class TableEngine {
     if (!d) return
     if (d.kind === 'tokens' && d.moved) this.flushMove(d, true)
     if (d.kind === 'tokens' || d.kind === 'ruler') { this.ruleG.clear(); this.ruleLabel.visible = false; if (d.moved) this.hooks.onRuler(null) }
+    if (d.kind === 'draw') {
+      this.strokeG.removeChildren().forEach((c) => c.destroy({ children: true }))
+      const pts = d.moved || this.drawStyle.kind === 'free' ? this.stroke : []
+      if (pts.length) this.hooks.onDraw({ ...this.drawStyle, points: pts.length === 1 && this.drawStyle.kind !== 'free' ? [] : pts })
+      this.stroke = []
+    }
     if (d.kind === 'marquee') {
       const w = this.toWorld(this.local(e))
       const [x0, x1] = [Math.min(d.start.x, w.x), Math.max(d.start.x, w.x)]
@@ -619,6 +724,16 @@ export class TableEngine {
     label.position.set(last.x + 10 / this.world.scale.x, last.y - 24 / this.world.scale.x)
     label.visible = true
     if (into) into.addChild(g, label)
+  }
+
+  /** Keeps painting for a moment: called whenever anything on screen may have changed. */
+  private poke = () => { this.activeUntil = performance.now() + 600 }
+
+  private loop = () => {
+    this.raf = requestAnimationFrame(this.loop)
+    if (this.pings.length) { this.tick(); this.poke() }
+    if (performance.now() > this.activeUntil) return
+    this.app.render()
   }
 
   private tick = () => {

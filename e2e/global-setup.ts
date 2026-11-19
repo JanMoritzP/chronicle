@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { request } from '@playwright/test'
-import { ACCOUNTS, ADMIN_PANEL, ADMIN_PORT, E2E_DIR, FAKE_OPEN5E_PORT, AUTH_DIR, BASE_URL, EDITOR, OWNER, PORT, REPORT_DIR, ROOT, RUN_DIR, STATE_FILE, VIEWER, WEB_DIST, authFile } from './lib/env'
+import { ACCOUNTS, ADMIN_PANEL, ADMIN_PORT, E2E_DIR, FAKE_OPEN5E_PORT, AUTH_DIR, BASE_URL, EDITOR, OWNER, PORT, REPORT_DIR, ROOT, RUN_DIR, STATE_FILE, VIEWER, WEB_DIST, adminAuthFile, authFile } from './lib/env'
 
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm'
 const npx = process.platform === 'win32' ? 'npx.cmd' : 'npx'
@@ -82,5 +82,11 @@ export default async function globalSetup() {
     await ctx.storageState({ path: authFile(role) })
     await ctx.dispose()
   }
+  // the dashboard login is rate limited, so tests that grant access reuse this one session
+  const panel = await request.newContext({ baseURL: `http://127.0.0.1:${ADMIN_PORT}` })
+  const panelLogin = await panel.post('/api/login', { data: ADMIN_PANEL })
+  if (!panelLogin.ok()) throw new Error('Admin dashboard login failed')
+  await panel.storageState({ path: adminAuthFile })
+  await panel.dispose()
   await owner.dispose()
 }

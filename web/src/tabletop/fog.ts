@@ -11,7 +11,7 @@ export interface Wall { id: string; x1: number; y1: number; x2: number; y2: numb
 export interface Light { id: string; x: number; y: number; bright?: number; dim?: number; color?: string }
 export interface Viewer { id: string; x: number; y: number; sight: number | null; dark: number }
 
-const MAX_SIDE = 1024
+const MAX_SIDE = 768
 const SAVE_EVERY_MS = 4000
 
 /** Walls that stop sight: closed doors and plain walls. Windows and open doors let it through. */
@@ -38,6 +38,8 @@ export class FogLayer {
   private saveTimer: number | undefined
   /** Called with the explored area as a PNG (base64) a few seconds after it changed. */
   onExplored: (png: string) => void = () => {}
+  /** Called when the dark layer was redrawn, so the screen can be painted again. */
+  onDrawn: () => void = () => {}
 
   constructor(private app: Application) { this.view.eventMode = 'none' }
 
@@ -179,6 +181,7 @@ export class FogLayer {
     cover.addChild(old, now)
     this.app.renderer.render({ container: cover, target: this.o, clear: true, clearColor: clear })
     cover.destroy({ children: true })
+    this.onDrawn()
   }
 
   private scheduleSave() {
