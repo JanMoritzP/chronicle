@@ -1,4 +1,4 @@
-import { Check, Download, RotateCcw, Trash2, X } from 'lucide-react'
+import { Check, Download, FilePlus2, RotateCcw, Search, Trash2, X, Zap } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api'
 import { BackupsSection } from './Backups'
@@ -12,16 +12,19 @@ import { PageIcon } from './TypeIcon'
 import { Select } from './Select'
 import type { PageMeta, Zettel } from '../types'
 
-function PageCard({ p }: { p: PageMeta }) {
+function PageCard({ p, lead = false }: { p: PageMeta; lead?: boolean }) {
   const navigate = useStore((s) => s.navigate)
   return (
-    <div className="card" data-page-id={p.id} onClick={() => navigate({ type: 'page', id: p.id })}
+    <div className={`card ${lead ? 'lead' : ''}`} data-page-id={p.id} onClick={() => navigate({ type: 'page', id: p.id })}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate({ type: 'page', id: p.id }) } }}
       tabIndex={0} role="button" aria-label={p.title || 'Untitled'}
       onAuxClick={(e) => { if (e.button === 1) navigate({ type: 'page', id: p.id }, { newTab: true }) }}>
       <div className="title row" style={{ gap: 6 }}><PageIcon page={p} /> {p.title || 'Untitled'}</div>
-      <p>{p.text.slice(0, 160) || 'Empty'}</p>
-      <div style={{ marginTop: 6 }}>{p.tags.slice(0, 3).map((t) => <span key={t} className="chip" style={{ marginRight: 4 }}>#{t}</span>)}</div>
+      <p>{p.text.slice(0, lead ? 320 : 160) || 'Empty'}</p>
+      <div className="card-foot">
+        {p.tags.slice(0, 3).map((t) => <span key={t} className="chip">#{t}</span>)}
+        <span className="muted card-time">{ago(p.updatedAt)}</span>
+      </div>
     </div>
   )
 }
@@ -40,17 +43,30 @@ export function HomeView() {
       {!readOnly && <button className="btn primary" onClick={async () => { const n = await askText('New world', { label: 'World name', okLabel: 'Create' }); if (n?.trim()) useStore.getState().createWorkspace(n.trim()) }}>Create world</button>}
     </div>
   )
+  const openTodos = data.pages.reduce((n, p) => n + (p.todos ?? 0), 0)
+  const navigate = useStore.getState().navigate
   return (
-    <div className="view">
-      <h1>{ws.name}</h1>
-      <div className="row muted" style={{ marginBottom: 20 }}>
-        <span>{data.pages.length} pages</span> · <span>{unprocessed} unprocessed zettels</span>
-      </div>
-      {!data.pages.length && <p className="muted">Nothing here yet. Press <kbd>Alt N</kbd> to write your first page, or <kbd>Alt C</kbd> to capture a quick thought.</p>}
-      {recent.length > 0 && <><h3 className="muted">Recently edited</h3><div className="grid">{recent.map((p) => <PageCard key={p.id} p={p} />)}</div></>}
+    <div className="view home">
+      <header className="home-head">
+        <h1>{ws.name}</h1>
+        <div className="home-stats muted">
+          <span>{data.pages.length} {data.pages.length === 1 ? 'page' : 'pages'}</span>
+          <button type="button" className="link-btn" onClick={() => navigate({ type: 'zettels' })}>{unprocessed} unprocessed zettels</button>
+          <button type="button" className="link-btn" onClick={() => navigate({ type: 'todos' })}>{openTodos} open {openTodos === 1 ? 'todo' : 'todos'}</button>
+        </div>
+        {!readOnly && (
+          <div className="home-actions">
+            <button className="btn primary row" onClick={() => useStore.getState().createPage().catch((e) => alertDialog(e.message))}><FilePlus2 size={15} /> Write a page <kbd className="kbd">Alt N</kbd></button>
+            <button className="btn row" onClick={() => useStore.getState().setUi({ captureOpen: true })}><Zap size={15} /> Capture a thought <kbd className="kbd">Alt C</kbd></button>
+            <button className="btn row" onClick={() => useStore.getState().setUi({ searchOpen: true, searchInitial: '' })}><Search size={15} /> Find anything <kbd className="kbd">Ctrl K</kbd></button>
+          </div>
+        )}
+      </header>
+      {!data.pages.length && <p className="muted home-empty">Nothing here yet. Write your first page, or capture a quick thought and sort it out later.</p>}
+      {recent.length > 0 && <><h3 className="home-h">Recently edited</h3><div className="grid home-grid">{recent.map((p, i) => <PageCard key={p.id} p={p} lead={i === 0} />)}</div></>}
       {missing.length > 0 && !readOnly && (
         <>
-          <h3 className="muted" style={{ marginTop: 28 }}>Linked but not written yet</h3>
+          <h3 className="home-h">Linked but not written yet</h3>
           <div className="row" style={{ flexWrap: 'wrap' }}>
             {missing.map(([name, from]) => (
               <button key={name} className="chip" onClick={() => useStore.getState().createPageFromName(name).then((p) => p && useStore.getState().navigate({ type: 'page', id: p.id }))}>

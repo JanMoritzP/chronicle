@@ -82,3 +82,28 @@ test('manual lists the commands', { tag: '@feature:shell.manual' }, async ({ app
   await expect(app.getByRole('heading', { level: 1, name: /Manual/ })).toBeVisible()
   await expect(app.locator('main')).toContainText('Heading 1')
 })
+
+test('home offers shortcuts to write, capture and find', { tag: '@feature:shell.home-actions' }, async ({ app }) => {
+  await app.getByRole('button', { name: /^Capture a thought/ }).click()
+  await expect(app.getByPlaceholder('Any thought, name, idea…')).toBeVisible()
+  await app.keyboard.press('Escape')
+  await app.getByRole('button', { name: /^Find anything/ }).click()
+  await expect(app.getByLabel('Search pages, text, tags, or commands')).toBeVisible()
+  await app.keyboard.press('Escape')
+  await app.getByRole('button', { name: /^Write a page/ }).click()
+  await expect(app.getByLabel('Page title')).toBeVisible()
+})
+
+test('the sidebar names the world and switches between worlds', { tag: '@feature:shell.world-switcher' }, async ({ app, api, world }) => {
+  const other = await api.json<{ id: string; name: string }>('post', '/api/workspaces', { name: `Other ${world.name}` })
+  await app.reload()
+  const head = app.getByRole('button', { name: /^World: / })
+  await expect(head).toContainText(world.name)
+  await head.click()
+  await expect(app.getByRole('menuitemradio', { name: world.name, exact: true })).toHaveAttribute('aria-checked', 'true')
+  await app.getByRole('menuitemradio', { name: other.name, exact: true }).click()
+  await expect(head).toContainText(other.name)
+  await head.click()
+  await app.getByRole('menuitem', { name: 'Home' }).click()
+  await expect(app.getByRole('heading', { level: 1, name: other.name })).toBeVisible()
+})

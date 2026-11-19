@@ -11,6 +11,8 @@ export const FONTS: FontChoice[] = [
   { id: 'dyslexic', name: 'Readable (Verdana)', stack: 'Verdana, Tahoma, sans-serif' },
 ]
 
+const BOOK_STACK = '"Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif'
+
 export interface FontPrefs { ui: string; body: string; size: number }
 
 const KEY = 'fonts'
@@ -27,7 +29,9 @@ export function applyFonts(p: FontPrefs = loadFonts()) {
   const root = document.documentElement.style
   root.setProperty('--font-ui', stackOf(p.ui))
   root.setProperty('--font-body', p.body === 'same' ? stackOf(p.ui) : stackOf(p.body))
-  root.setProperty('--font-scale', String(Math.min(1.6, Math.max(0.7, p.size / 100))))
+  // Titles and headings follow the reading font when the user picked one, and fall back to a book serif otherwise.
+  root.setProperty('--font-display', p.body === 'system' ? BOOK_STACK : stackOf(p.body === 'same' ? p.ui : p.body))
+  root.setProperty('--font-scale',String(Math.min(1.6, Math.max(0.7, p.size / 100))))
 }
 
 export function saveFonts(p: FontPrefs) {

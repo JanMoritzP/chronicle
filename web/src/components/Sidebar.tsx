@@ -1,12 +1,12 @@
 import { useUnreadComments } from './Comments'
 import {
-  BookOpen, CalendarDays, ChevronDown, ChevronRight, CircleHelp, FilePlus2, FolderPlus, Hash, Inbox, LayoutTemplate, Library, ListTodo, Map as MapIcon, MessageSquare, Network, ScrollText, Search, Settings, Shapes, Trash2, Users, Zap,
+  BookOpen, CalendarDays, Check, ChevronDown, ChevronRight, ChevronsUpDown, CircleHelp, FilePlus2, FolderPlus, Hash, Home, Inbox, LayoutTemplate, Library, ListTodo, Map as MapIcon, MessageSquare, Network, Plus, ScrollText, Search, Settings, Shapes, Trash2, Users, Zap,
 } from 'lucide-react'
 import { useMemo, useRef, useState } from 'react'
 import { api } from '../api'
 import { alertDialog, askText, confirmDialog } from '../lib/dialog'
 import { buildTagTree, type TagNode } from '../lib/data'
-import { currentView, useStore } from '../store'
+import { currentView, useStore, type View } from '../store'
 import type { PageMeta } from '../types'
 import { PageIcon, TypeIcon, useTypes } from './TypeIcon'
 
@@ -27,10 +27,29 @@ function TagItem({ node, depth }: { node: TagNode; depth: number }) {
   )
 }
 
+// Editor views belong to the list they were opened from, so the list stays highlighted.
+const NAV_PARENT: Partial<Record<View['type'], View['type']>> = { template: 'templates', pagetype: 'pagetypes', stattemplate: 'stattemplates' }
+
+function NavItem({ icon, label, to, badge = 0, badgeTitle }: { icon: React.ReactNode; label: string; to: View; badge?: number; badgeTitle?: string }) {
+  const navigate = useStore((s) => s.navigate)
+  const tab = useStore((s) => s.tabs.find((t) => t.id === s.activeTab) ?? s.tabs[0])
+  const type = currentView(tab).type
+  const active = (NAV_PARENT[type] ?? type) === to.type
+  return (
+    <div className={`side-item nav ${active ? 'active' : ''}`} tabIndex={0} role="button" aria-label={label} aria-current={active ? 'page' : undefined}
+      onClick={() => navigate(to)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(to) } }}>
+      {icon} <span className="grow">{label}</span>
+      {badge > 0 && <span className="chip" title={badgeTitle}>{badge}</span>}
+    </div>
+  )
+}
+
 export function Sidebar() {
-  const { data, tabs, activeTab, user } = useStore()
+  const { data, tabs, activeTab, user, workspaces, wsId } = useStore()
   const navigate = useStore((s) => s.navigate)
   const readOnly = user?.role === 'viewer'
+  const world = workspaces.find((w) => w.id === wsId)
+  const [worldMenu, setWorldMenu] = useState<{ x: number; y: number; w: number } | null>(null)
   const types = useTypes()
   const [open, setOpen] = useState<Record<string, boolean>>(() => JSON.parse(localStorage.getItem('folders-open') ?? '{}'))
   const [dropFolder, setDropFolder] = useState<string | null | undefined>(undefined)
@@ -171,40 +190,43 @@ export function Sidebar() {
   return (
     <>
       <div className="sidebar-head head">
-        <button className="btn row" style={{ justifyContent: 'flex-start', color: 'var(--muted)' }} onClick={() => useStore.getState().setUi({ searchOpen: true, searchInitial: '' })}>
-          <Search size={15} /> <span className="grow" style={{ textAlign: 'left' }}>Search</span> <kbd>Ctrl K</kbd>
+        <button className="world-head" aria-label={`World: ${world?.name ?? 'none'}. Switch world`} aria-haspopup="menu"
+          onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setWorldMenu({ x: r.left, y: r.bottom + 4, w: r.width }) }}>
+          <span className="world-mark" aria-hidden="true">{(world?.name ?? 'C').trim().charAt(0).toUpperCase()}</span>
+          <span className="grow ellipsis world-name">{world?.name ?? 'Chronicle'}</span>
+          <ChevronsUpDown size={14} className="muted" />
+        </button>
+        <button className="search-trigger" onClick={() => useStore.getState().setUi({ searchOpen: true, searchInitial: '' })}>
+          <Search size={15} /> <span className="grow">Search</span> <kbd className="kbd">Ctrl K</kbd>
         </button>
         {!readOnly && (
-          <div className="row">
-            <button className="btn primary grow row" style={{ justifyContent: 'center' }} onClick={() => useStore.getState().createPage()}><FilePlus2 size={15} /> New page</button>
-            <button className="btn" title="New special page (person, monster, location…)" onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setTypeMenu({ x: r.left, y: r.bottom + 4, folderId: null }) }}><Shapes size={15} /></button>
-            <button className="btn" title="New folder" onClick={() => newFolder(null)}><FolderPlus size={15} /></button>
-            <button className="btn" title="Quick capture (Alt+C)" onClick={() => useStore.getState().setUi({ captureOpen: true })}><Zap size={15} /></button>
+          <div className="side-actions">
+            <button className="btn primary new-page" onClick={() => useStore.getState().createPage()}><FilePlus2 size={15} /> New page</button>
+            <button className="btn square" title="New special page (person, monster, location…)" aria-label="New special page" onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setTypeMenu({ x: r.left, y: r.bottom + 4, folderId: null }) }}><Shapes size={15} /></button>
+            <button className="btn square" title="New folder" aria-label="New folder" onClick={() => newFolder(null)}><FolderPlus size={15} /></button>
+            <button className="btn square" title="Quick capture (Alt+C)" aria-label="Quick capture" onClick={() => useStore.getState().setUi({ captureOpen: true })}><Zap size={15} /></button>
           </div>
         )}
       </div>
       <div className="scroll">
-        <div className="side-item" tabIndex={0} role="button" aria-label="Zettelkasten" onClick={() => navigate({ type: 'zettels' })} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate({ type: 'zettels' }) } }}>
-          <Inbox size={15} /> <span className="grow">Zettelkasten</span>
-          {unprocessed > 0 && <span className="chip">{unprocessed}</span>}
-        </div>
-        <div className="side-item" tabIndex={0} role="button" aria-label="Graph" onClick={() => navigate({ type: 'graph' })} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate({ type: 'graph' }) } }}><Network size={15} /> <span className="grow">Graph</span></div>
-        <div className="side-item" tabIndex={0} role="button" aria-label="Maps" onClick={() => navigate({ type: 'maps' })} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate({ type: 'maps' }) } }}><MapIcon size={15} /> <span className="grow">Maps</span></div>
-        <div className="side-item" tabIndex={0} role="button" aria-label="Timeline" onClick={() => navigate({ type: 'timeline' })} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate({ type: 'timeline' }) } }}><CalendarDays size={15} /> <span className="grow">Timeline</span></div>
-        <div className="side-item" tabIndex={0} role="button" aria-label="Relations" onClick={() => navigate({ type: 'relations' })} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate({ type: 'relations' }) } }}><Users size={15} /> <span className="grow">Relations</span></div>
-        <div className="side-item" tabIndex={0} role="button" aria-label="Sessions" onClick={() => navigate({ type: 'sessions' })} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate({ type: 'sessions' }) } }}><BookOpen size={15} /> <span className="grow">Sessions</span></div>
-        <div className="side-item" tabIndex={0} role="button" aria-label="Todos" onClick={() => navigate({ type: 'todos' })} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate({ type: 'todos' }) } }}>
-          <ListTodo size={15} /> <span className="grow">Todos</span>
-          {openTodos > 0 && <span className="chip">{openTodos}</span>}
-        </div>
-        <div className="side-item" tabIndex={0} role="button" aria-label="Comments" onClick={() => navigate({ type: 'comments' })} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate({ type: 'comments' }) } }}>
-          <MessageSquare size={15} /> <span className="grow">Comments</span>
-          {unreadComments > 0 && <span className="chip" title="Open comments for you">{unreadComments}</span>}
-        </div>
-        <div className="side-item" tabIndex={0} role="button" aria-label="Library" onClick={() => navigate({ type: 'library' })} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate({ type: 'library' }) } }}><Library size={15} /> <span className="grow">Library</span></div>
-        <div className="side-item" tabIndex={0} role="button" aria-label="Templates" onClick={() => navigate({ type: 'templates' })} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate({ type: 'templates' }) } }}><LayoutTemplate size={15} /> <span className="grow">Templates</span></div>
-        <div className="side-item" tabIndex={0} role="button" aria-label="Special pages" onClick={() => navigate({ type: 'pagetypes' })} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate({ type: 'pagetypes' }) } }}><Shapes size={15} /> <span className="grow">Special pages</span></div>
-        <div className="side-item" tabIndex={0} role="button" aria-label="Stat block forms" onClick={() => navigate({ type: 'stattemplates' })} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate({ type: 'stattemplates' }) } }}><ScrollText size={15} /> <span className="grow">Stat block forms</span></div>
+        <nav className="nav-group" aria-label="Play">
+          <NavItem icon={<Inbox size={15} />} label="Zettelkasten" badge={unprocessed} to={{ type: 'zettels' }} />
+          <NavItem icon={<BookOpen size={15} />} label="Sessions" to={{ type: 'sessions' }} />
+          <NavItem icon={<ListTodo size={15} />} label="Todos" badge={openTodos} to={{ type: 'todos' }} />
+          <NavItem icon={<MessageSquare size={15} />} label="Comments" badge={unreadComments} badgeTitle="Open comments for you" to={{ type: 'comments' }} />
+        </nav>
+        <nav className="nav-group" aria-label="World">
+          <NavItem icon={<Network size={15} />} label="Graph" to={{ type: 'graph' }} />
+          <NavItem icon={<MapIcon size={15} />} label="Maps" to={{ type: 'maps' }} />
+          <NavItem icon={<CalendarDays size={15} />} label="Timeline" to={{ type: 'timeline' }} />
+          <NavItem icon={<Users size={15} />} label="Relations" to={{ type: 'relations' }} />
+        </nav>
+        <nav className="nav-group" aria-label="Toolkit">
+          <NavItem icon={<Library size={15} />} label="Library" to={{ type: 'library' }} />
+          <NavItem icon={<LayoutTemplate size={15} />} label="Templates" to={{ type: 'templates' }} />
+          <NavItem icon={<Shapes size={15} />} label="Special pages" to={{ type: 'pagetypes' }} />
+          <NavItem icon={<ScrollText size={15} />} label="Stat block forms" to={{ type: 'stattemplates' }} />
+        </nav>
 
         <div className="side-label">Pages</div>
         <div {...dragProps(null)} className={dropFolder === null ? 'side-item drop' : ''} style={{ display: 'block', padding: 0, minHeight: 40 }}>
@@ -225,6 +247,26 @@ export function Sidebar() {
         <button className="icon-btn" title="Manual" aria-label="Manual" onClick={() => navigate({ type: 'manual' })}><CircleHelp size={16} /></button>
         <button className="icon-btn" title="Settings" aria-label="Settings" onClick={() => navigate({ type: 'settings' })}><Settings size={16} /></button>
       </div>
+      {worldMenu && (
+        <div className="overlay" style={{ background: 'transparent', padding: 0 }} onMouseDown={() => setWorldMenu(null)}>
+          <div className="menu world-menu" role="menu" style={{ left: worldMenu.x, top: worldMenu.y, minWidth: worldMenu.w }} onMouseDown={(e) => e.stopPropagation()}>
+            {workspaces.map((w) => (
+              <button key={w.id} role="menuitemradio" aria-checked={w.id === wsId} onClick={() => { setWorldMenu(null); if (w.id !== wsId) useStore.getState().selectWorkspace(w.id) }}>
+                <span className="grow ellipsis">{w.name}</span>{w.id === wsId && <Check size={14} />}
+              </button>
+            ))}
+            <div className="menu-sep" />
+            <button role="menuitem" onClick={() => { setWorldMenu(null); navigate({ type: 'home' }) }}><Home size={14} /> Home</button>
+            {!readOnly && (
+              <button role="menuitem" onClick={async () => {
+                setWorldMenu(null)
+                const n = await askText('New world', { label: 'World name', okLabel: 'Create' })
+                if (n?.trim()) useStore.getState().createWorkspace(n.trim()).catch((e) => alertDialog(e.message))
+              }}><Plus size={14} /> New world</button>
+            )}
+          </div>
+        </div>
+      )}
       {typeMenu && (
         <div className="overlay" style={{ background: 'transparent', padding: 0 }} onMouseDown={() => setTypeMenu(null)}>
           <div className="menu" style={{ left: typeMenu.x, top: typeMenu.y }} onMouseDown={(e) => e.stopPropagation()}>

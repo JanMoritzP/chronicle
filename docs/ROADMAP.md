@@ -266,6 +266,17 @@ What it does: every edit to a page is recorded with who made it and when, and an
 - **Not covered.** History is not copied to another world or exported, as before. Two people typing in the same few seconds produce one entry credited to whoever changed the page last.
 - **Tests.** `node scripts/smoke-history.mjs <url> <user> <pass>`.
 
+## Look and navigation (built)
+
+What it does: a calmer, easier to read shell. No data or API changed.
+
+- **Type.** Titles and headings (page title, editor headings, view titles, the world name) use a book serif; body text stays on the reading font chosen in Settings. `--font-display` is set in `fonts.ts`: a book serif by default, the user's reading font when they picked one. Only fonts that ship with the OS are used, so the app still works offline.
+- **Contrast.** The muted text colour of the light themes was darkened to reach 4.5:1 on its background. Small uppercase labels (sidebar and section headings) became sentence case.
+- **Sidebar.** A world header at the top shows the current world and opens a menu to switch worlds, go Home or create a world (before, switching worlds was only in Settings and the command palette). The twelve views are grouped by use (Zettelkasten, Sessions, Todos, Comments; Graph, Maps, Timeline, Relations; Library, Templates, Special pages, Stat block forms) and the open view is highlighted. The "New page" button no longer wraps onto two lines.
+- **Home.** The most recently edited page leads as a large card, followed by the rest with how long ago they changed. Shortcuts for writing a page, capturing a thought and searching sit under the world name, and the zettel and todo counts link to their views.
+- **Touch and keyboard.** Row actions stay visible on screens without hover, rows are 40 px tall on phones, every button, card and chip shows a focus ring, and animations are turned off for people who asked for reduced motion.
+- **Tests.** `e2e/tests/shell.spec.ts` (`shell.home-actions`, `shell.world-switcher`).
+
 ## Operations
 - Password change: `POST /api/auth/password` (own), owner can set another user's.
 - Docker: health check on `/api/health`, graceful shutdown on SIGTERM (WAL checkpoint), `/data` owned by uid 1000, compose uses a named volume. Session cookie `Secure` follows `req.protocol` (behind cloudflared it is https).

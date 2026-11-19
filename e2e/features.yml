@@ -46,6 +46,12 @@ areas:
       - id: shell.home
         name: "Home with recent pages"
         files: [web/src/components/Views.tsx]
+      - id: shell.home-actions
+        name: "Home shortcuts: write, capture, find"
+        files: [web/src/components/Views.tsx]
+      - id: shell.world-switcher
+        name: "World name and switcher at the top of the sidebar"
+        files: [web/src/components/Sidebar.tsx]
       - id: shell.navigation
         name: "Every sidebar view opens"
         files: [web/src/components/Sidebar.tsx]

@@ -40,7 +40,8 @@ function Login() {
         setBusy(true); setErr('')
         try { await useStore.getState().login(u, p) } catch (x: any) { setErr(x.message) } finally { setBusy(false) }
       }}>
-        <h1>Chronicle</h1>
+        <div className="login-brand"><img src="/icon.svg" alt="" /><h1>Chronicle</h1></div>
+        <p className="login-sub muted">Sign in to open your worlds.</p>
         <label className="field">
           <span>Username</span>
           <input className="input" placeholder="Username" autoFocus autoComplete="username" value={u} onChange={(e) => setU(e.target.value)} aria-label="Username" />
