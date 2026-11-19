@@ -1,5 +1,5 @@
 import { creatureToStatBlock, importPlan } from '../web/src/lib/open5e'
-import { abilityMod, sheetOf, wholeSheetPatch, crFromText, crText, initiativeBonus, passivePerception, profBonus, saveBonus, sheetFromCreature, sheetFromLegacy, speedText } from '../web/src/lib/sheet'
+import { rollsIn, abilityMod, sheetOf, wholeSheetPatch, crFromText, crText, initiativeBonus, passivePerception, profBonus, saveBonus, sheetFromCreature, sheetFromLegacy, speedText } from '../web/src/lib/sheet'
 import type { LibraryEntry } from '../web/src/types'
 
 let failed = 0
@@ -59,6 +59,11 @@ check('legacy 2024: ruleset, saves, initiative', m.ruleset === '5e-2024' && m.sa
 check('cr text round trip', crText(0.125) === '1/8' && crFromText('1/4 (50 XP)') === 0.25 && crFromText('13 (10,000 XP)') === 13)
 check('hand typed speed', JSON.stringify(sheetFromLegacy({ speed: '30 ft., swim 40 ft.' }).speed) === JSON.stringify({ walk: 30, swim: 40 }))
 check('empty data does not throw', sheetFromLegacy({}).hp.max === 1)
+
+const ro = rollsIn('Melee Weapon Attack: +4 to hit, reach 5 ft. Hit: 5 (1d6 + 2) slashing damage plus 3 (1d6) fire damage.')
+check('attack and damage are found in the text', ro.attack === 4 && ro.damage.length === 2 && ro.damage[0].expr === '1d6+2' && ro.damage[0].type === 'slashing' && ro.damage[1].type === 'fire')
+check('a saving throw is found', rollsIn('Each creature must succeed on a DC 13 Dexterity saving throw').save?.dc === 13 && rollsIn('nothing here').attack === null)
+check('a minus sign in the bonus', rollsIn('−1 to hit').attack === -1 || rollsIn('-1 to hit').attack === -1)
 
 const plan = importPlan(dragon, null as any)
 check('import writes the sheet and the old stat block', plan.props.sheet?.hp.max === 110 && plan.props.data.main.data.hp === '110 (13d10 + 39)')

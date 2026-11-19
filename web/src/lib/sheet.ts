@@ -280,3 +280,15 @@ export function sheetFromLegacy(data: Record<string, string>, templateId = '5e-m
   s.features = { traits: parseFeatures(data.traits), actions: parseFeatures(data.actions), bonus: parseFeatures(data.bonus), reactions: parseFeatures(data.reactions), legendary: parseFeatures(data.legendary) }
   return s
 }
+
+// ---------- rolls found in feature text ----------
+
+export interface FeatureRolls { attack: number | null; damage: { expr: string; type: string }[]; save: { ability: string; dc: number } | null }
+
+/** The attack bonus, damage dice and saving throw written into a feature's text ("+4 to hit", "7 (2d4 + 2) piercing damage", "DC 13 Dexterity saving throw"). */
+export function rollsIn(text: string): FeatureRolls {
+  const hit = /([+\-−]\d+)\s+to hit/i.exec(text)
+  const damage = [...text.matchAll(/\((\d+d\d+(?:\s*[+\-−]\s*\d+)?)\)\s*([a-z]+)?\s*damage/gi)].map((m) => ({ expr: m[1].replace(/\s+/g, '').replace('−', '-'), type: m[2] ?? '' }))
+  const save = /DC\s*(\d+)\s*(Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma)\s*saving throw/i.exec(text)
+  return { attack: hit ? Number(hit[1].replace('−', '-')) : null, damage, save: save ? { ability: save[2], dc: Number(save[1]) } : null }
+}

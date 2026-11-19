@@ -17,6 +17,11 @@ export interface Who { id: string; username: string; role: string }
 export interface Cursor { user: string; name: string; x: number; y: number; at: number }
 export interface Ruler { user: string; name: string; points: { x: number; y: number }[] }
 export type Conn = 'connecting' | 'open' | 'closed'
+export interface Die { v: number; dropped?: boolean; extra?: boolean }
+export type RollTerm = { kind: 'num'; sign: 1 | -1; value: number } | { kind: 'dice'; sign: 1 | -1; count: number; sides: number; dice: Die[]; subtotal: number; text: string }
+export interface RollJson { expr: string; label: string; total: number; terms: RollTerm[]; crit: 'hit' | 'miss' | null }
+export type ChatPart = { t: 'text'; text: string } | { t: 'roll'; roll: RollJson }
+export interface ChatMsg { id: string; ts: number; userId: string; name: string; kind: 'say' | 'roll' | 'gmroll' | 'emote' | 'whisper'; to: string[]; parts: ChatPart[] }
 
 export const DEFAULT_SETTINGS: Settings = { gms: [], playersMoveOwn: true, playersCreateTokens: false, playersEditOwnStats: true, playersPing: true, playersRuler: true, showCursors: true }
 
@@ -34,12 +39,14 @@ interface TableState {
   selected: string[]
   cursors: Record<string, Cursor>
   rulers: Record<string, Ruler>
+  chat: ChatMsg[]
+  unread: number
   error: string
 }
 
 export const useTable = create<TableState>(() => ({
   conn: 'closed', you: null, role: 'spectator', settings: DEFAULT_SETTINGS, scenes: [], active: null, sceneId: null, tokens: [], online: [], members: [],
-  selected: [], cursors: {}, rulers: {}, error: '',
+  selected: [], cursors: {}, rulers: {}, chat: [], unread: 0, error: '',
 }))
 
 type Listener = (m: any) => void
@@ -56,7 +63,7 @@ export function applyMessage(m: any) {
     case 'snapshot':
       set({
         you: m.you, role: m.you.role, settings: { ...DEFAULT_SETTINGS, ...m.settings }, scenes: m.scenes, active: m.active, sceneId: m.sceneId,
-        tokens: m.tokens, online: m.online, members: m.members ?? [], selected: [], cursors: {}, rulers: {},
+        tokens: m.tokens, online: m.online, members: m.members ?? [], chat: m.chat ?? [], unread: 0, selected: [], cursors: {}, rulers: {},
       })
       break
     case 'view': set({ sceneId: m.sceneId, tokens: m.tokens, selected: [], cursors: {}, rulers: {} }); break
@@ -75,6 +82,7 @@ export function applyMessage(m: any) {
       const { [m.user]: _gone, ...rest } = s.rulers
       return { rulers: m.points ? { ...rest, [m.user]: { user: m.user, name: m.name, points: m.points } } : rest }
     }); break
+    case 'chat.msg': set((s) => ({ chat: [...s.chat.slice(-299), m.msg], unread: m.msg.userId === s.you?.id ? s.unread : s.unread + 1 })); break
     case 'nack': set({ error: m.error }); break
   }
   for (const l of listeners) l(m)
@@ -119,7 +127,7 @@ export function leaveTable() {
   const s = socket
   socket = null
   s?.close()
-  set({ conn: 'closed', you: null, role: 'spectator', scenes: [], tokens: [], sceneId: null, active: null, selected: [], cursors: {}, rulers: {}, online: [], members: [], error: '' })
+  set({ conn: 'closed', you: null, role: 'spectator', scenes: [], tokens: [], sceneId: null, active: null, selected: [], cursors: {}, rulers: {}, online: [], members: [], chat: [], unread: 0, error: '' })
 }
 
 /** Sends a message; an operation id comes back with a refusal so the cause can be shown. */

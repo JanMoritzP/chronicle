@@ -1,5 +1,5 @@
 import { Color } from 'pixi.js'
-import { Crosshair, Eye, EyeOff, Lock, LockOpen, Maximize, Minus, Plus, Ruler, RotateCw, Swords, Trash2, UserPlus, MousePointer2, Users } from 'lucide-react'
+import { Crosshair, Eye, MessageSquare, EyeOff, Lock, LockOpen, Maximize, Minus, Plus, Ruler, RotateCw, Swords, Trash2, UserPlus, MousePointer2, Users } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { askText, confirmDialog } from '../lib/dialog'
 import { colorFor } from '../lib/collab'
@@ -8,6 +8,7 @@ import { TableEngine, type Tool } from '../tabletop/engine'
 import { snap } from '../tabletop/grid'
 import { joinTable, leaveTable, onTableMessage, sendTable, useTable, type Scene, type Token } from '../tabletop/state'
 import { pickImage, uploadImage } from '../tabletop/upload'
+import { ChatPanel, LinkPage, TokenSheet, TokenStats } from './TableParts'
 import { Select } from './Select'
 
 const PALETTE = ['#c0392b', '#2e86c1', '#27ae60', '#d68910', '#8e44ad', '#16a085', '#7f8c8d', '#d35400']
@@ -22,7 +23,8 @@ export function TableView() {
   const sceneId = useTable((s) => s.sceneId)
   const error = useTable((s) => s.error)
   const [tool, setTool] = useState<Tool>('select')
-  const [panel, setPanel] = useState<'token' | 'scene' | 'table'>('token')
+  const [panel, setPanel] = useState<'token' | 'scene' | 'table' | 'chat'>('token')
+  const unread = useTable((s) => s.unread)
   const [panelOpen, setPanelOpen] = useState(true)
   const host = useRef<HTMLDivElement>(null)
   const engine = useRef<TableEngine | null>(null)
@@ -144,11 +146,13 @@ export function TableView() {
             <div className="seg">
               <button className={panel === 'token' ? 'on' : ''} onClick={() => setPanel('token')}>Token</button>
               {gm && <button className={panel === 'scene' ? 'on' : ''} onClick={() => setPanel('scene')}>Scene</button>}
+              <button className={panel === 'chat' ? 'on' : ''} onClick={() => setPanel('chat')}><MessageSquare size={12} /> Chat{unread > 0 && panel !== 'chat' ? ` (${unread})` : ''}</button>
               <button className={panel === 'table' ? 'on' : ''} onClick={() => setPanel('table')}>Table</button>
             </div>
             {panel === 'token' && <TokenPanel token={one} count={selected.length} />}
             {panel === 'scene' && gm && scene && <ScenePanel scene={scene} active={active === scene.id} wsId={wsId} />}
             {panel === 'table' && <TablePanel />}
+            {panel === 'chat' && <ChatPanel />}
           </aside>
         )}
       </div>
@@ -179,8 +183,10 @@ function TokenPanel({ token, count }: { token: Token | null; count: number }) {
   return (
     <div className="tt-form">
       <label>Name<input className="input" value={name} disabled={!gm} onChange={(e) => setName(e.target.value)} onBlur={() => name !== token.name && patch({ name })} onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} /></label>
+      <TokenStats token={token} />
       {gm && (
         <>
+          <LinkPage token={token} />
           <label>Size
             <Select className="input" value={String(token.size)} onChange={(v) => patch({ size: Number(v) })}>
               {[0.5, 1, 2, 3, 4, 5].map((s) => <option key={s} value={String(s)}>{s === 0.5 ? 'Tiny (half a cell)' : s === 1 ? 'Medium (1 cell)' : `${s} cells`}</option>)}
@@ -205,6 +211,7 @@ function TokenPanel({ token, count }: { token: Token | null; count: number }) {
           <button className="btn sm danger" onClick={async () => { if (await confirmDialog(`“${token.name || 'This token'}” is removed from the scene for everyone.`, { title: 'Delete token', okLabel: 'Delete', danger: true })) sendTable({ t: 'token.delete', ids: [token.id] }) }}><Trash2 size={13} /> Delete token</button>
         </>
       )}
+      <TokenSheet token={token} />
       {!gm && <div className="tt-row"><button className="btn sm" title="Turn 45 degrees (R)" disabled={!token.owners.length} onClick={() => patch({ rotation: (token.rotation + 45) % 360 })}><RotateCw size={13} /> Turn</button></div>}
     </div>
   )
@@ -265,6 +272,7 @@ function TablePanel() {
   const flags = useMemo(() => [
     ['playersMoveOwn', 'Players move their own tokens'],
     ['playersCreateTokens', 'Players add tokens'],
+    ['playersEditOwnStats', 'Players change their own hit points and conditions'],
     ['playersPing', 'Players ping the map'],
     ['playersRuler', 'Players share their ruler'],
     ['showCursors', 'Show everyone’s pointer'],

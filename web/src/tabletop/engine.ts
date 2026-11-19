@@ -155,7 +155,7 @@ export class TableEngine {
   upsert(t: Token) {
     this.tokens.set(t.id, t)
     if (!this.ready) return
-    const key = [t.image, t.color, t.name, t.size, t.hidden, t.locked].join('|')
+    const key = [t.image, t.color, t.name, t.size, t.hidden, t.locked, JSON.stringify(t.data.hp ?? null), (t.data.conditions ?? []).join(',')].join('|')
     let v = this.views.get(t.id)
     if (!v || v.key !== key) {
       v?.box.destroy({ children: true })
@@ -200,9 +200,36 @@ export class TableEngine {
         this.drawSelection(v)
       })
     }
+    const hp = t.data.hp as { value?: number; max?: number; temp?: number } | undefined
+    const hasBar = !!hp && (hp.max ?? 0) > 0
+    if (hasBar) {
+      const w = d * 0.9, ratio = Math.max(0, Math.min(1, (hp!.value ?? 0) / hp!.max!))
+      const bar = new Graphics().roundRect(-w / 2, r + 2, w, 7, 3).fill({ color: 0x000000, alpha: 0.7 })
+      if (ratio > 0) bar.roundRect(-w / 2 + 1, r + 3, (w - 2) * ratio, 5, 2).fill({ color: ratio > 0.5 ? 0x4caf50 : ratio > 0.25 ? 0xf1c40f : 0xe74c3c })
+      if ((hp!.temp ?? 0) > 0) bar.roundRect(-w / 2 + 1, r + 3, Math.min(w - 2, (w - 2) * ((hp!.temp ?? 0) / hp!.max!)), 2, 1).fill({ color: 0x5dade2 })
+      bar.label = 'hp'
+      v.box.addChild(bar)
+      if ((hp!.value ?? 0) <= 0) {
+        const x = new Text({ text: '✕', style: { fontSize: r * 1.1, fill: 0xffffff, fontFamily: 'sans-serif', fontWeight: '700', stroke: { color: 0x000000, width: 4 } } })
+        x.anchor.set(0.5)
+        x.alpha = 0.85
+        x.label = 'down'
+        v.box.addChild(x)
+      }
+    }
+    const conditions = (t.data.conditions ?? []) as string[]
+    conditions.slice(0, 5).forEach((c, i) => {
+      const pip = new Graphics().circle(0, 0, 8).fill({ color: pipColor(c) }).stroke({ width: 1.5, color: 0x000000, alpha: 0.7 })
+      const letter = new Text({ text: c.slice(0, 1).toUpperCase(), style: { fontSize: 11, fill: 0xffffff, fontFamily: 'sans-serif', fontWeight: '700' } })
+      letter.anchor.set(0.5)
+      pip.addChild(letter)
+      pip.position.set(-r + 6 + i * 14, -r - 4)
+      pip.label = 'cond'
+      v.box.addChild(pip)
+    })
     const label = new Text({ text: t.name, style: { fontSize: 13, fill: 0xffffff, fontFamily: 'sans-serif', stroke: { color: 0x000000, width: 4 } } })
     label.anchor.set(0.5, 0)
-    label.y = r + 2
+    label.y = r + (hasBar ? 11 : 2)
     label.visible = !!t.name
     label.label = 'name'
     v.box.addChild(label)
@@ -225,7 +252,7 @@ export class TableEngine {
     v.box.rotation = 0
     v.box.alpha = t.hidden ? 0.45 : 1
     // the picture turns with the token; the name stays upright
-    for (const c of v.box.children) if (c.label !== 'name' && c.label !== 'sel') c.rotation = (t.rotation * Math.PI) / 180
+    for (const c of v.box.children) if (!['name', 'sel', 'hp', 'down', 'cond'].includes(c.label)) c.rotation = (t.rotation * Math.PI) / 180
   }
 
   setSelected(ids: string[]) {
@@ -471,4 +498,11 @@ export class TableEngine {
 
 function snapPoint(p: Pt, scene: Scene): Pt {
   return snap(p, 1, scene)
+}
+
+/** One colour per condition name, so the same condition looks the same everywhere. */
+function pipColor(name: string) {
+  let h = 0
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 360
+  return new Color(`hsl(${h} 60% 42%)`).toNumber()
 }
