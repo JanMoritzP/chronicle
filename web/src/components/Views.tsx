@@ -1,5 +1,5 @@
 import { Check, Download, FilePlus2, RotateCcw, Search, Trash2, X, Zap } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { api } from '../api'
 import { BackupsSection } from './Backups'
 import { ago, unresolvedByName } from '../lib/data'
@@ -218,7 +218,6 @@ function SharedPages() {
   useEffect(() => { load() }, [wsId])
   return (
     <>
-      <h3 className="muted" style={{ marginTop: 28 }}>Publicly shared pages</h3>
       {!rows.length && <p className="muted" style={{ fontSize: 13 }}>Nothing is shared. Use a page’s … menu → Share publicly.</p>}
       <table className="simple"><tbody>
         {rows.map((r) => (
@@ -246,7 +245,7 @@ function PasswordForm() {
   }
   return (
     <>
-      <h3 className="muted" style={{ marginTop: 28 }}>Change my password</h3>
+      <h3 className="muted">Change my password</h3>
       <form className="row" style={{ flexWrap: 'wrap' }} onSubmit={(e) => { e.preventDefault(); submit() }}>
         <input className="input" style={{ width: 170 }} type="password" autoComplete="current-password" placeholder="current password" aria-label="Current password" value={f.current} onChange={(e) => setF({ ...f, current: e.target.value })} />
         <input className="input" style={{ width: 170 }} type="password" autoComplete="new-password" placeholder="new (8+)" aria-label="New password" value={f.next} onChange={(e) => setF({ ...f, next: e.target.value })} />
@@ -303,7 +302,6 @@ function DesktopSettings() {
   if (!IN_DESKTOP_APP) return null
   return (
     <>
-      <h3 className="muted" style={{ marginTop: 28 }}>Desktop app</h3>
       <p>
         <button className="btn sm" onClick={() => window.open('chronicle-desktop://check-updates')}>Check for updates</button>
         <span className="muted" style={{ fontSize: 13, marginLeft: 8 }}>The app also looks by itself a few seconds after it starts and every six hours.</span>
@@ -343,19 +341,37 @@ function WorldOptions({ id }: { id: string }) {
   )
 }
 
-export function SettingsView() {
-  const { user, workspaces, wsId } = useStore()
-  const [theme, setTheme] = useState(document.documentElement.dataset.theme)
+function AccountsSection() {
+  const user = useStore((s) => s.user)
   const [users, setUsers] = useState<any[]>([])
   const [form, setForm] = useState({ username: '', password: '', role: 'viewer' })
   const [msg, setMsg] = useState('')
-  const owner = user?.role === 'owner'
   const loadUsers = () => api.users().then(setUsers)
-  useEffect(() => { if (owner) loadUsers() }, [owner])
-
+  useEffect(() => { loadUsers() }, [])
   return (
-    <div className="view">
-      <h1>Settings</h1>
+    <>
+      <p className="muted" style={{ fontSize: 13, margin: '0 0 8px' }}>New accounts can open every world. To limit a person to some worlds, use the admin dashboard.</p>
+      <table className="simple"><tbody>
+        {users.map((u) => (
+          <tr key={u.id}><td>{u.username}</td><td className="muted">{u.role}</td>
+            <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>{u.id !== user!.id && <button className="btn sm" onClick={async () => { const p = await askText(`New password for ${u.username}`, { label: '8+ characters. They will be logged out everywhere.', okLabel: 'Set password' }); if (p) { try { await api.setUserPassword(u.id, p); alertDialog('Password set.') } catch (e: any) { alertDialog(e.message) } } }}>Set password</button>}{' '}{u.id !== user!.id && <button className="btn sm danger" onClick={async () => { if (await confirmDialog(`Delete ${u.username}?`, { okLabel: 'Delete', danger: true })) { await api.deleteUser(u.id); loadUsers() } }}>Remove</button>}</td></tr>
+        ))}
+      </tbody></table>
+      <div className="row" style={{ marginTop: 10, flexWrap: 'wrap' }}>
+        <input className="input" style={{ width: 150 }} placeholder="username" aria-label="Username" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} />
+        <input className="input" style={{ width: 170 }} type="password" placeholder="password (8+)" aria-label="Password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+        <Select className="input" style={{ width: 120 }} value={form.role} onChange={(v) => setForm({ ...form, role: v })} aria-label="User role" title="User role"><option value="viewer">Viewer</option><option value="editor">Editor</option></Select>
+        <button className="btn primary" onClick={async () => { try { await api.createUser(form); setForm({ username: '', password: '', role: 'viewer' }); setMsg(''); loadUsers() } catch (e: any) { setMsg(e.message) } }}>Add account</button>
+      </div>
+      {msg && <div className="error">{msg}</div>}
+    </>
+  )
+}
+
+function AppearanceSection() {
+  const [theme, setTheme] = useState(document.documentElement.dataset.theme)
+  return (
+    <>
       <h3 className="muted">Theme</h3>
       <div className="swatches">
         {THEMES.map((t) => (
@@ -365,12 +381,16 @@ export function SettingsView() {
           </button>
         ))}
       </div>
-
       <FontSettings />
+    </>
+  )
+}
 
-      <DesktopSettings />
-
-      <h3 className="muted" style={{ marginTop: 28 }}>Worlds</h3>
+function WorldsSection() {
+  const { user, workspaces, wsId } = useStore()
+  return (
+    <>
+      <h3 className="muted">Your worlds</h3>
       <div className="row" style={{ flexWrap: 'wrap' }}>
         {workspaces.map((w) => <button key={w.id} className={`btn ${w.id === wsId ? 'primary' : ''}`} onClick={() => useStore.getState().selectWorkspace(w.id)}>{w.name}</button>)}
         {user?.role !== 'viewer' && <button className="btn ghost" onClick={async () => { const n = await askText('New world', { label: 'World name', okLabel: 'Create' }); if (n?.trim()) useStore.getState().createWorkspace(n.trim()) }}>+ New world</button>}
@@ -382,36 +402,60 @@ export function SettingsView() {
           <span className="muted" style={{ fontSize: 13, marginLeft: 8 }}>Markdown pages in their folders, images, and world.json with everything else.</span>
         </p>
       )}
+    </>
+  )
+}
 
-      <SharedPages />
-
-      <h3 className="muted" style={{ marginTop: 28 }}>Keyboard shortcuts</h3>
+function ShortcutsSection() {
+  return (
+    <>
       <p className="muted" style={{ fontSize: 13 }}>On a German keyboard AltGr counts as Ctrl+Alt, so typing <kbd>{'{'}</kbd> and <kbd>{'}'}</kbd> never triggers shortcuts that need other keys. Mouse back/forward buttons also work.</p>
       <table className="simple"><tbody>{(Object.keys(ACTION_LABELS) as Action[]).map((a) => <KeyEditor key={a} action={a} />)}</tbody></table>
+    </>
+  )
+}
 
-      {owner && (
-        <>
-          <h3 className="muted" style={{ marginTop: 28 }}>Accounts</h3>
-          <p className="muted" style={{ fontSize: 13, margin: '0 0 8px' }}>New accounts can open every world. To limit a person to some worlds, use the admin dashboard.</p>
-          <table className="simple"><tbody>
-            {users.map((u) => (
-              <tr key={u.id}><td>{u.username}</td><td className="muted">{u.role}</td>
-                <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>{u.id !== user!.id && <button className="btn sm" onClick={async () => { const p = await askText(`New password for ${u.username}`, { label: '8+ characters. They will be logged out everywhere.', okLabel: 'Set password' }); if (p) { try { await api.setUserPassword(u.id, p); alertDialog('Password set.') } catch (e: any) { alertDialog(e.message) } } }}>Set password</button>}{' '}{u.id !== user!.id && <button className="btn sm danger" onClick={async () => { if (await confirmDialog(`Delete ${u.username}?`, { okLabel: 'Delete', danger: true })) { await api.deleteUser(u.id); loadUsers() } }}>Remove</button>}</td></tr>
-            ))}
-          </tbody></table>
-          <div className="row" style={{ marginTop: 10, flexWrap: 'wrap' }}>
-            <input className="input" style={{ width: 150 }} placeholder="username" aria-label="Username" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} />
-            <input className="input" style={{ width: 170 }} type="password" placeholder="password (8+)" aria-label="Password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
-            <Select className="input" style={{ width: 120 }} value={form.role} onChange={(v) => setForm({ ...form, role: v })} aria-label="User role" title="User role"><option value="viewer">Viewer</option><option value="editor">Editor</option></Select>
-            <button className="btn primary" onClick={async () => { try { await api.createUser(form); setForm({ username: '', password: '', role: 'viewer' }); setMsg(''); loadUsers() } catch (e: any) { setMsg(e.message) } }}>Add account</button>
-          </div>
-          {msg && <div className="error">{msg}</div>}
-
-          <BackupsSection />
-        </>
-      )}
+function MyAccountSection() {
+  const user = useStore((s) => s.user)
+  return (
+    <>
       <PasswordForm />
       <div style={{ marginTop: 28 }}><button className="btn" onClick={() => useStore.getState().logout()}>Log out ({user?.username})</button></div>
+    </>
+  )
+}
+
+type Section = { id: string; label: string; show: boolean; body: ReactNode }
+
+export function SettingsView() {
+  const user = useStore((s) => s.user)
+  const owner = user?.role === 'owner'
+  const sections: Section[] = [
+    { id: 'appearance', label: 'Appearance', show: true, body: <AppearanceSection /> },
+    { id: 'shortcuts', label: 'Keyboard shortcuts', show: true, body: <ShortcutsSection /> },
+    { id: 'worlds', label: 'Worlds', show: true, body: <WorldsSection /> },
+    { id: 'sharing', label: 'Sharing', show: true, body: <SharedPages /> },
+    { id: 'accounts', label: 'Accounts', show: owner, body: <AccountsSection /> },
+    { id: 'backups', label: 'Backups', show: owner, body: <BackupsSection /> },
+    { id: 'desktop', label: 'Desktop app', show: IN_DESKTOP_APP, body: <DesktopSettings /> },
+    { id: 'me', label: 'My account', show: true, body: <MyAccountSection /> },
+  ].filter((s) => s.show)
+  const [current, setCurrent] = useState('appearance')
+  const active = sections.find((s) => s.id === current) ?? sections[0]
+  return (
+    <div className="view settings-view">
+      <h1>Settings</h1>
+      <div className="settings-layout">
+        <nav className="settings-nav" aria-label="Settings sections">
+          {sections.map((s) => (
+            <button key={s.id} className={s.id === active.id ? 'on' : ''} aria-current={s.id === active.id ? 'page' : undefined} onClick={() => setCurrent(s.id)}>{s.label}</button>
+          ))}
+        </nav>
+        <section className="settings-body" aria-label={active.label}>
+          <h2>{active.label}</h2>
+          {active.body}
+        </section>
+      </div>
     </div>
   )
 }

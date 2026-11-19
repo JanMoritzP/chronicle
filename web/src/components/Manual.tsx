@@ -40,7 +40,7 @@ const SECTIONS: Section[] = [
     id: 'start', title: 'Getting started', text: 'world page folder tag sidebar tabs split',
     body: () => (
       <>
-        <p>Chronicle is a notebook for your campaign. Everything lives in a <b>world</b>: pages, folders, maps, templates and the timeline. You can keep several worlds and switch between them in Settings, or with <Code>/switch</Code> in quick search (<K>Ctrl + K</K>).</p>
+        <p>Chronicle is a notebook for your campaign. Everything lives in a <b>world</b>: pages, folders, maps, templates and the timeline. You can keep several worlds and switch between them in the sidebar world menu or in Settings, Worlds, or with <Code>/switch</Code> in quick search (<K>Ctrl + K</K>).</p>
         <ul>
           <li>A <b>page</b> holds text. Give it a title, an icon, aliases (other names it goes by) and tags.</li>
           <li>Put pages into <b>folders</b> by dragging them in the sidebar. Tags can be nested, as in <Code>npc/villain</Code>.</li>

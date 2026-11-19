@@ -90,6 +90,9 @@ areas:
   - id: settings
     name: Settings
     features:
+      - id: settings.sections
+        name: "Settings split into sections"
+        files: [web/src/components/Views.tsx]
       - id: settings.themes
         name: "Ten themes"
         files: [web/src/themes.ts, web/src/components/Views.tsx]

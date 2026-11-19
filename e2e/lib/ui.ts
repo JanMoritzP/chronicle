@@ -66,3 +66,9 @@ export async function dismissAlert(page: Page) {
   try { await d.waitFor({ state: 'visible', timeout: 2000 }) } catch { return }
   await d.locator('button[type=submit]').click()
 }
+
+/** Open Settings and switch to one of its sections. */
+export async function openSettings(page: Page, section: string) {
+  await openView(page, 'Settings')
+  await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('button', { name: section, exact: true }).click()
+}

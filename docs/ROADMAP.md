@@ -277,6 +277,8 @@ What it does: a calmer, easier to read shell. No data or API changed.
 - **Touch and keyboard.** Row actions stay visible on screens without hover, rows are 40 px tall on phones, every button, card and chip shows a focus ring, and animations are turned off for people who asked for reduced motion.
 - **Tests.** `e2e/tests/shell.spec.ts` (`shell.home-actions`, `shell.world-switcher`).
 
+- **Settings.** A menu on the left (a scrolling strip of tabs on phones) opens one page per group: Appearance (theme, fonts), Keyboard shortcuts, Worlds (switch, create, starter todo, export, delete), Sharing (publicly shared pages), Accounts and Backups (owner only), Desktop app (desktop app only) and My account (password, log out). Viewers see the same sections minus the owner ones. Nothing about storage changed. Test: `settings.sections` in `e2e/tests/settings.spec.ts`.
+
 ## Operations
 - Password change: `POST /api/auth/password` (own), owner can set another user's.
 - Docker: health check on `/api/health`, graceful shutdown on SIGTERM (WAL checkpoint), `/data` owned by uid 1000, compose uses a named volume. Session cookie `Secure` follows `req.protocol` (behind cloudflared it is https).

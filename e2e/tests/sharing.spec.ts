@@ -1,5 +1,5 @@
 import { doc, expect, test } from '../fixtures'
-import { menuItem, openPage, openView } from '../lib/ui'
+import { menuItem, openPage, openSettings, openView } from '../lib/ui'
 
 test('share a page with a public link and open it signed out', { tag: '@feature:share' }, async ({ app, as, makePage }) => {
   await makePage('Handout', { content: doc('Beware the old well.') })
@@ -49,7 +49,7 @@ test('settings lists publicly shared pages', { tag: '@feature:share.list' }, asy
   const p = await makePage('Listed share')
   await api.json('post', `/api/pages/${p.id}/share`)
   await app.reload()
-  await openView(app, 'Settings')
+  await openSettings(app, 'Sharing')
   await expect(app.locator('main')).toContainText('Listed share')
 })
 

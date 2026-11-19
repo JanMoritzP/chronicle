@@ -21,3 +21,17 @@ test('on a phone the main views fit the screen', { tag: '@feature:mobile' }, asy
     expect(overflow, `${name} overflows`).toBeLessThanOrEqual(1)
   }
 })
+
+test('on a phone the settings sections scroll as a strip and fit the screen', { tag: '@feature:mobile' }, async ({ app }) => {
+  await app.getByRole('button', { name: 'Toggle sidebar' }).click()
+  await app.getByRole('complementary').getByRole('button', { name: 'Settings', exact: true }).click()
+  await app.locator('.scrim').click({ position: { x: 360, y: 300 } })
+  const menu = app.getByRole('navigation', { name: 'Settings sections' })
+  for (const name of ['Appearance', 'Keyboard shortcuts', 'Worlds', 'Backups']) {
+    await menu.getByRole('button', { name, exact: true }).click()
+    await expect(app.getByRole('region', { name })).toBeVisible()
+    const overflow = await app.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
+    expect(overflow, `${name} overflows`).toBeLessThanOrEqual(1)
+    if (process.env.SHOT && name === 'Worlds') await app.screenshot({ path: `${process.env.SHOT}/settings-mobile.png` })
+  }
+})

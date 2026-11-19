@@ -34,7 +34,6 @@ export function BackupsSection() {
 
   return (
     <>
-      <h3 className="muted" style={{ marginTop: 28 }}>Backups</h3>
       <p className="muted" style={{ fontSize: 13 }}>
         A snapshot of the database is written daily and the newest 14 are kept. Snapshots hold all text, links, maps and settings; uploaded images and map images are not in them, so use the full download to move or archive everything.
       </p>
