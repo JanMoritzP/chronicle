@@ -4,7 +4,7 @@ import { requireEditor, requireOwner, requireUser } from '../auth.js'
 import { db, now } from '../db.js'
 import type { DocNode } from '../doc.js'
 import { libraryEntry, libraryIndex, libraryStatus, refreshLibrary } from '../library.js'
-import { replaceContent, type PageRow } from '../pages.js'
+import { ensureBaseline, replaceContent, type PageRow } from '../pages.js'
 import { propsStatData, rewriteDataRefs } from '../refs.js'
 
 export async function libraryRoutes(app: FastifyInstance) {
@@ -54,6 +54,7 @@ export async function libraryRoutes(app: FastifyInstance) {
       // stat block slots of special pages
       const moveRef = (r: { libKey?: string; note?: string }) => (r.libKey === b.data.libKey ? { name: target.title, pageId: target.id, ...(r.note ? { note: r.note } : {}) } : null)
       for (const d of propsStatData(props)) fieldHit += rewriteDataRefs(d, moveRef)
+      if (fieldHit) ensureBaseline(p.id)
       if (fieldHit) db.prepare('UPDATE pages SET props = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(props), now(), p.id)
       const walk = (n: DocNode) => {
         if (n.type === 'statblock') hit += rewriteDataRefs(n.attrs?.data, moveRef)
@@ -65,7 +66,7 @@ export async function libraryRoutes(app: FastifyInstance) {
         n.content?.forEach(walk)
       }
       walk(doc)
-      if (hit || fieldHit) { replaceContent(p, doc); changed++ }
+      if (hit || fieldHit) { replaceContent(p, doc, req.user!); changed++ }
     }
     return { changed }
   })

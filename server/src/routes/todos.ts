@@ -43,12 +43,12 @@ export async function todoRoutes(app: FastifyInstance) {
     const p = db.prepare('SELECT * FROM pages WHERE id = ? AND deleted_at IS NULL').get(id) as PageRow | undefined
     if (!p) return reply.code(404).send({ error: 'not found' })
     // with the page open somewhere the change goes through the live document, like any other edit
-    const live = editTodoLive(id, todoId, b.data)
+    const live = editTodoLive(id, todoId, b.data, req.user!)
     if (live === 'missing') return reply.code(404).send({ error: 'This todo is no longer in the page.' })
     if (live === 'ok') return { ok: true }
     const doc = JSON.parse(p.content) as DocNode
     if (!editTodo(doc, todoId, b.data)) return reply.code(404).send({ error: 'This todo is no longer in the page.' })
-    replaceContent(p, doc)
+    replaceContent(p, doc, req.user!)
     return { ok: true }
   })
 
@@ -56,12 +56,12 @@ export async function todoRoutes(app: FastifyInstance) {
     const { id, todoId } = req.params as { id: string; todoId: string }
     const p = db.prepare('SELECT * FROM pages WHERE id = ? AND deleted_at IS NULL').get(id) as PageRow | undefined
     if (!p) return reply.code(404).send({ error: 'not found' })
-    const live = editTodoLive(id, todoId, null)
+    const live = editTodoLive(id, todoId, null, req.user!)
     if (live === 'missing') return reply.code(404).send({ error: 'This todo is no longer in the page.' })
     if (live === 'ok') return { ok: true }
     const doc = JSON.parse(p.content) as DocNode
     if (!editTodo(doc, todoId, null)) return reply.code(404).send({ error: 'This todo is no longer in the page.' })
-    replaceContent(p, doc)
+    replaceContent(p, doc, req.user!)
     return { ok: true }
   })
 }

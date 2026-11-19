@@ -10,7 +10,7 @@ import { userFromCookieHeader, type AuthUser } from './auth.js'
 import { db, now } from './db.js'
 import { ensureHeadingIds } from './doc.js'
 import { publishWorld } from './live.js'
-import { applyContent, contentHooks, pageDerived, type PageRow } from './pages.js'
+import { applyContent, contentHooks, pageDerived, type Author, type PageRow } from './pages.js'
 import { editTodoIn, fragmentToDoc, seedFragment } from './ydoc.js'
 
 /**
@@ -31,6 +31,8 @@ interface Conn { socket: WebSocket; user: AuthUser; canWrite: boolean; clientIds
 interface Room {
   pageId: string; wsId: string; doc: Y.Doc; awareness: awarenessProtocol.Awareness
   conns: Set<Conn>; timer?: NodeJS.Timeout
+  /** Whoever changed the document last; the next save is credited to them in the page history. */
+  writer: Author | null
 }
 
 const rooms = new Map<string, Room>()
@@ -51,7 +53,7 @@ function openRoom(pageId: string): Room | null {
   const saved = db.prepare('SELECT state FROM page_docs WHERE page_id = ?').get(pageId) as { state: Buffer } | undefined
   const awareness = new awarenessProtocol.Awareness(doc)
   awareness.setLocalState(null)
-  const room: Room = { pageId, wsId: page.workspace_id, doc, awareness, conns: new Set() }
+  const room: Room = { pageId, wsId: page.workspace_id, doc, awareness, conns: new Set(), writer: null }
   if (saved) Y.applyUpdate(doc, new Uint8Array(saved.state))
   else {
     seedFragment(doc, ensureHeadingIds(JSON.parse(page.content)))
@@ -96,7 +98,8 @@ function persist(room: Room) {
   saveState(room)
   const doc = fragmentToDoc(room.doc)
   if (!doc.content?.length || JSON.stringify(doc) === page.content) return
-  applyContent(page, doc)
+  applyContent(page, doc, room.writer)
+  room.writer = null
   const derived = pageDerived(room.pageId)
   publishWorld(room.wsId, { k: 'page-saved', id: room.pageId, ...derived })
 }
@@ -127,6 +130,7 @@ function onMessage(room: Room, c: Conn, data: Uint8Array) {
     // viewers follow along but cannot change the page
     else if (c.canWrite && step === syncProtocol.messageYjsSyncStep2) syncProtocol.readSyncStep2(dec, room.doc, c)
     else if (c.canWrite && step === syncProtocol.messageYjsUpdate) syncProtocol.readUpdate(dec, room.doc, c)
+    if (c.canWrite && step !== syncProtocol.messageYjsSyncStep1 && room.timer) room.writer = { id: c.user.id, username: c.user.username }
     if (encoding.length(enc) > 1) send(c, encoding.toUint8Array(enc))
   } else if (type === MSG_AWARENESS) {
     awarenessProtocol.applyAwarenessUpdate(room.awareness, decoding.readVarUint8Array(dec), c)
@@ -218,13 +222,13 @@ contentHooks.replaced = (pageId) => {
  * Edits a todo marker inside the live document, if the page has one, so a change made in the Todos tab reaches open editors
  * as a normal edit. Returns null when the page has no live document (the caller then edits the stored JSON instead).
  */
-export function editTodoLive(pageId: string, todoId: string, change: Record<string, any> | null): 'ok' | 'missing' | null {
+export function editTodoLive(pageId: string, todoId: string, change: Record<string, any> | null, author: Author | null = null): 'ok' | 'missing' | null {
   const has = rooms.has(pageId) || db.prepare('SELECT 1 FROM page_docs WHERE page_id = ?').get(pageId)
   if (!has) return null
   const room = openRoom(pageId)
   if (!room) return null
   const hit = editTodoIn(room.doc, todoId, change)
-  if (hit) persist(room)
+  if (hit) { room.writer = author; persist(room) }
   if (!room.conns.size) disposeRoom(room)
   return hit ? 'ok' : 'missing'
 }

@@ -1,6 +1,6 @@
 import { get, set } from 'idb-keyval'
 import type { Calendar } from './lib/calendar'
-import type { LibraryEntry, LibraryIndex, LibraryStatus, BackupInfo, Bootstrap, EventRow, FullPage, MapFull, MapItem, MapLayer, CopyPreview, CopyResult, GameSession, MapMeta, PageType, Relation, StatsResult, StatTemplateRow, Template, TodoItem, User, Workspace, WorldSettings } from './types'
+import type { LibraryEntry, LibraryIndex, LibraryStatus, BackupInfo, Bootstrap, EventRow, FullPage, MapFull, MapItem, MapLayer, CopyPreview, CopyResult, GameSession, MapMeta, PageType, PageVersion, Relation, StatsResult, StatTemplateRow, Template, TodoItem, User, Workspace, WorldSettings } from './types'
 
 export interface StatTemplateBody { name: string; sections: any[]; look?: Record<string, any> }
 export interface PageTypeBody { name: string; icon: string; tag: string; source: string; definition: Record<string, any> }
@@ -50,8 +50,13 @@ export const api = {
   restorePage: (id: string) => req('POST', `/api/pages/${id}/restore`, {}),
   purgePage: (id: string) => req('DELETE', `/api/pages/${id}/purge`),
   trash: (ws: string) => req<any[]>('GET', `/api/workspaces/${ws}/trash`),
-  versions: (id: string) => req<{ id: string; title: string; wordCount: number; createdAt: number }[]>('GET', `/api/pages/${id}/versions`),
-  version: (vid: string) => req<{ content: any; title: string }>('GET', `/api/versions/${vid}`),
+  versions: (id: string) => req<PageVersion[]>('GET', `/api/pages/${id}/versions`),
+  version: (vid: string) => req<{ content: any; title: string; authorName: string | null; meta: { icon: string | null; aliases: string[]; tags: string[] } | null }>('GET', `/api/versions/${vid}`),
+  restoreVersion: async (vid: string, pageId: string) => {
+    const r = await req<any>('POST', `/api/versions/${vid}/restore`, {})
+    pageCache.delete(pageId)
+    return r
+  },
   createFolder: (ws: string, name: string, parentId: string | null) => req<any>('POST', `/api/workspaces/${ws}/folders`, { name, parentId }),
   patchFolder: (id: string, b: any) => req('PATCH', `/api/folders/${id}`, b),
   deleteFolder: (id: string) => req('DELETE', `/api/folders/${id}`),

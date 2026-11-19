@@ -75,20 +75,21 @@ export function pageDerived(id: string) {
 export const contentHooks: { replaced: (pageId: string) => void } = { replaced: () => {} }
 
 /** Replaces a page's document from the outside (restore, bulk relink). Anyone editing it live is told to reload. */
-export function replaceContent(p: PageRow, doc: DocNode) {
-  applyContent(p, doc)
+export function replaceContent(p: PageRow, doc: DocNode, author: Author | null = null) {
+  applyContent(p, doc, author)
   contentHooks.replaced(p.id)
 }
 
 /** Writes a changed document back to a page the same way an editor save does (index, statistics, history). */
-export function applyContent(p: PageRow, doc: DocNode) {
+export function applyContent(p: PageRow, doc: DocNode, author: Author | null = null) {
   ensureHeadingIds(doc)
   db.transaction(() => {
+    ensureBaseline(p.id)
     const ex = reindexLinks(p.id, p.workspace_id, doc)
     recordActivity(p.id, p.workspace_id, ex.wordCount - p.word_count)
-    snapshotIfDue({ id: p.id, title: p.title, content: p.content, word_count: p.word_count })
     db.prepare('UPDATE pages SET content=?, text=?, outline=?, word_count=?, has_stats=?, updated_at=? WHERE id=?')
       .run(JSON.stringify(doc), ex.text, JSON.stringify(ex.outline), ex.wordCount, ex.hasStats ? 1 : 0, now(), p.id)
+    recordRevision(p.id, author)
   })()
 }
 
@@ -162,16 +163,55 @@ export function recordActivity(pageId: string, workspaceId: string, wordDelta: n
   ).run(pageId, workspaceId, today(), Math.max(0, wordDelta), wordDelta, created ? 1 : 0)
 }
 
-export function snapshotIfDue(page: Pick<PageRow, 'id' | 'title' | 'content' | 'word_count'>, force = false) {
-  const last = db.prepare('SELECT created_at FROM page_versions WHERE page_id = ? ORDER BY created_at DESC LIMIT 1').get(page.id) as
-    { created_at: number } | undefined
-  if (!force && last && now() - last.created_at < VERSION_GAP_MS) return
-  db.prepare('INSERT INTO page_versions(id,page_id,title,content,word_count,created_at) VALUES(?,?,?,?,?,?)')
-    .run(uid(), page.id, page.title, page.content, page.word_count, now())
+export interface Author { id: string; username: string }
+
+interface RevisionState { title: string; content: string; props: string; meta: string; wordCount: number; updatedAt: number }
+
+/** Everything a restore brings back besides the text: special-page fields, portrait, icon, aliases and tags. Folder is left alone on purpose. */
+function stateOf(pageId: string): RevisionState | null {
+  const p = db.prepare('SELECT title, content, props, aliases, icon, word_count, updated_at FROM pages WHERE id = ?').get(pageId) as
+    { title: string; content: string; props: string; aliases: string; icon: string | null; word_count: number; updated_at: number } | undefined
+  if (!p) return null
+  const tags = (db.prepare('SELECT tag FROM page_tags WHERE page_id = ? ORDER BY tag').all(pageId) as { tag: string }[]).map((t) => t.tag)
+  return {
+    title: p.title, content: p.content, props: p.props, wordCount: p.word_count, updatedAt: p.updated_at,
+    meta: JSON.stringify({ icon: p.icon, aliases: JSON.parse(p.aliases), tags }),
+  }
+}
+
+function insertRevision(pageId: string, s: RevisionState, author: Author | null, createdAt: number, reason: string | null = null, restoredFrom: number | null = null) {
   db.prepare(
-    `DELETE FROM page_versions WHERE page_id = ? AND id NOT IN
-     (SELECT id FROM page_versions WHERE page_id = ? ORDER BY created_at DESC LIMIT 100)`,
-  ).run(page.id, page.id)
+    `INSERT INTO page_versions(id,page_id,title,content,word_count,created_at,author_id,author_name,props,meta,reason,restored_from)
+     VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
+  ).run(uid(), pageId, s.title, s.content, s.wordCount, createdAt, author?.id ?? null, author?.username ?? null, s.props, s.meta, reason, restoredFrom)
+}
+
+/** Call before the first change to a page that has no history yet, so its starting state can be restored too. */
+export function ensureBaseline(pageId: string) {
+  if (db.prepare('SELECT 1 FROM page_versions WHERE page_id = ? LIMIT 1').get(pageId)) return
+  const s = stateOf(pageId)
+  if (s) insertRevision(pageId, s, null, s.updatedAt)
+}
+
+/**
+ * Call after every change to a page. Keeps the page as it is now in its history: one entry per author per editing burst
+ * (edits by the same person within VERSION_GAP_MS of the burst's start fold into one), so a restore point exists for every edit
+ * without storing every keystroke. A reason ('restore') always makes its own entry.
+ */
+export function recordRevision(pageId: string, author: Author | null, opts: { reason?: string; restoredFrom?: number } = {}) {
+  const s = stateOf(pageId)
+  if (!s) return
+  const last = db.prepare('SELECT * FROM page_versions WHERE page_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1').get(pageId) as
+    { id: string; author_id: string | null; created_at: number; reason: string | null; title: string; content: string; props: string | null; meta: string | null } | undefined
+  if (!opts.reason && last && last.title === s.title && last.content === s.content && last.props === s.props && last.meta === s.meta) return
+  const t = now()
+  // legacy rows (no props) are never rewritten: they only hold text
+  const fold = !opts.reason && last && last.reason === null && last.props !== null && last.author_id === (author?.id ?? null) && t - last.created_at < VERSION_GAP_MS
+  if (fold) {
+    db.prepare('UPDATE page_versions SET title=?, content=?, word_count=?, props=?, meta=? WHERE id=?').run(s.title, s.content, s.wordCount, s.props, s.meta, last.id)
+  } else {
+    insertRevision(pageId, s, author, t, opts.reason ?? null, opts.restoredFrom ?? null)
+  }
 }
 
 export function setTags(pageId: string, tags: string[]) {

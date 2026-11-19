@@ -19,7 +19,7 @@ A World Anvil-style worldbuilding notebook. Self-hosted, React frontend, Node + 
 ## Status
 
 ### Done (phases 1-4 + cross-world copy + sessions + public sharing + export/restore + Electron)
-- Server: auth, users/roles, workspaces, folders, pages, trash, version history (throttled snapshots, last 100), zettels, image upload (raster only), daily DB backups, security headers.
+- Server: auth, users/roles, workspaces, folders, pages, trash, page history with authors and full restore, zettels, image upload (raster only), daily DB backups, security headers.
 - Editor: headings with stable ids, lists, tasks, tables, quotes, code, images (upload / paste / drop), `{{` auto-close with page + section autocomplete, `/` commands (`/image`, `/embed`, stat blocks, etc.), page/section embeds.
 - Hover previews: stat block, then portrait, then first paragraph. Section links preview only that section.
 - Ctrl+K search (pages, aliases, sections, full text, zettels, `#tags`, `/commands`), fuzzy matching.
@@ -208,6 +208,17 @@ What it does: more than one person works in the same Chronicle at the same time,
 - **Restore.** Backup restore keeps accounts, memberships (pruned to worlds that exist) and admin accounts, and resets all rooms.
 - **Tests.** `node scripts/smoke-multiuser.mjs <url> <user> <pass> <admin-url> <admin-user> <admin-pass>` (access, dashboard, live editing, live stream), `scripts/test-ydoc.ts` (conversion and merging).
 - **Not covered.** Maps, the timeline and relations refresh their lists live but an open map view does not follow another person's edits to its items. Offline edits to a page are kept and merged while the tab stays open; a page opened while offline is read-only.
+
+## Page history (built)
+
+What it does: every edit to a page is recorded with who made it and when, and any earlier version can be restored in full. The clock button on a page opens the history.
+
+- **What an entry holds.** The state of the page after an edit: title, text, special-page fields and portrait (`props`), icon, aliases and tags. Table `page_versions` gained `author_id`, `author_name`, `props`, `meta`, `reason`, `restored_from` (migration #14). The author is stored as a name too, so an entry survives a deleted account. Entries from before this change hold text only and show as "Earlier version"; restoring one keeps the page's current fields.
+- **When an entry is made.** `recordRevision` in `server/src/pages.ts` runs after every change to a page: `PATCH /api/pages/:id`, a live editing save (`collab.ts` credits the last person who changed the document), a todo change, relinking library terms. Edits by the same person within 5 minutes of the entry's start fold into that entry, so a restore point exists for every edit without storing every keystroke. An edit by someone else always starts a new entry. A change that leaves the page identical adds nothing. The first change to a page with no history also keeps its starting state (no author).
+- **Kept forever.** No entry is ever thinned or deleted, except with its page.
+- **Restore.** `POST /api/versions/:vid/restore` (editors) puts back title, text, fields, portrait, icon, aliases and tags. The folder is left where it is. What was on the page just before is recorded first, and the restore itself becomes an entry by the person who did it, marked with the date it restored. Nothing is lost, so a restore can be undone by restoring an entry before it. People editing the page live are told to reload.
+- **Not covered.** History is not copied to another world or exported, as before. Two people typing in the same few seconds produce one entry credited to whoever changed the page last.
+- **Tests.** `node scripts/smoke-history.mjs <url> <user> <pass>`.
 
 ## Operations
 - Password change: `POST /api/auth/password` (own), owner can set another user's.

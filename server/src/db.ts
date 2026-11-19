@@ -296,6 +296,14 @@ const migrations: string[] = [
     updated_at INTEGER NOT NULL
   );
   `,
+  `
+  ALTER TABLE page_versions ADD COLUMN author_id TEXT;
+  ALTER TABLE page_versions ADD COLUMN author_name TEXT;
+  ALTER TABLE page_versions ADD COLUMN props TEXT;
+  ALTER TABLE page_versions ADD COLUMN meta TEXT;
+  ALTER TABLE page_versions ADD COLUMN reason TEXT;
+  ALTER TABLE page_versions ADD COLUMN restored_from INTEGER;
+  `,
 ]
 
 export const SCHEMA_VERSION = migrations.length

@@ -7,7 +7,7 @@ import { emptyDoc, ensureHeadingIds, type DocNode } from '../doc.js'
 import { templatesOf } from './templates.js'
 import { pageTypesOf } from './pagetypes.js'
 import { statTemplatesOf } from './stattemplates.js'
-import { contentHooks, pageDerived, pageSummary, portraitOf, recordActivity, reindexLinks, relinkByName, setTags, snapshotIfDue, uid, type PageRow } from '../pages.js'
+import { contentHooks, ensureBaseline, pageDerived, pageSummary, portraitOf, recordActivity, recordRevision, reindexLinks, relinkByName, setTags, uid, type PageRow } from '../pages.js'
 
 const docSchema = z.custom<DocNode>((v) => typeof v === 'object' && v !== null && (v as DocNode).type === 'doc')
 
@@ -252,6 +252,7 @@ export async function contentRoutes(app: FastifyInstance) {
     if (d.content) ensureHeadingIds(d.content)
 
     db.transaction(() => {
+      ensureBaseline(id)
       const title = d.title ?? p.title
       const aliases = d.aliases ?? (JSON.parse(p.aliases) as string[])
       let content = p.content, text = p.text, outline = p.outline, wc = p.word_count, hasStats = p.has_stats
@@ -261,8 +262,6 @@ export async function contentRoutes(app: FastifyInstance) {
         text = ex.text; outline = JSON.stringify(ex.outline); wc = ex.wordCount; hasStats = ex.hasStats ? 1 : 0
         recordActivity(id, p.workspace_id, ex.wordCount - p.word_count)
       }
-      // keep a restorable copy of the state *before* this edit (throttled)
-      if (d.content) snapshotIfDue({ id, title: p.title, content: p.content, word_count: p.word_count })
       db.prepare(
         `UPDATE pages SET title=?, icon=?, folder_id=?, aliases=?, content=?, text=?, outline=?, word_count=?, has_stats=?, props=?, updated_at=? WHERE id=?`,
       ).run(
@@ -273,6 +272,7 @@ export async function contentRoutes(app: FastifyInstance) {
       if (d.props && !d.content) reindexLinks(id, p.workspace_id, JSON.parse(p.content) as DocNode, d.props)
       if (d.tags) setTags(id, d.tags)
       if (d.title !== undefined || d.aliases) relinkByName(p.workspace_id, id, title, aliases)
+      recordRevision(id, req.user!)
     })()
     // a document sent over REST replaces whatever is being edited live; open editors reload it
     if (d.content) contentHooks.replaced(id)
@@ -312,14 +312,44 @@ export async function contentRoutes(app: FastifyInstance) {
   // ---------- history ----------
   app.get('/api/pages/:id/versions', { preHandler: requireUser }, async (req) => {
     const { id } = req.params as { id: string }
-    return db.prepare('SELECT id, title, word_count AS wordCount, created_at AS createdAt FROM page_versions WHERE page_id = ? ORDER BY created_at DESC').all(id)
+    return db.prepare(
+      `SELECT id, title, word_count AS wordCount, created_at AS createdAt, author_name AS authorName, reason, restored_from AS restoredFrom
+       FROM page_versions WHERE page_id = ? ORDER BY created_at DESC, rowid DESC`,
+    ).all(id)
   })
 
   app.get('/api/versions/:vid', { preHandler: requireUser }, async (req, reply) => {
     const { vid } = req.params as { vid: string }
     const v = db.prepare('SELECT * FROM page_versions WHERE id = ?').get(vid) as any
     if (!v) return reply.code(404).send({ error: 'not found' })
-    return { id: v.id, pageId: v.page_id, title: v.title, content: JSON.parse(v.content), createdAt: v.created_at }
+    return { id: v.id, pageId: v.page_id, title: v.title, content: JSON.parse(v.content), createdAt: v.created_at, authorName: v.author_name, meta: v.meta ? JSON.parse(v.meta) : null }
+  })
+
+  // Puts the whole page back as it was in a version: text, title, special-page fields, portrait, icon, aliases and tags. The restore is itself a history entry.
+  app.post('/api/versions/:vid/restore', { preHandler: requireEditor }, async (req, reply) => {
+    const { vid } = req.params as { vid: string }
+    const v = db.prepare('SELECT * FROM page_versions WHERE id = ?').get(vid) as any
+    if (!v) return reply.code(404).send({ error: 'not found' })
+    const p = db.prepare('SELECT * FROM pages WHERE id = ? AND deleted_at IS NULL').get(v.page_id) as PageRow | undefined
+    if (!p) return reply.code(404).send({ error: 'not found' })
+    const doc = ensureHeadingIds(JSON.parse(v.content) as DocNode)
+    const meta = v.meta ? JSON.parse(v.meta) as { icon: string | null; aliases: string[]; tags: string[] } : null
+    db.transaction(() => {
+      // a live editor may not have saved yet; make sure what is on the page now is in the history before it is replaced
+      recordRevision(p.id, null)
+      const aliases = meta?.aliases ?? (JSON.parse(p.aliases) as string[])
+      const props = v.props ?? p.props
+      const ex = reindexLinks(p.id, p.workspace_id, doc, JSON.parse(props))
+      recordActivity(p.id, p.workspace_id, ex.wordCount - p.word_count)
+      db.prepare('UPDATE pages SET title=?, icon=?, aliases=?, content=?, text=?, outline=?, word_count=?, has_stats=?, props=?, updated_at=? WHERE id=?')
+        .run(v.title, meta ? meta.icon : p.icon, JSON.stringify(aliases), JSON.stringify(doc), ex.text, JSON.stringify(ex.outline), ex.wordCount, ex.hasStats ? 1 : 0, props, now(), p.id)
+      if (meta) setTags(p.id, meta.tags)
+      relinkByName(p.workspace_id, p.id, v.title, aliases)
+      recordRevision(p.id, req.user!, { reason: 'restore', restoredFrom: v.created_at })
+    })()
+    contentHooks.replaced(p.id)
+    const s = pageSummary(db.prepare('SELECT * FROM pages WHERE id = ?').get(p.id) as PageRow)
+    return { ...pageDerived(p.id), title: s.title, icon: s.icon, aliases: s.aliases, tags: s.tags }
   })
 
   // ---------- zettelkasten ----------

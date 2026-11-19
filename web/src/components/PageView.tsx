@@ -14,12 +14,12 @@ import { autolinkDoc, buildMatcher } from '../lib/autolink'
 import { useLibrary } from '../lib/library'
 import { searchPages } from '../lib/linkSearch'
 import { useStore } from '../store'
-import { alertDialog, askText } from '../lib/dialog'
+import { alertDialog, askText, confirmDialog } from '../lib/dialog'
 import { typeOf } from '../lib/pageTypes'
 import { TypeIcon, useTypes } from './TypeIcon'
 import { TypeLayout } from './TypeLayout'
 import { Select } from './Select'
-import type { FullPage } from '../types'
+import type { FullPage, PageVersion } from '../types'
 import { ReadOnlyDoc } from '../editor/Embed'
 
 type SaveState = 'saved' | 'saving' | 'dirty' | 'error'
@@ -434,10 +434,14 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
       }} />}
       {showShare && <ShareDialog pageId={page.id} title={title} onClose={() => setShowShare(false)} />}
       {showHistory && <History pageId={page.id} readOnly={readOnly} onClose={() => setShowHistory(false)}
-        onRestore={async (content, t) => {
+        onRestore={async (vid) => {
           await flush()
-          await api.patchPage(page.id, { content, title: t })
-          api.invalidate(page.id)
+          const r = await api.restoreVersion(vid, page.id)
+          useStore.getState().patchPageMeta(page.id, {
+            title: r.title, icon: r.icon, aliases: r.aliases, tags: r.tags, outline: r.outline, text: r.text,
+            wordCount: r.wordCount, hasStats: r.hasStats, portrait: r.portrait, updatedAt: r.updatedAt, todos: r.todos, type: r.type,
+          })
+          useStore.getState().setLinksFor(page.id, r.links)
           setShowHistory(false)
           onReload()
         }} />}
@@ -473,10 +477,16 @@ function EmbedPicker({ onClose, onPick }: { onClose: () => void; onPick: (p: { i
   )
 }
 
-function History({ pageId, readOnly, onClose, onRestore }: { pageId: string; readOnly: boolean; onClose: () => void; onRestore: (content: any, title: string) => void }) {
-  const [versions, setVersions] = useState<{ id: string; title: string; wordCount: number; createdAt: number }[]>([])
-  const [sel, setSel] = useState<{ id: string; content: any; title: string } | null>(null)
-  useEffect(() => { api.versions(pageId).then(setVersions) }, [pageId])
+function History({ pageId, readOnly, onClose, onRestore }: { pageId: string; readOnly: boolean; onClose: () => void; onRestore: (versionId: string) => Promise<void> }) {
+  const [versions, setVersions] = useState<PageVersion[]>([])
+  const [sel, setSel] = useState<{ id: string; content: any; title: string; meta: { icon: string | null; aliases: string[]; tags: string[] } | null; createdAt: number } | null>(null)
+  useEffect(() => { api.versions(pageId).then(setVersions).catch((e) => alertDialog(e.message)) }, [pageId])
+  const restore = async () => {
+    if (!sel) return
+    const when = new Date(sel.createdAt).toLocaleString()
+    if (!await confirmDialog(`Restore the page as it was on ${when}? The page as it is now stays in the history, so you can go back.`, { title: 'Restore this version', okLabel: 'Restore' })) return
+    onRestore(sel.id).catch((e) => alertDialog(e.message))
+  }
   return (
     <div className="overlay" onMouseDown={onClose} role="dialog" aria-modal="true" aria-label="Version history">
       <div className="dialog" style={{ width: 860 }} onMouseDown={(e) => e.stopPropagation()}>
@@ -486,18 +496,29 @@ function History({ pageId, readOnly, onClose, onRestore }: { pageId: string; rea
         </div>
         <div className="row" style={{ alignItems: 'stretch', minHeight: 0, flex: 1 }}>
           <div className="results" style={{ width: 230, borderRight: '1px solid var(--border)', flex: 'none' }} role="listbox" aria-label="Versions">
-            {!versions.length && <div className="muted" style={{ padding: 10 }}>No earlier versions yet. Snapshots are taken while you edit.</div>}
+            {!versions.length && <div className="muted" style={{ padding: 10 }}>No versions yet. Every edit to this page is recorded here, with who made it.</div>}
             {versions.map((v) => (
-              <div key={v.id} className={`result ${sel?.id === v.id ? 'sel' : ''}`} role="option" aria-selected={sel?.id === v.id} tabIndex={0} onClick={() => api.version(v.id).then((d) => setSel({ id: v.id, ...d }))}>
-                <div><div>{new Date(v.createdAt).toLocaleString()}</div><div className="sub">{v.wordCount} words</div></div>
+              <div key={v.id} className={`result ${sel?.id === v.id ? 'sel' : ''}`} role="option" aria-selected={sel?.id === v.id} tabIndex={0}
+                onClick={() => api.version(v.id).then((d) => setSel({ id: v.id, createdAt: v.createdAt, ...d })).catch((e) => alertDialog(e.message))}>
+                <div>
+                  <div>{new Date(v.createdAt).toLocaleString()}</div>
+                  <div className="sub">{v.authorName ?? 'Earlier version'} · {v.wordCount} words</div>
+                  {v.reason === 'restore' && v.restoredFrom && <div className="sub">Restored the version from {new Date(v.restoredFrom).toLocaleString()}</div>}
+                </div>
               </div>
             ))}
           </div>
           <div className="grow" style={{ overflow: 'auto', padding: 16 }} role="region" aria-label="Version preview">
             {sel ? (
               <>
-                {!readOnly && <button className="btn primary sm" style={{ marginBottom: 10 }} onClick={() => onRestore(sel.content, sel.title)}>Restore this version</button>}
+                {!readOnly && <button className="btn primary sm" style={{ marginBottom: 10 }} onClick={restore}>Restore this version</button>}
                 <h2 style={{ marginTop: 0 }}>{sel.title}</h2>
+                {sel.meta && (sel.meta.tags.length > 0 || sel.meta.aliases.length > 0) && (
+                  <div className="muted" style={{ marginBottom: 8 }}>
+                    {sel.meta.tags.length > 0 && <div>Tags: {sel.meta.tags.map((t) => `#${t}`).join(', ')}</div>}
+                    {sel.meta.aliases.length > 0 && <div>Also known as: {sel.meta.aliases.join(', ')}</div>}
+                  </div>
+                )}
                 <div className="editor"><ReadOnlyDoc doc={sel.content} /></div>
               </>
             ) : <span className="muted">Select a version to preview it.</span>}

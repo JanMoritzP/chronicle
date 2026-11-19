@@ -1,3 +1,9 @@
+/** One entry of a page's history: who saved the page, when, and whether it came from a restore. */
+export interface PageVersion {
+  id: string; title: string; wordCount: number; createdAt: number
+  authorName: string | null; reason: 'restore' | null; restoredFrom: number | null
+}
+
 export interface PageMeta {
   id: string
   /** library entry this page was imported from */
