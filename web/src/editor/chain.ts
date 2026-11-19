@@ -114,7 +114,7 @@ function parse(src: string): Item[] {
   }
 
   const items = sibs()
-  if (!atEnd()) fail(`Unexpected "${src[i]}"`)
+  if (!atEnd()) fail(src[i] === ' ' ? 'Text goes in braces, e.g. h2{My heading}' : `Unexpected "${src[i]}"`)
   return items
 }
 

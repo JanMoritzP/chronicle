@@ -28,6 +28,7 @@ export type View =
   | { type: 'stattemplates' }
   | { type: 'stattemplate'; id: string }
   | { type: 'settings' }
+  | { type: 'manual' }
 
 export interface OnlinePerson { id: string; username: string }
 

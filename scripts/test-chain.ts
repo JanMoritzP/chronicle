@@ -116,5 +116,7 @@ check('operators and table sizes are chains', isChainSource('h2+p') && isChainSo
 check('trailing token', trailingToken('h2+ul>li')?.token === 'li' && trailingToken('h2+ul>li')?.start === 6)
 check('no token after an operator, a count or inside text', trailingToken('h2+') === null && trailingToken('li*3') === null && trailingToken('p{ab') === null && trailingToken('p{a}') === null)
 
+check('text after > without braces says to use braces', /braces/.test(err('h2>My heading')?.error ?? ''))
+
 if (failed) { console.log(`\n${failed} check(s) failed`); process.exit(1) }
 console.log('\nall passed')

@@ -14,6 +14,7 @@ import { PageTypeEditor, PageTypesView } from './components/PageTypes'
 import { StatTemplateEditor, StatTemplatesView } from './components/StatTemplates'
 import { resolveTemplates } from './editor/templates'
 import { TodosView } from './components/Todos'
+import { ManualView } from './components/Manual'
 import { useWorld } from './lib/world'
 import { PageView } from './components/PageView'
 import { BUILTIN_TYPES } from './lib/pageTypes'
@@ -63,6 +64,7 @@ function viewTitle(v: View, pages: { id: string; title: string }[]) {
     case 'tag': return `#${v.tag}`
     case 'trash': return 'Trash'
     case 'settings': return 'Settings'
+    case 'manual': return 'Manual'
     case 'maps': return 'Maps'
     case 'timeline': return 'Timeline'
     case 'relations': return 'Relations'
@@ -88,6 +90,7 @@ function ViewRouter({ view }: { view: View }) {
     case 'tag': return <TagView tag={view.tag} />
     case 'trash': return <TrashView />
     case 'settings': return <SettingsView />
+    case 'manual': return <ManualView />
     case 'maps': return <MapsView />
     case 'timeline': return <TimelineView />
     case 'relations': return <RelationsView />

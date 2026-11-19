@@ -147,6 +147,14 @@ What it does: the slash menu understands short chains in the style of Emmet, so 
 - **Tests.** `scripts/test-chain.ts` (bundle with esbuild, run with node).
 - **Not done.** No custom named chains (templates cover that), no `^` to climb up a level, no inline formatting or links inside `{text}`.
 
+## Manual (built)
+
+What it does: a built-in manual explains the app, and a bare `/` in a page now lists every command.
+
+- **Slash menu.** An empty query returns all commands in declared order (templates first, then built-in commands, then stat blocks); the popup scrolls. A typed query still shows the best 12. `/help` opens the manual. A chain with text after `>` and a space (`h2>My heading`) now says "Text goes in braces, e.g. h2{My heading}" instead of an unexpected-character error.
+- **Manual view.** `{ type: 'manual' }`, `components/Manual.tsx`. Opened from the question mark button in the sidebar footer, `/help` in a page or "Open manual" in Ctrl+K. It has a search box and a contents row. The command table is built from `COMMAND_LIST` in `slash.ts`, the chain block names from `CHAIN_TAGS` in `chain.ts` and the shortcuts from `keys.ts`, so they follow the code. The prose is written by hand: update it when a feature changes.
+- **Tests.** `scripts/test-chain.ts` covers the new chain message. The view has no server part.
+
 ## Boxes, sections and columns (built)
 
 What it does: new kinds of block for page layout, inserted from the slash menu or a chain (see "Slash chains"). `web/src/editor/blocks.tsx`.

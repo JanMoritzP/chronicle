@@ -387,6 +387,19 @@ a.btn { display: inline-block; color: inherit; text-decoration: none; }
   .pt-split { grid-template-columns: minmax(0, 1fr); }
 }
 
+/* ---------- manual ---------- */
+.manual .input { width: 100%; }
+.man-toc { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 8px; }
+.man-toc .chip { cursor: pointer; padding: 3px 11px; }
+.man-section { margin-top: 28px; }
+.man-section h2 { margin: 0 0 8px; font-size: 1.25rem; }
+.man-code { font: 13px ui-monospace, monospace; padding: 1px 6px; border-radius: 5px; background: var(--accent-soft); }
+.man-example { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin: 6px 0; }
+.man-table { border-collapse: collapse; width: 100%; margin: 8px 0 12px; }
+.man-table td { padding: 5px 10px 5px 0; border-bottom: 1px solid var(--border); vertical-align: top; }
+.man-table td:first-child { white-space: nowrap; width: 1%; }
+.man-table .kbd { margin-right: 4px; }
+
 /* ---------- views ---------- */
 .view { max-width: 900px; margin: 0 auto; padding: 32px 36px 100px; }
 .view h1 { margin: 0 0 16px; font-size: 1.7rem; }

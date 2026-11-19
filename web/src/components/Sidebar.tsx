@@ -1,5 +1,5 @@
 import {
-  BookOpen, CalendarDays, ChevronDown, ChevronRight, FilePlus2, FolderPlus, Hash, Inbox, LayoutTemplate, Library, ListTodo, Map as MapIcon, Network, ScrollText, Search, Settings, Shapes, Trash2, Users, Zap,
+  BookOpen, CalendarDays, ChevronDown, ChevronRight, CircleHelp, FilePlus2, FolderPlus, Hash, Inbox, LayoutTemplate, Library, ListTodo, Map as MapIcon, Network, ScrollText, Search, Settings, Shapes, Trash2, Users, Zap,
 } from 'lucide-react'
 import { useMemo, useRef, useState } from 'react'
 import { api } from '../api'
@@ -216,6 +216,7 @@ export function Sidebar() {
       </div>
       <div className="foot">
         <button className="icon-btn" title="Trash" aria-label="Trash" onClick={() => navigate({ type: 'trash' })}><Trash2 size={16} /></button>
+        <button className="icon-btn" title="Manual" aria-label="Manual" onClick={() => navigate({ type: 'manual' })}><CircleHelp size={16} /></button>
         <button className="icon-btn" title="Settings" aria-label="Settings" onClick={() => navigate({ type: 'settings' })}><Settings size={16} /></button>
       </div>
       {typeMenu && (

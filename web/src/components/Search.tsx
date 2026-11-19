@@ -47,6 +47,7 @@ export function SearchDialog() {
         })(),
         { id: 'trash', label: 'Open trash', run: () => st.navigate({ type: 'trash' }) },
         { id: 'settings', label: 'Open settings', run: () => st.navigate({ type: 'settings' }) },
+        { id: 'manual', label: 'Open manual', run: () => st.navigate({ type: 'manual' }) },
         { id: 'sidebar', label: 'Toggle sidebar', hint: bindings.toggleSidebar[0], run: () => st.setUi({ sidebarOpen: !st.sidebarOpen }) },
         { id: 'split', label: 'Close split view', run: () => st.setSplit(null) },
         { id: 'logout', label: 'Log out', run: () => st.logout() },

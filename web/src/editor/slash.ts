@@ -3,7 +3,7 @@ import Suggestion from '@tiptap/suggestion'
 import { PluginKey } from '@tiptap/pm/state'
 import {
   AlignLeft, CalendarDays, CheckSquare, Code, FileInput, Heading1, Heading2, Heading3, Image as ImageIcon, LayoutTemplate, List, ListOrdered, ListTodo,
-  BookOpen, CalendarClock, ChevronsRight, ChevronsUpDown, Columns2, Dices, Info, Landmark, ListTree, Lock, MapPin, Swords, TriangleAlert, User, Minus, Quote, Shield, Sparkles, Users, Table as TableIcon,
+  BookOpen, CalendarClock, CircleHelp, ChevronsRight, ChevronsUpDown, Columns2, Dices, Info, Landmark, ListTree, Lock, MapPin, Swords, TriangleAlert, User, Minus, Quote, Shield, Sparkles, Users, Table as TableIcon,
 } from 'lucide-react'
 import { createElement } from 'react'
 import { fuzzy } from '../lib/fuzzy'
@@ -65,7 +65,11 @@ const COMMANDS: Cmd[] = [
   { id: 'roll', label: 'Roll table', sub: 'A d6 table to fill in (roll20 for a d20)', keywords: 'random dice table', icon: Dices, run: viaChain('roll') },
   ...Object.entries(PRESETS).map<Cmd>(([id, p]) => ({ id, label: p.label, sub: p.sub, keywords: 'preset starter structure', icon: PRESET_ICONS[id], run: viaChain(id) })),
   { id: 'relation', label: 'Relation', sub: 'Link to a parent, spouse, sibling or custom relationship', keywords: 'family tree parent child spouse sibling rival ally', icon: Users, run: (e, r) => { e.chain().focus().deleteRange(r).run(); worldPicker.relation?.(e, r) } },
+  { id: 'help', label: 'Manual', sub: 'All commands, chains and shortcuts', keywords: 'help guide commands syntax how', icon: CircleHelp, run: (e, r) => { e.chain().focus().deleteRange(r).run(); useStore.getState().navigate({ type: 'manual' }) } },
 ]
+
+/** The built-in commands for the manual, in menu order. */
+export const COMMAND_LIST = COMMANDS.filter((c) => c.id !== 'help').map((c) => ({ id: c.id, label: c.label, sub: c.sub }))
 
 function statCommands(): Cmd[] {
   return currentTemplates().map<Cmd>((t) => ({
@@ -150,7 +154,8 @@ function items(editor: Editor, query: string): SuggestItem[] {
     if (best) out.push({ cmd, score: best.score + (best === idHit ? 20 : 0) + (all.length - order) * 2, indices: best === hit ? hit!.indices : [] })
   }
   out.sort((a, b) => b.score - a.score)
-  return out.slice(0, 12).map(({ cmd, indices }) => ({
+  // a bare "/" lists everything in declared order; the popup scrolls
+  return (query ? out.slice(0, 12) : out).map(({ cmd, indices }) => ({
     key: cmd.id,
     label: cmd.label,
     sub: cmd.sub,
