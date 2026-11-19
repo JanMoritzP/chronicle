@@ -3,12 +3,12 @@ import Suggestion from '@tiptap/suggestion'
 import { PluginKey } from '@tiptap/pm/state'
 import {
   AlignLeft, CalendarDays, CheckSquare, Code, FileInput, Heading1, Heading2, Heading3, Image as ImageIcon, LayoutTemplate, List, ListOrdered, ListTodo,
-  ChevronsRight, MapPin, Minus, Quote, Shield, Sparkles, Users, Table as TableIcon,
+  BookOpen, CalendarClock, ChevronsRight, ChevronsUpDown, Columns2, Dices, Info, Landmark, ListTree, Lock, MapPin, Swords, TriangleAlert, User, Minus, Quote, Shield, Sparkles, Users, Table as TableIcon,
 } from 'lucide-react'
 import { createElement } from 'react'
 import { fuzzy } from '../lib/fuzzy'
 import { currentTemplates } from './useTemplates'
-import { CHAIN_TAGS, isChainSource, runChain, trailingToken, type ChainExtras } from './chain'
+import { CHAIN_TAGS, PRESETS, isChainSource, runChain, trailingToken, type ChainExtras } from './chain'
 import { suggestRender, type SuggestItem } from './suggest'
 import { useStore } from '../store'
 
@@ -29,6 +29,13 @@ export const embedPicker: { pick: ((editor: Editor, range: { from: number; to: n
 /** /pin and /teven open dialogs owned by the page component. */
 export const worldPicker: { pin: ((editor: Editor, range: { from: number; to: number }) => void) | null; event: ((editor: Editor, range: { from: number; to: number }) => void) | null; relation: ((editor: Editor, range: { from: number; to: number }) => void) | null } = { pin: null, event: null, relation: null }
 
+/** Menu commands that insert exactly what the same name inserts in a chain. */
+const viaChain = (src: string) => (e: Editor, r: { from: number; to: number }) => {
+  const res = runChain(src)
+  if (res.ok) e.chain().focus().deleteRange(r).insertContent(res.nodes).run()
+}
+const PRESET_ICONS: Record<string, any> = { npc: User, place: Landmark, encounter: Swords }
+
 const COMMANDS: Cmd[] = [
   { id: 'h1', label: 'Heading 1', sub: 'Large section heading', keywords: 'title', icon: Heading1, run: (e, r) => e.chain().focus().deleteRange(r).setNode('heading', { level: 1 }).run() },
   { id: 'h2', label: 'Heading 2', sub: 'Medium section heading', icon: Heading2, run: (e, r) => e.chain().focus().deleteRange(r).setNode('heading', { level: 2 }).run() },
@@ -47,6 +54,16 @@ const COMMANDS: Cmd[] = [
   { id: 'pin', label: 'Pin on map', sub: 'Mark where this page is on a map', keywords: 'map marker location place', icon: MapPin, run: (e, r) => { e.chain().focus().deleteRange(r).run(); worldPicker.pin?.(e, r) } },
   { id: 'teven', label: 'Timeline event', sub: 'Give this page a date on the timeline', keywords: 'date calendar time when', icon: CalendarDays, run: (e, r) => { e.chain().focus().deleteRange(r).run(); worldPicker.event?.(e, r) } },
   { id: 'chain', label: 'Chain blocks', sub: 'Combine blocks in one go, e.g. h2{Hooks}+ul>li*3', keywords: 'emmet abbreviation combine nest repeat', icon: Sparkles, run: (e, r) => { e.chain().focus().insertContentAt(r.to, 'h2{Title}+ul>li*3').run() } },
+  { id: 'callout', label: 'Note box', sub: 'Highlighted box for a note', keywords: 'callout info highlight', icon: Info, run: viaChain('callout') },
+  { id: 'warning', label: 'Warning box', sub: 'Highlighted box for a danger or a rule to remember', keywords: 'callout caution danger', icon: TriangleAlert, run: viaChain('warning') },
+  { id: 'aloud', label: 'Read-aloud box', sub: 'Text to read to the players', keywords: 'callout boxed text describe narration', icon: BookOpen, run: viaChain('aloud') },
+  { id: 'secret', label: 'Secret', sub: 'Only you see it: shared pages keep it closed', keywords: 'callout gm hidden private spoiler', icon: Lock, run: viaChain('secret') },
+  { id: 'fold', label: 'Collapsible section', sub: 'A titled section that can be closed', keywords: 'toggle accordion details spoiler', icon: ChevronsUpDown, run: viaChain('fold') },
+  { id: 'columns', label: 'Columns', sub: 'Two columns side by side (cols3 for three)', keywords: 'layout side', icon: Columns2, run: viaChain('cols') },
+  { id: 'toc', label: 'Table of contents', sub: 'Links to the headings of this page', keywords: 'outline contents headings', icon: ListTree, run: viaChain('toc') },
+  { id: 'date', label: 'Date today', sub: 'The real date, e.g. for session notes', keywords: 'day time now', icon: CalendarClock, run: viaChain('date') },
+  { id: 'roll', label: 'Roll table', sub: 'A d6 table to fill in (roll20 for a d20)', keywords: 'random dice table', icon: Dices, run: viaChain('roll') },
+  ...Object.entries(PRESETS).map<Cmd>(([id, p]) => ({ id, label: p.label, sub: p.sub, keywords: 'preset starter structure', icon: PRESET_ICONS[id], run: viaChain(id) })),
   { id: 'relation', label: 'Relation', sub: 'Link to a parent, spouse, sibling or custom relationship', keywords: 'family tree parent child spouse sibling rival ally', icon: Users, run: (e, r) => { e.chain().focus().deleteRange(r).run(); worldPicker.relation?.(e, r) } },
 ]
 
@@ -108,7 +125,7 @@ function chainItems(editor: Editor, query: string): SuggestItem[] {
   const tok = trailingToken(query)
   if (tok) {
     const lower = tok.token.toLowerCase()
-    const names = [...CHAIN_TAGS, ...Object.entries(extras).map(([name, e]) => ({ name, label: e.label }))]
+    const names = [...new Map([...CHAIN_TAGS, ...Object.entries(extras).map(([name, e]) => ({ name, label: e.label }))].map((t) => [t.name, t])).values()]
     for (const t of names.filter((n) => n.name.startsWith(lower) && n.name !== lower).slice(0, 6)) {
       out.push({
         key: `chain-${t.name}`, label: query.slice(0, tok.start) + t.name, sub: t.label, icon: createElement(ChevronsRight, { size: 16 }),

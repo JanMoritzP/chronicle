@@ -9,6 +9,7 @@ import { TableKit } from '@tiptap/extension-table'
 import UniqueID from '@tiptap/extension-unique-id'
 import { Placeholder } from '@tiptap/extensions'
 import type { CollabProvider } from '../lib/collab'
+import { Callout, Column, Columns, Fold, Toc } from './blocks'
 import { Embed } from './Embed'
 import { SlashCommands } from './slash'
 import { StatBlock } from './StatBlock'
@@ -28,6 +29,11 @@ export function buildExtensions(opts: { readOnly?: boolean; collab?: CollabOptio
     TableKit.configure({ table: { resizable: false } }),
     UniqueID.configure({ types: ['heading', 'todo'], attributeName: 'id' }),
     Todo,
+    Callout,
+    Fold,
+    Columns,
+    Column,
+    Toc,
     Wikilink,
     Embed,
     StatBlock,

@@ -54,6 +54,10 @@ function publicDoc(page: PageRow, doc: DocNode, depth = 0): DocNode {
       return inner.content?.length ? [{ type: 'blockquote', content: inner.content }] : []
     }
     if (n.type === 'todo') return []
+    // a secret never leaves with its text; the reader sees that something is being kept closed
+    if (n.type === 'callout' && n.attrs?.kind === 'secret') {
+      return [{ type: 'callout', attrs: { kind: 'secret' }, content: [{ type: 'paragraph', content: [{ type: 'text', text: 'This is a secret. It stays closed in shared pages.' }] }] }]
+    }
     if (n.type === 'statblock' && n.attrs?.data) {
       // the links of linked fields are private; the shown text stays
       const data = Object.fromEntries(Object.entries(n.attrs.data as Record<string, unknown>).filter(([k]) => !k.endsWith(':refs')))

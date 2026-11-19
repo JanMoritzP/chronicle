@@ -23,11 +23,25 @@ export const CHAIN_TAGS: { name: string; label: string }[] = [
   { name: 'p', label: 'Text' }, { name: 'ul', label: 'Bullet list' }, { name: 'ol', label: 'Numbered list' }, { name: 'task', label: 'Checklist' },
   { name: 'li', label: 'List item' }, { name: 'quote', label: 'Quote' }, { name: 'code', label: 'Code block' }, { name: 'hr', label: 'Divider' },
   { name: 'table', label: 'Table, e.g. table3x4' }, { name: 'todo', label: 'Todo' },
+  { name: 'callout', label: 'Note box' }, { name: 'warning', label: 'Warning box' }, { name: 'aloud', label: 'Read-aloud box' }, { name: 'secret', label: 'Secret box (closed in shared pages)' },
+  { name: 'fold', label: 'Collapsible section, e.g. fold{Title}' }, { name: 'cols', label: 'Columns, e.g. cols3' }, { name: 'col', label: 'Column' },
+  { name: 'toc', label: 'Table of contents' }, { name: 'date', label: 'The date today' }, { name: 'roll', label: 'Roll table, e.g. roll20' },
 ]
 
-const ALIASES: Record<string, string> = { text: 'p', bullet: 'ul', number: 'ol', checklist: 'task', divider: 'hr', img: 'image', blockquote: 'quote' }
+/** Ready-made structures. They sit below the world's own templates, so a template with the same name wins. */
+export const PRESETS: Record<string, { label: string; sub: string; chain: string }> = {
+  npc: { label: 'NPC sheet', sub: 'Name, look, voice, goal and a secret', chain: 'h2{Name}+(ul>li{Race and class}+li{Look}+li{Voice and manner}+li{Wants})+h3{Secrets}+secret>p' },
+  place: { label: 'Place', sub: 'Name, sights, people and a secret', chain: 'h2{Name}+h3{Sights and sounds}+p+h3{Who is here}+(ul>li*3)+h3{Secrets}+secret>p' },
+  encounter: { label: 'Encounter', sub: 'Setting, foes, terrain, loot and outcome', chain: 'h2{Encounter}+p{Where and why}+(ul>li{Foes}+li{Terrain and hazards}+li{Treasure})+h3{Outcome}+p' },
+}
+CHAIN_TAGS.push(...Object.entries(PRESETS).map(([name, p]) => ({ name, label: p.label })))
+
+const ALIASES: Record<string, string> = { text: 'p', bullet: 'ul', number: 'ol', checklist: 'task', divider: 'hr', img: 'image', blockquote: 'quote', warn: 'warning', note: 'callout', info: 'callout', columns: 'cols' }
+const CALLOUTS: Record<string, string> = { callout: 'info', warning: 'warning', aloud: 'aloud', secret: 'secret' }
+const DICE = [4, 6, 8, 10, 12, 20]
 const LISTS = { ul: ['bulletList', 'listItem'], ol: ['orderedList', 'listItem'], task: ['taskList', 'taskItem'] } as const
 type ListTag = keyof typeof LISTS
+type Parent = ListTag | 'cols' | null
 const isList = (n: string): n is ListTag => n in LISTS
 
 const MAX_REPEAT = 50
@@ -126,6 +140,14 @@ function listItem(type: string, blocks: Json[]): Json {
   return { type, ...(type === 'taskItem' ? { attrs: { checked: false } } : {}), content: blocks[0]?.type === 'paragraph' ? blocks : [para(null), ...blocks] }
 }
 
+const column = (blocks: Json[]): Json => ({ type: 'column', content: blocks.length ? blocks : [para(null)] })
+
+/** A random table: one row per face of the die, ready to be filled in. */
+function rollTable(die: number): Json {
+  const row = (cell: string, a: string, b: string): Json => ({ type: 'tableRow', content: [a, b].map((t) => ({ type: cell, content: [para(t)] })) })
+  return { type: 'table', content: [row('tableHeader', `d${die}`, 'Result'), ...Array.from({ length: die }, (_, i) => row('tableCell', String(i + 1), ''))] }
+}
+
 function table(rows: number, cols: number): Json {
   const row = (cell: string): Json => ({ type: 'tableRow', content: Array.from({ length: cols }, () => ({ type: cell, content: [para(null)] })) })
   return { type: 'table', content: [row('tableHeader'), ...Array.from({ length: rows - 1 }, () => row('tableCell'))] }
@@ -133,7 +155,7 @@ function table(rows: number, cols: number): Json {
 
 interface Ctx { left: number; extras: ChainExtras; action: string | null }
 
-function expandItems(items: Item[], parent: ListTag | null, n: number, ctx: Ctx, top: boolean): Json[] {
+function expandItems(items: Item[], parent: Parent, n: number, ctx: Ctx, top: boolean): Json[] {
   const out: Json[] = []
   items.forEach((it, idx) => {
     for (let k = 1; k <= it.count; k++) {
@@ -145,12 +167,13 @@ function expandItems(items: Item[], parent: ListTag | null, n: number, ctx: Ctx,
   return out
 }
 
-function expandEl(el: El, parent: ListTag | null, n: number, ctx: Ctx, mayAct: boolean): Json[] {
+function expandEl(el: El, parent: Parent, n: number, ctx: Ctx, mayAct: boolean): Json[] {
   if (--ctx.left < 0) fail(`That would add more than ${MAX_BLOCKS} blocks.`)
   const name = ALIASES[el.name] ?? el.name
   const text = el.text === null ? null : subst(el.text, n)
   const noText = () => { if (text !== null) fail(`${el.name} does not take {text}.`) }
-  const kids = () => expandItems(el.children, isList(name) ? name : null, n, ctx, false)
+  const cols = /^cols(\d+)?$/.exec(name)
+  const kids = () => expandItems(el.children, isList(name) ? name : cols ? 'cols' : null, n, ctx, false)
 
   const h = /^h([1-4])$/.exec(name)
   if (h) return [{ type: 'heading', attrs: { level: Number(h[1]) }, ...(text ? { content: [{ type: 'text', text }] } : {}) }, ...kids()]
@@ -161,6 +184,28 @@ function expandEl(el: El, parent: ListTag | null, n: number, ctx: Ctx, mayAct: b
     if (rows < 1 || cols < 1 || rows > MAX_TABLE || cols > MAX_TABLE) fail(`A table has 1 to ${MAX_TABLE} rows and columns.`)
     return [table(rows, cols), ...kids()]
   }
+  const roll = /^roll(\d+)?$/.exec(name)
+  if (roll) {
+    noText()
+    const die = Number(roll[1] ?? 6)
+    if (!DICE.includes(die)) fail(`There is no d${die}. Use ${DICE.map((d) => `d${d}`).join(', ')}.`)
+    return [rollTable(die), ...kids()]
+  }
+  if (cols) {
+    noText()
+    let list = kids().map((k) => (k.type === 'column' ? k : column([k])))
+    if (cols[1]) {
+      if (list.length) fail('Write cols3 or cols>col*3, not both.')
+      list = Array.from({ length: Number(cols[1]) }, () => column([]))
+    }
+    if (!list.length) list = [column([]), column([])]
+    if (list.length < 2 || list.length > 4) fail('A set of columns has 2 to 4 columns.')
+    return [{ type: 'columns', content: list }]
+  }
+  if (name in CALLOUTS) {
+    const blocks = [...(text !== null ? [para(text)] : []), ...kids()]
+    return [{ type: 'callout', attrs: { kind: CALLOUTS[name] }, content: blocks.length ? blocks : [para(null)] }]
+  }
   if (isList(name)) {
     noText()
     const [list, itemType] = LISTS[name]
@@ -169,8 +214,17 @@ function expandEl(el: El, parent: ListTag | null, n: number, ctx: Ctx, mayAct: b
   }
   switch (name) {
     case 'p': return [para(text), ...kids()]
+    case 'col':
+      if (parent !== 'cols') fail('col goes inside columns: cols>col*2')
+      return [column([...(text !== null ? [para(text)] : []), ...kids()])]
+    case 'fold': {
+      const blocks = kids()
+      return [{ type: 'fold', attrs: { title: text ?? '' }, content: blocks.length ? blocks : [para(null)] }]
+    }
+    case 'toc': noText(); return [{ type: 'toc' }, ...kids()]
+    case 'date': noText(); return [para(new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })), ...kids()]
     case 'li':
-      if (!parent) fail('li goes inside a list: ul>li*3')
+      if (!parent || parent === 'cols') fail('li goes inside a list: ul>li*3')
       return [listItem(parent === 'task' ? 'taskItem' : 'listItem', [...(text !== null ? [para(text)] : []), ...kids()])]
     case 'quote': {
       const blocks = [...(text !== null ? [para(text)] : []), ...kids()]
@@ -181,7 +235,12 @@ function expandEl(el: El, parent: ListTag | null, n: number, ctx: Ctx, mayAct: b
     case 'todo': return [{ type: 'paragraph', content: [{ type: 'todo', attrs: { message: text ?? '', done: false } }] }, ...kids()]
   }
   const extra = ctx.extras[name] ?? ctx.extras[el.name]
-  if (!extra) throw new ChainError(`There is no block called "${el.name}".`, false, el.name)
+  if (!extra) {
+    const preset = PRESETS[name]
+    if (!preset) throw new ChainError(`There is no block called "${el.name}".`, false, el.name)
+    noText()
+    return [...expandItems(parse(preset.chain), null, n, ctx, false), ...kids()]
+  }
   noText()
   if (extra.action) {
     if (!mayAct || el.children.length) fail(`${el.name} opens a dialog, so it has to come last in the chain.`)
@@ -202,6 +261,10 @@ function label(n: Json): string {
     case 'orderedList': return `Numbered list (${PLURAL(items, 'item')})`
     case 'taskList': return `Checklist (${PLURAL(items, 'item')})`
     case 'blockquote': return 'Quote'
+    case 'callout': return ({ info: 'Note box', warning: 'Warning box', aloud: 'Read-aloud box', secret: 'Secret box' } as Record<string, string>)[String(n.attrs?.kind)] ?? 'Note box'
+    case 'fold': return 'Collapsible section'
+    case 'columns': return `Columns (${items})`
+    case 'toc': return 'Table of contents'
     case 'codeBlock': return 'Code block'
     case 'horizontalRule': return 'Divider'
     case 'table': return `Table (${items} × ${n.content?.[0]?.content?.length ?? 0})`

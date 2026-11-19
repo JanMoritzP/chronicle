@@ -11,6 +11,9 @@ export interface MdContext {
 
 const UPLOAD_URL = /^\/api\/uploads\/([0-9a-f-]{36})$/
 
+const CALLOUT_LABEL: Record<string, string> = { info: 'Note', warning: 'Warning', aloud: 'Read aloud', secret: 'Secret' }
+const html = (s: string) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!)
+
 const esc = (s: string) => s.replace(/[\\*_`\[\]<]/g, (c) => '\\' + c)
 
 function wrap(text: string, marks: NonNullable<DocNode['marks']>): string {
@@ -97,6 +100,8 @@ function block(n: DocNode, ctx: MdContext): string[] {
     case 'horizontalRule': return ['---']
     case 'image': return [image(n, ctx)]
     case 'table': return table(n, ctx)
+    case 'callout': return ['> **' + (CALLOUT_LABEL[String(n.attrs?.kind)] ?? 'Note') + '**', '>', ...blocks(n.content, ctx).map((l) => (l ? '> ' + l : '>'))]
+    case 'fold': return ['<details><summary>' + html(String(n.attrs?.title || 'Section')) + '</summary>', '', ...blocks(n.content, ctx), '', '</details>']
     case 'embed': return [wikiSyntax(n.attrs ?? {}, true, ctx.titles)]
     case 'statblock': {
       const a = n.attrs ?? {}

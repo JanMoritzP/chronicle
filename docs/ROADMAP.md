@@ -141,10 +141,24 @@ What it does: the slash menu understands short chains in the style of Emmet, so 
 - **Syntax.** `a>b` puts b inside a, `a+b` puts b after a (after `>`, a `+` stays inside the nest, as in Emmet: `ul>li+li` is a list of two). `a*3` repeats, `(a+b)*3` repeats a group, `a{text}` sets the text; text may hold spaces. In text `$` is the number of the repeat (`$$` pads to two digits), `\$` and `\}` are literal. Order of `{}` and `*` after a name does not matter. A leaf block that gets children places them after itself, so `h2{Hooks}>ul>li*3` works like `h2{Hooks}+ul>li*3`.
 - **Blocks.** `h1` to `h4`, `p`, `ul`, `ol`, `task` (checklist), `li`, `quote`, `code`, `hr`, `todo`, `table` (`table3x4` is 3 rows by 4 columns, with a header row), plus the names of the slash menu (`bullet`, `number`, `checklist`, `divider`, `text`). The world's templates (`npc`) and stat blocks (`stat-5e-monster`) can be chained by their slash name. Dialog commands (`image`, `embed`, `pin`, `teven`, `relation`) may end a chain: everything before is inserted, then the dialog opens.
 - **In the menu.** A query with an operator (or a table size) is a chain; any other query is a normal command search. A chain shows one entry that says what it will insert ("Heading 2, Bullet list (3 items)"). While it is not valid the entry is greyed with the reason, and the name being typed is offered as a completion (`ul>l` offers `ul>li`). Enter or Tab inserts; one undo removes the whole chain. "Chain blocks" in the menu types an example to start from.
+- **More blocks.** `callout` (also `note`, `info`), `warning` (`warn`), `aloud`, `secret`, `fold{Title}`, `cols` (`cols3`, or `cols>col*3`; 2 to 4 columns), `col`, `toc`, `date`, `roll` (`roll20`: a table with one row per face of d4, d6, d8, d10, d12 or d20), and the presets `npc`, `place` and `encounter`. A preset is itself a chain (`PRESETS` in `chain.ts`) and sits below the world's own templates: a template called `npc` wins. All of them are also plain slash commands.
 - **Limits.** 50 repeats, 300 blocks per chain, tables up to 20 by 20.
 - **Code.** `web/src/editor/chain.ts` (pure: parser and expansion to TipTap JSON), `slash.ts` (menu wiring), `suggest.ts` (`disabled` items). The slash plugin now allows spaces in its query; a query with a space that is not a chain shows nothing, as before.
 - **Tests.** `scripts/test-chain.ts` (bundle with esbuild, run with node).
-- **Not done.** No custom named chains, no `^` to climb up a level, no inline formatting or links inside `{text}`.
+- **Not done.** No custom named chains (templates cover that), no `^` to climb up a level, no inline formatting or links inside `{text}`.
+
+## Boxes, sections and columns (built)
+
+What it does: new kinds of block for page layout, inserted from the slash menu or a chain (see "Slash chains"). `web/src/editor/blocks.tsx`.
+
+- **Callout** (`callout`, attribute `kind`: `info`, `warning`, `aloud`, `secret`): a box that holds blocks. Click its label to switch the kind. A **secret** is for the GM: in a shared page its text is never sent. The reader sees a closed box saying "This is a secret. It stays closed in shared pages." A secret inside a fold, or inside an embedded page, is replaced the same way (`publicDoc` in `server/src/routes/shares.ts`).
+- **Fold** (`fold`, attribute `title`): a titled section that holds blocks and can be closed. Open while writing, closed for readers; whether it is open is a view setting and not saved in the page.
+- **Columns** (`columns` holding 2 to 4 `column`s): side by side, stacking on a narrow screen.
+- **Contents** (`toc`): links to the headings of the page, kept current while typing. It has no data of its own.
+- **Markdown export.** Callouts become a quote with a bold label (`> **Warning**`), secrets included because the export is the owner's. Folds become `<details><summary>`. Columns are written one after another, contents are left out.
+- **Live editing, templates, copy and history** need nothing special: the live document conversion and the stored JSON are generic.
+- **Known limitation.** The public library route (`/api/public/library/:key`) decides whether an entry is "linked by a shared page" from the page's raw stored text, so a library link that sits only inside a secret still makes that entry readable through the share. The entry is public Open5e data and the key has to be guessed.
+- **Tests.** `scripts/smoke-blocks.mjs` (storage, secrets in shared pages and embeds, export), `scripts/test-chain.ts` (the chains).
 
 ## Special pages (built)
 - A special page is a normal page with a fixed layout next to its text and an automatic tag. Built-in types: Person, Monster, Location. Custom types are per world and can be created, duplicated and deleted. Deleting a type makes its pages plain pages (the text and field values are kept).
