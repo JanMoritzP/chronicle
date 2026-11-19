@@ -10,8 +10,9 @@ import { db, now } from './db.js'
 import { uid } from './pages.js'
 import { presenceChanged } from './presence.js'
 import { ALLOWED } from './routes/uploads.js'
+import { parseChat, readable, type Kind, type Part } from './chat.js'
 import {
-  canCreateToken, canMoveToken, canPing, canRuler, canSeeToken, clientMessage, makeLimiter, parseSettings, roleAt, settingsSchema,
+  canCreateToken, canEditStats, canMoveToken, canPing, canRuler, canSeeToken, clientMessage, makeLimiter, parseSettings, redact, roleAt, settingsSchema,
   type ClientMessage, type TableRole, type TableSettings, type TokenRow,
 } from './tabletop.js'
 
@@ -87,7 +88,7 @@ function viewFor(c: Conn, wanted?: string | null) {
 }
 
 const tokensFor = (c: Conn, scene: string | null) => scene
-  ? (db.prepare('SELECT * FROM tokens WHERE scene_id = ? AND workspace_id = ? ORDER BY z, created_at').all(scene, c.ws) as TokenDb[]).map(tokenJson).filter((t) => canSeeToken(c.role, c.user.id, t))
+  ? (db.prepare('SELECT * FROM tokens WHERE scene_id = ? AND workspace_id = ? ORDER BY z, created_at').all(scene, c.ws) as TokenDb[]).map(tokenJson).filter((t) => canSeeToken(c.role, c.user.id, t)).map((t) => redact(c.role, c.user.id, t))
   : []
 
 function sendView(c: Conn) {
@@ -99,12 +100,26 @@ const membersOf = (ws: string) => db.prepare(
   `SELECT u.id, u.username, u.role FROM users u WHERE u.role = 'owner' OR u.id IN (SELECT user_id FROM workspace_members WHERE workspace_id = ?) ORDER BY u.username`,
 ).all(ws) as { id: string; username: string; role: string }[]
 
+interface ChatOut { id: string; ts: number; userId: string; name: string; kind: Kind; to: string[]; parts: Part[] }
+/** A message as a reader sees it: a whisper also says who it was for. */
+const chatJson = (m: ChatOut, _reader: string) => ({ id: m.id, ts: m.ts, userId: m.userId, name: m.name, kind: m.kind, to: m.to, parts: m.parts })
+
+function historyFor(c: Conn) {
+  const rows = db.prepare('SELECT id, user_id, name, ts, kind, to_ids, parts FROM chat_messages WHERE workspace_id = ? ORDER BY ts DESC LIMIT 200').all(c.ws) as { id: string; user_id: string; name: string; ts: number; kind: Kind; to_ids: string; parts: string }[]
+  return rows
+    .map((r): ChatOut => ({ id: r.id, ts: r.ts, userId: r.user_id, name: r.name, kind: r.kind, to: parse<string[]>(r.to_ids, []), parts: parse<Part[]>(r.parts, []) }))
+    .filter((m) => readable(m, c.user.id, c.role === 'gm'))
+    .slice(0, 100)
+    .reverse()
+    .map((m) => chatJson(m, c.user.id))
+}
+
 function sendSnapshot(c: Conn) {
   const { active, settings } = stateOf(c.ws)
   viewFor(c, c.scene)
   send(c, {
     t: 'snapshot', you: { id: c.user.id, username: c.user.username, role: c.role }, settings, scenes: scenesOf(c.ws), active,
-    sceneId: c.scene, tokens: tokensFor(c, c.scene), online: onlineIn(c.ws), members: membersOf(c.ws),
+    sceneId: c.scene, tokens: tokensFor(c, c.scene), online: onlineIn(c.ws), members: membersOf(c.ws), chat: historyFor(c),
   })
 }
 
@@ -115,7 +130,7 @@ function emitToken(ws: string, before: TokenRow | null, after: TokenRow | null) 
     if (c.scene !== sceneId) continue
     const sawBefore = !!before && canSeeToken(c.role, c.user.id, before)
     const seesAfter = !!after && canSeeToken(c.role, c.user.id, after)
-    if (seesAfter) send(c, { t: 'token', token: after })
+    if (seesAfter) send(c, { t: 'token', token: redact(c.role, c.user.id, after!) })
     else if (sawBefore) send(c, { t: 'token.remove', ids: [before!.id] })
   }
 }
@@ -234,10 +249,52 @@ async function handle(c: Conn, m: ClientMessage) {
       for (const mv of m.moves) {
         const before = tokenRow(mv.id, ws)
         if (!before) continue
-        if (!canMoveToken(c.role, c.user.id, before, settings)) { send(c, { t: 'token', token: before }); continue }
+        if (!canMoveToken(c.role, c.user.id, before, settings)) { send(c, { t: 'token', token: redact(c.role, c.user.id, before) }); continue }
         upd.run(mv.x, mv.y, mv.rotation ?? before.rotation, now(), mv.id)
         emitToken(ws, before, tokenRow(mv.id, ws)!)
       }
+      return
+    }
+    case 'token.stat': {
+      const before = tokenRow(m.id, ws)
+      if (!before) return nack(c, m, 'no such token')
+      if (!canEditStats(c.role, c.user.id, before, settings)) return nack(c, m, 'not allowed')
+      if (m.stat?.hpPrivate !== undefined && !gm) return nack(c, m, 'only the GM can do that')
+      const data: Record<string, any> = { ...before.data }
+      const st = m.stat ?? {}
+      if (st.hp) data.hp = { ...(data.hp ?? {}), ...st.hp }
+      if (st.ac !== undefined) { if (st.ac === null) delete data.ac; else data.ac = st.ac }
+      if (st.conditions) data.conditions = [...new Set(st.conditions)]
+      if (st.hpPrivate !== undefined) data.hpPrivate = st.hpPrivate
+      if (m.damage) {
+        // damage wears down temporary hit points first; healing stops at the maximum
+        const hp = { value: 0, max: 0, temp: 0, ...(data.hp ?? {}) }
+        if (m.damage > 0) {
+          const soak = Math.min(hp.temp, m.damage)
+          hp.temp -= soak
+          hp.value = Math.max(0, hp.value - (m.damage - soak))
+        } else hp.value = hp.max > 0 ? Math.min(hp.max, hp.value - m.damage) : hp.value - m.damage
+        data.hp = hp
+      }
+      if (JSON.stringify(data).length > 8000) return nack(c, m, 'too much data')
+      db.prepare('UPDATE tokens SET data = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(data), now(), m.id)
+      return emitToken(ws, before, tokenRow(m.id, ws)!)
+    }
+    case 'chat': {
+      const parsed = parseChat(m.text)
+      if ('error' in parsed) return nack(c, m, parsed.error)
+      if (c.role === 'spectator' && parsed.kind !== 'say') return nack(c, m, 'Spectators can talk but not roll or whisper.')
+      let to: string[] = []
+      if (parsed.kind === 'whisper') {
+        const target = membersOf(ws).find((u) => u.username.toLowerCase() === parsed.to!.toLowerCase())
+        if (!target) return nack(c, m, `Nobody called “${parsed.to}” can be reached at this table.`)
+        to = [target.id]
+      }
+      const name = gm && m.as ? m.as.trim() || c.user.username : c.user.username
+      const msg = { id: uid(), ts: now(), userId: c.user.id, name, kind: parsed.kind, to, parts: parsed.parts }
+      db.prepare('INSERT INTO chat_messages(id,workspace_id,user_id,name,ts,kind,to_ids,parts) VALUES(?,?,?,?,?,?,?,?)').run(msg.id, ws, msg.userId, name, msg.ts, msg.kind, JSON.stringify(to), JSON.stringify(msg.parts))
+      db.prepare('DELETE FROM chat_messages WHERE workspace_id = ? AND ts < ?').run(ws, msg.ts - 90 * 24 * 3600 * 1000)
+      for (const x of inWorld(ws)) if (readable(msg, x.user.id, x.role === 'gm')) send(x, { t: 'chat.msg', msg: chatJson(msg, x.user.id) })
       return
     }
     case 'token.delete': {

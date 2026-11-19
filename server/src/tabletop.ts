@@ -11,6 +11,7 @@ export const settingsSchema = z.object({
   /** What players may do. Spectators can do none of it. */
   playersMoveOwn: z.boolean().default(true),
   playersCreateTokens: z.boolean().default(false),
+  playersEditOwnStats: z.boolean().default(true),
   playersPing: z.boolean().default(true),
   playersRuler: z.boolean().default(true),
   /** Players see each other's cursors. */
@@ -19,7 +20,7 @@ export const settingsSchema = z.object({
 /** A change to the settings: only the keys that are present (a partial of the schema above would fill the defaults back in). */
 export const settingsPatch = z.object({
   gms: z.array(z.string().max(64)).max(20),
-  playersMoveOwn: z.boolean(), playersCreateTokens: z.boolean(), playersPing: z.boolean(), playersRuler: z.boolean(), showCursors: z.boolean(),
+  playersMoveOwn: z.boolean(), playersCreateTokens: z.boolean(), playersEditOwnStats: z.boolean(), playersPing: z.boolean(), playersRuler: z.boolean(), showCursors: z.boolean(),
 }).partial().strict()
 export type TableSettings = z.infer<typeof settingsSchema>
 export const DEFAULT_SETTINGS: TableSettings = settingsSchema.parse({})
@@ -49,6 +50,16 @@ export const canSeeToken = (role: TableRole, userId: string, t: Pick<TokenRow, '
 export function canMoveToken(role: TableRole, userId: string, t: Pick<TokenRow, 'owners' | 'locked'>, s: TableSettings) {
   if (role === 'gm') return true
   return role === 'player' && s.playersMoveOwn && ownsToken(userId, t) && !t.locked
+}
+
+export const canEditStats = (role: TableRole, userId: string, t: Pick<TokenRow, 'owners'>, s: TableSettings) =>
+  role === 'gm' || (role === 'player' && s.playersEditOwnStats && ownsToken(userId, t))
+
+/** What a person is allowed to read of a token: hit points and armor class can be kept to the GM and the owners. */
+export function redact(role: TableRole, userId: string, t: TokenRow): TokenRow {
+  if (role === 'gm' || !t.data.hpPrivate || ownsToken(userId, t)) return t
+  const { hp: _hp, ac: _ac, ...data } = t.data
+  return { ...t, data }
 }
 
 export const canCreateToken = (role: TableRole, s: TableSettings) => role === 'gm' || (role === 'player' && s.playersCreateTokens)
@@ -90,6 +101,13 @@ export const scenePatch = z.object({
 }).partial().strict()
 
 const point = z.object({ x: coord, y: coord })
+const hpValue = z.number().int().min(-9999).max(99999)
+export const statPatch = z.object({
+  hp: z.object({ value: hpValue, max: z.number().int().min(0).max(99999), temp: z.number().int().min(0).max(99999) }).partial().strict(),
+  ac: z.number().int().min(0).max(99).nullable(),
+  conditions: z.array(z.string().min(1).max(30)).max(30),
+  hpPrivate: z.boolean(),
+}).partial().strict()
 
 export const clientMessage = z.discriminatedUnion('t', [
   z.object({ t: z.literal('view'), sceneId: id }),
@@ -100,8 +118,10 @@ export const clientMessage = z.discriminatedUnion('t', [
   z.object({ t: z.literal('token.add'), sceneId: id, token: tokenPatch }),
   z.object({ t: z.literal('token.update'), id, patch: tokenPatch }),
   z.object({ t: z.literal('token.move'), moves: z.array(z.object({ id, x: coord, y: coord, rotation: z.number().finite().min(-3600).max(3600).optional() })).min(1).max(100) }),
+  z.object({ t: z.literal('token.stat'), id, stat: statPatch.optional(), /** positive hurts, negative heals */ damage: z.number().int().min(-99999).max(99999).optional() }),
   z.object({ t: z.literal('token.delete'), ids: z.array(id).min(1).max(100) }),
   z.object({ t: z.literal('settings.set'), patch: settingsPatch }),
+  z.object({ t: z.literal('chat'), text: z.string().min(1).max(600), as: z.string().max(60).optional() }),
   z.object({ t: z.literal('cursor'), x: coord, y: coord }),
   z.object({ t: z.literal('ping'), x: coord, y: coord }),
   z.object({ t: z.literal('ruler'), points: z.array(point).max(50).nullable() }),

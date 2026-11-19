@@ -11,14 +11,14 @@ export interface Token {
   owners: string[]; z: number; data: Record<string, any>
 }
 export interface Settings {
-  gms: string[]; playersMoveOwn: boolean; playersCreateTokens: boolean; playersPing: boolean; playersRuler: boolean; showCursors: boolean
+  gms: string[]; playersMoveOwn: boolean; playersCreateTokens: boolean; playersEditOwnStats: boolean; playersPing: boolean; playersRuler: boolean; showCursors: boolean
 }
 export interface Who { id: string; username: string; role: string }
 export interface Cursor { user: string; name: string; x: number; y: number; at: number }
 export interface Ruler { user: string; name: string; points: { x: number; y: number }[] }
 export type Conn = 'connecting' | 'open' | 'closed'
 
-export const DEFAULT_SETTINGS: Settings = { gms: [], playersMoveOwn: true, playersCreateTokens: false, playersPing: true, playersRuler: true, showCursors: true }
+export const DEFAULT_SETTINGS: Settings = { gms: [], playersMoveOwn: true, playersCreateTokens: false, playersEditOwnStats: true, playersPing: true, playersRuler: true, showCursors: true }
 
 interface TableState {
   conn: Conn

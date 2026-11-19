@@ -366,6 +366,19 @@ const migrations: string[] = [
     settings TEXT NOT NULL DEFAULT '{}'
   );
   `,
+  `
+  CREATE TABLE chat_messages (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    ts INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    to_ids TEXT NOT NULL DEFAULT '[]',
+    parts TEXT NOT NULL
+  );
+  CREATE INDEX chat_ws ON chat_messages(workspace_id, ts);
+  `,
 ]
 
 export const SCHEMA_VERSION = migrations.length
