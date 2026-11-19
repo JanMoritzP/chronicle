@@ -10,7 +10,8 @@ export const db = new Database(path.join(config.dataDir, 'dnd.db'))
 db.pragma('journal_mode = WAL')
 db.pragma('foreign_keys = ON')
 
-const migrations: string[] = [
+/** A step is SQL, or a function when it has to look at what is already there. Steps are only ever added at the end: a shipped step is never edited. */
+const migrations: (string | ((d: Database.Database) => void))[] = [
   `
   CREATE TABLE users (
     id TEXT PRIMARY KEY,
@@ -391,8 +392,21 @@ const migrations: string[] = [
     open INTEGER NOT NULL DEFAULT 0
   );
   CREATE INDEX walls_scene ON scene_walls(scene_id);
-  ALTER TABLE table_state ADD COLUMN combat TEXT NOT NULL DEFAULT '{}';
-  CREATE TABLE encounters (
+  CREATE TABLE scene_fog (
+    scene_id TEXT NOT NULL REFERENCES scenes(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL,
+    mask BLOB NOT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (scene_id, user_id)
+  );
+  `,
+  // Combat, encounters, drawings and tiles. They were first added to the step above while it was still unreleased,
+  // so installs from 0.24 to 0.28 have some of them and not others: create only what is missing.
+  (d) => {
+    const columns = (d.prepare('PRAGMA table_info(table_state)').all() as { name: string }[]).map((c) => c.name)
+    if (!columns.includes('combat')) d.exec("ALTER TABLE table_state ADD COLUMN combat TEXT NOT NULL DEFAULT '{}'")
+    d.exec(`
+  CREATE TABLE IF NOT EXISTS encounters (
     id TEXT PRIMARY KEY,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
@@ -400,8 +414,8 @@ const migrations: string[] = [
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
   );
-  CREATE INDEX encounters_ws ON encounters(workspace_id);
-  CREATE TABLE drawings (
+  CREATE INDEX IF NOT EXISTS encounters_ws ON encounters(workspace_id);
+  CREATE TABLE IF NOT EXISTS drawings (
     id TEXT PRIMARY KEY,
     scene_id TEXT NOT NULL REFERENCES scenes(id) ON DELETE CASCADE,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -415,8 +429,8 @@ const migrations: string[] = [
     gm_only INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL
   );
-  CREATE INDEX drawings_scene ON drawings(scene_id);
-  CREATE TABLE scene_tiles (
+  CREATE INDEX IF NOT EXISTS drawings_scene ON drawings(scene_id);
+  CREATE TABLE IF NOT EXISTS scene_tiles (
     id TEXT PRIMARY KEY,
     scene_id TEXT NOT NULL REFERENCES scenes(id) ON DELETE CASCADE,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -428,15 +442,9 @@ const migrations: string[] = [
     hidden INTEGER NOT NULL DEFAULT 0,
     z INTEGER NOT NULL DEFAULT 0
   );
-  CREATE INDEX tiles_scene ON scene_tiles(scene_id);
-  CREATE TABLE scene_fog (
-    scene_id TEXT NOT NULL REFERENCES scenes(id) ON DELETE CASCADE,
-    user_id TEXT NOT NULL,
-    mask BLOB NOT NULL,
-    updated_at INTEGER NOT NULL,
-    PRIMARY KEY (scene_id, user_id)
-  );
-  `,
+  CREATE INDEX IF NOT EXISTS tiles_scene ON scene_tiles(scene_id);
+  `)
+  },
 ]
 
 export const SCHEMA_VERSION = migrations.length
@@ -454,7 +462,8 @@ export function migrate(target: Database.Database = db) {
   let version = schemaVersionOf(target)
   while (version < migrations.length) {
     target.transaction(() => {
-      target.exec(migrations[version])
+      const step = migrations[version]
+      if (typeof step === 'string') target.exec(step); else step(target)
       version++
       target.prepare("INSERT INTO meta(key,value) VALUES('schema_version',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(String(version))
     })()

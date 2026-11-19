@@ -60,6 +60,8 @@ const makeScene = async (page: import('@playwright/test').Page, name: string) =>
   await page.getByPlaceholder('The crypt under the chapel').fill(name)
   await page.getByRole('button', { name: 'Create' }).click()
   await expect(page.locator('.tt-bar')).toContainText(name)
+  // a failed message shows up as a banner; creating a scene must never leave one
+  await expect(page.getByRole('alert')).toHaveCount(0)
 }
 const makeToken = async (page: import('@playwright/test').Page, name: string) => {
   await page.locator('.tt-bar').getByRole('button', { name: 'Token' }).click()

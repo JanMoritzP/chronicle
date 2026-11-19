@@ -688,7 +688,7 @@ export function attachTable(server: HttpServer) {
         const r = clientMessage.safeParse(json)
         if (!r.success) return send(c, { t: 'nack', op: (json as { op?: string } | null)?.op ?? null, error: 'bad message' })
         if (!c.limit() && ['cursor', 'ruler', 'token.move'].includes(r.data.t)) return
-        c.queue = c.queue.then(() => handle(c, r.data)).catch(() => nack(c, r.data, 'failed'))
+        c.queue = c.queue.then(() => handle(c, r.data)).catch((e) => { console.error('table message failed:', r.data.t, e); nack(c, r.data, 'The table could not do that. Reload the page and try again.') })
       })
       socket.on('pong', () => { c.alive = true })
       socket.on('close', () => { conns.delete(c); presenceChanged(); announce(c.ws); sameScene(c, () => true, { t: 'cursor.gone', user: c.user.id }) })
