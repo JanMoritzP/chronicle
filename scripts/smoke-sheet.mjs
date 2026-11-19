@@ -69,6 +69,25 @@ check('writing both keeps the new sheet', r.data.props.sheet?.name === 'Goblin')
 r = await call('PATCH', `/api/pages/${id}`, { props: { sheet: { v: 2 } } })
 check('whole props with a bad sheet are refused', r.status === 400)
 
+// characters
+const hero = () => ({ ...sheet(), kind: 'character', name: 'Aria', player: 'Sam', species: 'Elf', background: 'Sage', classes: [{ name: 'Wizard', level: 5, subclass: 'Evoker' }], profs: { saves: ['int', 'wis'], skills: { arcana: 'e' }, tools: 'Calligrapher' }, hitDice: [{ sides: 6, total: 5, used: 1 }], deathSaves: { ok: 0, fail: 0 }, spellcasting: { ability: 'int', slots: [{ total: 4, used: 1 }] }, spells: 'Fire Bolt', inventory: [{ name: 'Quarterstaff', qty: 1, equipped: true, note: '' }], currency: { cp: 0, sp: 0, ep: 0, gp: 25, pp: 0 }, inspiration: false })
+r = await call('POST', `/api/workspaces/${ws}/pages`, { title: 'Aria', props: { type: 'person', sheet: hero() } })
+check('a character sheet is stored', r.status === 200)
+const heroId = r.data.id
+r = await call('GET', `/api/pages/${heroId}`)
+check('with its class levels, proficiencies and slots', r.data.props.sheet.kind === 'character' && r.data.props.sheet.classes[0].level === 5 && r.data.props.sheet.profs.skills.arcana === 'e' && r.data.props.sheet.spellcasting.slots[0].total === 4)
+r = await call('PATCH', `/api/pages/${heroId}`, { propsPatch: { sheet: { 'currency.gp': 40, 'spellcasting.slots': [{ total: 4, used: 3 }, { total: 2, used: 0 }], 'hp.current': 11, 'hp.temp': 3, inspiration: true } } })
+r = await call('GET', `/api/pages/${heroId}`)
+check('character fields are patched by path', r.data.props.sheet.currency.gp === 40 && r.data.props.sheet.currency.sp === 0 && r.data.props.sheet.spellcasting.slots[0].used === 3 && r.data.props.sheet.hp.current === 11 && r.data.props.sheet.inspiration === true)
+r = await call('PATCH', `/api/pages/${heroId}`, { propsPatch: { sheet: { 'classes': [{ name: 'Wizard', level: 99 }] } } })
+check('a level above 20 is refused', r.status === 400)
+r = await call('PATCH', `/api/pages/${heroId}`, { propsPatch: { sheet: { 'profs': { saves: ['luck'], skills: {} } } } })
+check('an unknown ability is refused', r.status === 400)
+r = await call('PATCH', `/api/pages/${heroId}`, { propsPatch: { sheet: { 'inventory': Array.from({ length: 201 }, () => ({ name: 'x', qty: 1, equipped: false, note: '' })) } } })
+check('an endless inventory is refused', r.status === 400)
+r = await call('GET', `/api/pages/${heroId}`)
+check('refused patches change nothing', r.data.props.sheet.currency.gp === 40 && r.data.props.sheet.classes[0].level === 5)
+
 await call('DELETE', `/api/workspaces/${ws}`)
 if (failed) { console.log(`\n${failed} failed`); process.exit(1) }
 console.log('\nall passed')

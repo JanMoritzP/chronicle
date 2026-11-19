@@ -843,3 +843,41 @@ input[type=color] { width: 34px; height: 24px; padding: 0; border: 1px solid var
 .sv .sv-feature-head { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .sv .sv-fname { font-weight: 700; font-style: italic; }
 .sv .sv-usage { min-width: 110px; }
+
+/* ---------- character sheet ---------- */
+.cs { display: flex; flex-direction: column; gap: 14px; margin: 8px 0 22px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); }
+.cs h4 { margin: 0 0 6px; font-size: 13px; text-transform: none; color: var(--muted); letter-spacing: 0; }
+.cs-name { font: 600 1.5rem/1.2 var(--font-display); border: 0; background: transparent; outline: 0; width: 100%; padding: 0; margin: 0; color: inherit; }
+.cs-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 4px 0; }
+.cs-line .sv-text { min-width: 110px; flex: 1; }
+.cs-classes { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.cs-class { display: inline-flex; align-items: center; gap: 6px; }
+.cs-combat { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.cs-box { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); text-align: left; font: inherit; color: inherit; }
+.cs-box > b { font-size: 12px; color: var(--muted); font-weight: 500; }
+.cs-hp { grid-column: span 2; }
+.cs-hp .tt-hpbar { width: 100%; }
+.cs-hpfields { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.cs-hd, .cs-ds { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.cs-add { display: inline-flex; gap: 4px; }
+.cs-bubbles { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.cs-bubble { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--accent); background: transparent; padding: 0; cursor: pointer; }
+.cs-bubble.on { background: var(--accent); }
+.cs-roll { cursor: pointer; }
+button.cs-roll:disabled { cursor: default; }
+.cs-abilities { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.cs-ability { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); }
+.cs-ability > .cs-roll { display: flex; flex-direction: column; align-items: center; border: 0; background: transparent; color: inherit; font: inherit; }
+.cs-mod { font-size: 1.4rem; font-weight: 600; }
+.cs-save, .cs-skill { border: 0; background: transparent; color: inherit; font: inherit; font-size: 12px; cursor: pointer; padding: 2px 4px; border-radius: 6px; display: flex; gap: 6px; align-items: center; text-align: left; }
+.cs-save:hover, .cs-skill:hover { background: var(--bg-hover); }
+.cs-skillgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 0 12px; }
+.cs-skill { width: 100%; }
+.cs-mark { width: 14px; color: var(--accent); }
+.cs-slots { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px; margin: 6px 0; }
+.cs-slot { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; }
+.cs-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.cs-items li { display: flex; align-items: center; gap: 6px; }
+.cs-items .sv-text { flex: 1; }
+.cs-notes { margin: 4px 0; white-space: pre-wrap; }
+.cs-wrap, .cs-add { margin: 8px 0; }

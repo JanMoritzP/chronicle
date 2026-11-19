@@ -26,8 +26,32 @@ export interface Feature {
   cost?: number
 }
 
-export interface Sheet {
+export interface ClassLevel { name: string; level: number; subclass?: string }
+export interface HitDice { sides: number; total: number; used: number }
+export interface InventoryItem { name: string; qty: number; equipped: boolean; note: string }
+export interface Currency { cp: number; sp: number; ep: number; gp: number; pp: number }
+export type Proficiency = 'p' | 'e'
+
+/** What only a player character has. Everything is optional so a creature's sheet is unchanged. */
+export interface CharacterPart {
+  player?: string
+  species?: string
+  background?: string
+  classes?: ClassLevel[]
+  inspiration?: boolean
+  profs?: { saves: Ability[]; skills: Record<string, Proficiency>; tools?: string }
+  hitDice?: HitDice[]
+  deathSaves?: { ok: number; fail: number }
+  spellcasting?: { ability: Ability | ''; /** index 0 is level 1 */ slots: { total: number; used: number }[] }
+  spells?: string
+  inventory?: InventoryItem[]
+  currency?: Currency
+}
+
+export interface Sheet extends CharacterPart {
   v: 1
+  /** a creature unless it says otherwise */
+  kind?: 'creature' | 'character'
   ruleset: '5e' | '5e-2024'
   name: string
   size: string
@@ -36,7 +60,7 @@ export interface Sheet {
   alignment: string
   abilities: Record<Ability, number>
   ac: { value: number; note: string }
-  hp: { max: number; formula: string }
+  hp: { max: number; formula: string; /** characters keep their current and temporary hit points on the sheet */ current?: number; temp?: number }
   speed: Partial<Record<SpeedMode, number>> & { hover?: boolean }
   /** total bonuses, as printed; a missing entry means "just the ability modifier" */
   saves: Partial<Record<Ability, number>>
@@ -98,11 +122,50 @@ export const signed = (n: number) => (n >= 0 ? `+${n}` : `−${Math.abs(n)}`)
 /** Proficiency bonus from challenge rating (a challenge rating below 1 counts as 1). */
 export const profBonus = (cr: number) => 2 + Math.floor((Math.max(cr, 1) - 1) / 4)
 
-export const saveBonus = (s: Sheet, a: Ability) => s.saves[a] ?? abilityMod(s.abilities[a])
+export const isCharacter = (s: Sheet) => s.kind === 'character'
+export const characterLevel = (s: Sheet) => (s.classes ?? []).reduce((n, c) => n + Math.max(0, c.level), 0)
+
+/** The proficiency bonus: by level for a character, by challenge rating for a creature. */
+export const proficiency = (s: Sheet) => isCharacter(s) ? 2 + Math.floor((Math.max(1, characterLevel(s)) - 1) / 4) : s.cr != null ? profBonus(s.cr) : 2
+
+export const SKILLS: Record<string, Ability> = {
+  acrobatics: 'dex', 'animal handling': 'wis', arcana: 'int', athletics: 'str', deception: 'cha', history: 'int', insight: 'wis', intimidation: 'cha', investigation: 'int',
+  medicine: 'wis', nature: 'int', perception: 'wis', performance: 'cha', persuasion: 'cha', religion: 'int', 'sleight of hand': 'dex', stealth: 'dex', survival: 'wis',
+}
+
+export function skillBonus(s: Sheet, skill: string): number {
+  const ability = SKILLS[skill] ?? 'int'
+  if (!isCharacter(s)) return s.skills[skill] ?? abilityMod(s.abilities[ability])
+  const p = s.profs?.skills[skill]
+  return abilityMod(s.abilities[ability]) + (p === 'e' ? 2 * proficiency(s) : p === 'p' ? proficiency(s) : 0)
+}
+
+export const saveBonus = (s: Sheet, a: Ability) => isCharacter(s) ? abilityMod(s.abilities[a]) + (s.profs?.saves.includes(a) ? proficiency(s) : 0) : s.saves[a] ?? abilityMod(s.abilities[a])
+
+export const spellAbilityMod = (s: Sheet) => s.spellcasting?.ability ? abilityMod(s.abilities[s.spellcasting.ability]) : null
+export const spellDC = (s: Sheet) => { const m = spellAbilityMod(s); return m == null ? null : 8 + proficiency(s) + m }
+export const spellAttack = (s: Sheet) => { const m = spellAbilityMod(s); return m == null ? null : proficiency(s) + m }
+
+/** The fields a long rest changes: full hit points, no temporary ones, every slot back, half the hit dice back (at least one), death saves cleared. */
+export function longRestPatch(s: Sheet): Record<string, unknown> {
+  const patch: Record<string, unknown> = { 'hp.current': s.hp.max, 'hp.temp': 0, deathSaves: { ok: 0, fail: 0 } }
+  if (s.spellcasting) patch['spellcasting.slots'] = s.spellcasting.slots.map((x) => ({ ...x, used: 0 }))
+  if (s.hitDice?.length) {
+    let back = Math.max(1, Math.floor((s.hitDice.reduce((n, d) => n + d.total, 0)) / 2))
+    patch.hitDice = s.hitDice.map((d) => { const give = Math.min(d.used, back); back -= give; return { ...d, used: d.used - give } })
+  }
+  return patch
+}
+
+export const emptyCharacter = (ruleset: Sheet['ruleset'] = '5e'): Sheet => ({
+  ...emptySheet(ruleset), kind: 'character', hp: { max: 10, formula: '', current: 10, temp: 0 }, classes: [{ name: '', level: 1 }],
+  profs: { saves: [], skills: {} }, hitDice: [], deathSaves: { ok: 0, fail: 0 }, spellcasting: { ability: '', slots: [] }, spells: '', inventory: [],
+  currency: { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0 }, inspiration: false,
+})
 
 export const initiativeBonus = (s: Sheet) => s.initiative ?? abilityMod(s.abilities.dex)
 
-export const passivePerception = (s: Sheet) => s.passivePerception ?? 10 + (s.skills.perception ?? abilityMod(s.abilities.wis))
+export const passivePerception = (s: Sheet) => s.passivePerception ?? 10 + skillBonus(s, 'perception')
 
 export function crText(cr: number | undefined): string {
   if (cr == null || !Number.isFinite(cr)) return ''

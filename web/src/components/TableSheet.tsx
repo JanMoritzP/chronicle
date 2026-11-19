@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
-import { ABILITIES, FEATURE_GROUPS, abilityMod, crText, initiativeBonus, passivePerception, rollsIn, saveBonus, sheetOf, signed, speedText, type Sheet } from '../lib/sheet'
+import { ABILITIES, FEATURE_GROUPS, SKILLS, abilityMod, crText, initiativeBonus, isCharacter, passivePerception, rollsIn, saveBonus, sheetOf, signed, skillBonus, speedText, type Sheet } from '../lib/sheet'
 
 // The sheet of a creature as a table card: every number that can be rolled is a button.
 // Click rolls it, Shift-click with advantage, Ctrl-click with disadvantage. The roll goes to the table chat.
@@ -42,7 +42,7 @@ export function SheetCard({ sheet, roll }: { sheet: Sheet; roll: RollFn }) {
       <div className="tt-sheet-sub muted">{[sheet.size, sheet.type, sheet.alignment && `, ${sheet.alignment}`].filter(Boolean).join(' ').replace(' ,', ',')}</div>
       <div className="tt-sheet-facts">
         <span><b>AC</b> {sheet.ac.value}{sheet.ac.note ? ` (${sheet.ac.note})` : ''}</span>
-        <span><b>HP</b> {sheet.hp.max}{sheet.hp.formula ? ` (${sheet.hp.formula})` : ''}</span>
+        <span><b>HP</b> {isCharacter(sheet) ? `${sheet.hp.current ?? sheet.hp.max} / ${sheet.hp.max}` : `${sheet.hp.max}${sheet.hp.formula ? ` (${sheet.hp.formula})` : ''}`}</span>
         <span><b>Speed</b> {speedText(sheet)}</span>
         {sheet.cr != null && <span><b>CR</b> {crText(sheet.cr)}</span>}
         <button className="tt-roll" title="Roll initiative. Shift for advantage, Ctrl for disadvantage." onClick={(e) => check(e, initiativeBonus(sheet), 'Initiative')}>Initiative {signed(initiativeBonus(sheet))}</button>
@@ -56,11 +56,11 @@ export function SheetCard({ sheet, roll }: { sheet: Sheet; roll: RollFn }) {
         ))}
       </div>
       <div className="tt-chips" role="group" aria-label="Saving throws">
-        {ABILITIES.map((a) => <button key={a} className={`tt-roll${sheet.saves[a] != null ? ' prof' : ''}`} onClick={(e) => check(e, saveBonus(sheet, a), `${a.toUpperCase()} save`)}>{a.toUpperCase()} save {signed(saveBonus(sheet, a))}</button>)}
+        {ABILITIES.map((a) => <button key={a} className={`tt-roll${isCharacter(sheet) ? (sheet.profs?.saves.includes(a) ? ' prof' : '') : sheet.saves[a] != null ? ' prof' : ''}`} onClick={(e) => check(e, saveBonus(sheet, a), `${a.toUpperCase()} save`)}>{a.toUpperCase()} save {signed(saveBonus(sheet, a))}</button>)}
       </div>
-      {Object.keys(sheet.skills).length > 0 && (
+      {(isCharacter(sheet) || Object.keys(sheet.skills).length > 0) && (
         <div className="tt-chips" role="group" aria-label="Skills">
-          {Object.entries(sheet.skills).map(([k, v]) => <button key={k} className="tt-roll prof" onClick={(e) => check(e, v, `${title(k)} check`)}>{title(k)} {signed(v)}</button>)}
+          {(isCharacter(sheet) ? Object.keys(SKILLS).map((k): [string, number] => [k, skillBonus(sheet, k)]) : Object.entries(sheet.skills)).map(([k, v]) => <button key={k} className={`tt-roll${isCharacter(sheet) && !sheet.profs?.skills[k] ? '' : ' prof'}`} onClick={(e) => check(e, v, `${title(k)} check`)}>{title(k)} {signed(v)}</button>)}
         </div>
       )}
       {(sheet.vulnerabilities || sheet.resistances || sheet.immunities || sheet.conditionImmunities) && (

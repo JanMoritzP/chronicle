@@ -403,6 +403,23 @@ check('players cannot clear the scene', !!(await pa.until((m) => m.t === 'nack' 
 gm.send({ t: 'draw.clear', sceneId: crypt })
 check('the GM clears every drawing', !!(await pa.until((m) => m.t === 'draw.cleared' && m.sceneId === crypt)))
 
+// a character's hit points follow their token
+const charSheet = { v: 1, kind: 'character', ruleset: '5e', name: 'Hero', size: '', type: '', alignment: '', abilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 }, ac: { value: 16, note: '' }, hp: { max: 30, formula: '', current: 30, temp: 0 }, speed: { walk: 30 }, saves: {}, skills: {}, senses: {}, vulnerabilities: '', resistances: '', immunities: '', conditionImmunities: '', languages: '', features: { traits: [], actions: [], bonus: [], reactions: [], legendary: [] }, classes: [{ name: 'Fighter', level: 3 }] }
+const heroPage = (await call('POST', `/api/workspaces/${ws}/pages`, { title: 'Hero', props: { type: 'person', sheet: charSheet } }, gmCookie)).data
+gm.send({ t: 'token.add', sceneId: crypt, token: { name: 'Hero', x: 70, y: 70, owners: [alice.id] } })
+const heroTok = (await gm.until((m) => m.t === 'token' && m.token.name === 'Hero')).token
+gm.send({ t: 'token.update', id: heroTok.id, patch: { pageId: heroPage.id } })
+gm.send({ t: 'token.stat', id: heroTok.id, stat: { hp: { value: 30, max: 30 } } })
+pa.send({ t: 'token.stat', id: heroTok.id, damage: 12 })
+await gm.until((m) => m.t === 'token' && m.token.id === heroTok.id && m.token.data.hp?.value === 18)
+await sleep(200)
+check('damage on the table is on the sheet', (await call('GET', `/api/pages/${heroPage.id}`, null, gmCookie)).data.props.sheet.hp.current === 18)
+gm.send({ t: 'token.stat', id: heroTok.id, stat: { hp: { temp: 5 } } })
+await sleep(250)
+check('and so are temporary hit points', (await call('GET', `/api/pages/${heroPage.id}`, null, gmCookie)).data.props.sheet.hp.temp === 5)
+gm.send({ t: 'token.delete', ids: [heroTok.id] })
+await sleep(100)
+
 // bad input
 gm.send({ t: 'token.update', id: aria.id, patch: { size: 9999 }, op: 'big' })
 check('out of range values are refused', !!(await gm.until((m) => m.t === 'nack' && m.op === 'big')))

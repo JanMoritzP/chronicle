@@ -1,5 +1,5 @@
 import { creatureToStatBlock, importPlan } from '../web/src/lib/open5e'
-import { rollsIn, abilityMod, sheetOf, wholeSheetPatch, crFromText, crText, initiativeBonus, passivePerception, profBonus, saveBonus, sheetFromCreature, sheetFromLegacy, speedText } from '../web/src/lib/sheet'
+import { emptyCharacter, longRestPatch, proficiency, skillBonus, spellAttack, spellDC, characterLevel, isCharacter, rollsIn, abilityMod, sheetOf, wholeSheetPatch, crFromText, crText, initiativeBonus, passivePerception, profBonus, saveBonus, sheetFromCreature, sheetFromLegacy, speedText } from '../web/src/lib/sheet'
 import type { LibraryEntry } from '../web/src/types'
 
 let failed = 0
@@ -64,6 +64,24 @@ const ro = rollsIn('Melee Weapon Attack: +4 to hit, reach 5 ft. Hit: 5 (1d6 + 2)
 check('attack and damage are found in the text', ro.attack === 4 && ro.damage.length === 2 && ro.damage[0].expr === '1d6+2' && ro.damage[0].type === 'slashing' && ro.damage[1].type === 'fire')
 check('a saving throw is found', rollsIn('Each creature must succeed on a DC 13 Dexterity saving throw').save?.dc === 13 && rollsIn('nothing here').attack === null)
 check('a minus sign in the bonus', rollsIn('−1 to hit').attack === -1 || rollsIn('-1 to hit').attack === -1)
+
+const ch = emptyCharacter()
+ch.abilities = { str: 8, dex: 14, con: 14, int: 18, wis: 12, cha: 10 }
+ch.classes = [{ name: 'Wizard', level: 5 }]
+ch.profs = { saves: ['int', 'wis'], skills: { arcana: 'e', stealth: 'p' } }
+ch.spellcasting = { ability: 'int', slots: [{ total: 4, used: 3 }, { total: 3, used: 3 }, { total: 2, used: 0 }] }
+ch.hitDice = [{ sides: 6, total: 5, used: 4 }]
+ch.hp = { max: 28, formula: '', current: 3, temp: 2 }
+check('a character is told apart and has a level', isCharacter(ch) && !isCharacter(sheetFromLegacy({})) && characterLevel(ch) === 5)
+check('proficiency follows the level', proficiency(ch) === 3 && proficiency({ ...ch, classes: [{ name: 'a', level: 1 }] }) === 2 && proficiency({ ...ch, classes: [{ name: 'a', level: 9 }] }) === 4 && proficiency({ ...ch, classes: [{ name: 'a', level: 17 }] }) === 6)
+check('multiclass levels add up', characterLevel({ ...ch, classes: [{ name: 'a', level: 3 }, { name: 'b', level: 2 }] }) === 5)
+check('saves add proficiency when proficient', saveBonus(ch, 'int') === 7 && saveBonus(ch, 'dex') === 2 && saveBonus(ch, 'wis') === 4)
+check('skills: expertise doubles, proficient adds, others are the modifier', skillBonus(ch, 'arcana') === 10 && skillBonus(ch, 'stealth') === 5 && skillBonus(ch, 'history') === 4 && skillBonus(ch, 'athletics') === -1)
+check('passive Perception uses the skill', passivePerception(ch) === 11)
+check('spell save DC and attack bonus', spellDC(ch) === 15 && spellAttack(ch) === 7 && spellDC(emptyCharacter()) === null)
+const rest = longRestPatch(ch) as any
+check('a long rest restores hit points, slots and half the hit dice', rest['hp.current'] === 28 && rest['hp.temp'] === 0 && rest['spellcasting.slots'].every((s: any) => s.used === 0) && rest.hitDice[0].used === 2 && rest.deathSaves.fail === 0)
+check('creatures are unchanged', saveBonus(s, 'dex') === 4 && skillBonus(s, 'stealth') === 4 && skillBonus(s, 'athletics') === 4)
 
 const plan = importPlan(dragon, null as any)
 check('import writes the sheet and the old stat block', plan.props.sheet?.hp.max === 110 && plan.props.data.main.data.hp === '110 (13d10 + 39)')

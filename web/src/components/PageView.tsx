@@ -19,7 +19,8 @@ import { typeOf } from '../lib/pageTypes'
 import { TypeIcon, useTypes } from './TypeIcon'
 import { TypeLayout } from './TypeLayout'
 import type { SheetPatch } from './SheetView'
-import { patchSheetLocal, sheetOf, wholeSheetPatch } from '../lib/sheet'
+import { emptyCharacter, patchSheetLocal, sheetOf, wholeSheetPatch } from '../lib/sheet'
+import { CharacterSheet } from './CharacterSheet'
 import { Select } from './Select'
 import type { FullPage, PageVersion } from '../types'
 import { ReadOnlyDoc } from '../editor/Embed'
@@ -267,6 +268,11 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
     setProps({ ...props, sheet: patchSheetLocal(base, patch) })
     schedule({ propsPatch: { sheet: props.sheet ? patch : { ...wholeSheetPatch(base), ...patch } } }, 500)
   }
+  const addCharacterSheet = () => {
+    const sheet = { ...emptyCharacter(), name: title }
+    setProps({ ...props, sheet })
+    schedule({ propsPatch: { sheet: wholeSheetPatch(sheet) } }, 200)
+  }
   const pickImage = () => new Promise<string | null>((resolve) => {
     const el = document.createElement('input')
     el.type = 'file'
@@ -390,6 +396,11 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
           )}
           {meta && <span style={{ marginLeft: 'auto' }}>{words} words · edited {ago(meta.updatedAt)}</span>}
         </div>
+        {sheetOf(props)?.kind === 'character' ? (
+          <CharacterSheet sheet={sheetOf(props)!} set={readOnly ? undefined : setSheetFields} />
+        ) : pageType?.id === 'person' && !readOnly && !zen ? (
+          <div className="cs-add"><button className="btn sm" onClick={addCharacterSheet}>Add a character sheet</button></div>
+        ) : null}
         {pageType ? (
           <TypeLayout layout={pageType.layout} data={typeData} readOnly={readOnly} setValue={setTypeValue} pickImage={pickImage} sheet={{ value: sheetOf(props), set: setSheetFields }}
             body={<EditorContent editor={editor} />} />

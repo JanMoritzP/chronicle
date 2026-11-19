@@ -30,7 +30,7 @@ function usageText(f: Feature) {
   return parts.length ? ` (${parts.join(', ')})` : ''
 }
 
-function FeatureEditor({ group, list, set }: { group: FeatureGroup; list: Feature[]; set: (next: Feature[]) => void }) {
+export function FeatureEditor({ group, list, set }: { group: FeatureGroup; list: Feature[]; set: (next: Feature[]) => void }) {
   const change = (i: number, p: Partial<Feature>) => set(list.map((f, j) => (j === i ? { ...f, ...p } : f)))
   return (
     <div className="sv-features">

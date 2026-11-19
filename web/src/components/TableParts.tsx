@@ -85,7 +85,7 @@ export function LinkPage({ token }: { token: Token }) {
     setOpen(false)
     const info = await loadSheet(id)
     sendTable({ t: 'token.update', id: token.id, patch: { pageId: id, ...(token.name ? {} : { name: title }), ...(!token.image && info.portrait && /^\/api\/uploads\/[A-Za-z0-9-]+$/.test(info.portrait) ? { image: info.portrait } : {}) } })
-    if (info.sheet) sendTable({ t: 'token.stat', id: token.id, stat: { hp: { value: info.sheet.hp.max, max: info.sheet.hp.max }, ac: info.sheet.ac.value, hpPrivate: info.type === 'monster' } })
+    if (info.sheet) sendTable({ t: 'token.stat', id: token.id, stat: { hp: { value: info.sheet.hp.current ?? info.sheet.hp.max, max: info.sheet.hp.max, temp: info.sheet.hp.temp ?? 0 }, ac: info.sheet.ac.value, hpPrivate: info.type === 'monster' } })
   }
   return (
     <div className="tt-link">

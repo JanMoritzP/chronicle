@@ -397,6 +397,9 @@ areas:
       - id: sheet.edit
         name: "A monster page edits its numbers in place and keeps them"
         files: [web/src/components/SheetView.tsx]
+      - id: sheet.character
+        name: "A person page gets a character sheet that works out the numbers"
+        files: [web/src/components/CharacterSheet.tsx]
       - id: sheet.legacy
         name: "An old text stat block is shown as a sheet and stored as one when edited"
         files: [web/src/lib/sheet.ts]

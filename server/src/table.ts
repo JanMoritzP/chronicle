@@ -8,6 +8,7 @@ import { userFromCookieHeader, type AuthUser } from './auth.js'
 import { config } from './config.js'
 import { db, now } from './db.js'
 import { uid } from './pages.js'
+import { publishWorld } from './live.js'
 import { presenceChanged } from './presence.js'
 import { ALLOWED } from './routes/uploads.js'
 import { parseChat, readable, type Kind, type Part } from './chat.js'
@@ -132,6 +133,20 @@ function initiativeBonus(ws: string, pageId: string | null) {
   if (!sheet) return 0
   return typeof sheet.initiative === 'number' ? sheet.initiative : Math.floor(((sheet.abilities?.dex ?? 10) - 10) / 2)
 }
+/** A character's hit points on the table are the hit points on their sheet: the page follows the token. */
+function followHp(ws: string, pageId: string | null, hp: { value?: number; max?: number; temp?: number } | undefined) {
+  if (!pageId || !hp) return
+  const row = db.prepare('SELECT props FROM pages WHERE id = ? AND workspace_id = ?').get(pageId, ws) as { props: string } | undefined
+  const props = parse<{ sheet?: { kind?: string; hp?: { max?: number; current?: number; temp?: number } } }>(row?.props ?? '{}', {})
+  if (props.sheet?.kind !== 'character' || !props.sheet.hp) return
+  const h = props.sheet.hp
+  if (typeof hp.value === 'number') h.current = Math.max(-9999, Math.min(100000, Math.round(hp.value)))
+  if (typeof hp.temp === 'number') h.temp = Math.max(0, Math.min(100000, Math.round(hp.temp)))
+  if (typeof hp.max === 'number') h.max = Math.max(0, Math.min(100000, Math.round(hp.max)))
+  db.prepare('UPDATE pages SET props = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(props), now(), pageId)
+  publishWorld(ws, { k: 'refresh', area: 'pages', pageId })
+}
+
 function postChat(ws: string, userId: string, name: string, kind: Kind, to: string[], parts: Part[]) {
   const msg = { id: uid(), ts: now(), userId, name, kind, to, parts }
   db.prepare('INSERT INTO chat_messages(id,workspace_id,user_id,name,ts,kind,to_ids,parts) VALUES(?,?,?,?,?,?,?,?)').run(msg.id, ws, userId, name, msg.ts, kind, JSON.stringify(to), JSON.stringify(parts))
@@ -339,6 +354,7 @@ async function handle(c: Conn, m: ClientMessage) {
       }
       if (JSON.stringify(data).length > 8000) return nack(c, m, 'too much data')
       db.prepare('UPDATE tokens SET data = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(data), now(), m.id)
+      if (st.hp || m.damage) followHp(ws, before.pageId, data.hp)
       return emitToken(ws, before, tokenRow(m.id, ws)!)
     }
     case 'chat': {

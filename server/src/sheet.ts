@@ -17,7 +17,26 @@ const features = z.array(feature).max(60)
 const score = int(0, 60)
 const bonus = int(-30, 60)
 
+const abilityKey = z.enum(['str', 'dex', 'con', 'int', 'wis', 'cha'])
+const count = (max: number) => int(0, max)
+const character = {
+  kind: z.enum(['creature', 'character']).optional(),
+  player: text(80).optional(),
+  species: text(80).optional(),
+  background: text(80).optional(),
+  classes: z.array(z.object({ name: text(60), level: int(0, 20), subclass: text(60).optional() })).max(6).optional(),
+  inspiration: z.boolean().optional(),
+  profs: z.object({ saves: z.array(abilityKey).max(6), skills: z.record(text(40), z.enum(['p', 'e'])).refine((r) => Object.keys(r).length <= 30), tools: text(300).optional() }).optional(),
+  hitDice: z.array(z.object({ sides: int(2, 100), total: count(40), used: count(40) })).max(6).optional(),
+  deathSaves: z.object({ ok: int(0, 3), fail: int(0, 3) }).optional(),
+  spellcasting: z.object({ ability: z.union([abilityKey, z.literal('')]), slots: z.array(z.object({ total: count(20), used: count(20) })).max(9) }).optional(),
+  spells: text(8000).optional(),
+  inventory: z.array(z.object({ name: text(120), qty: count(99999), equipped: z.boolean(), note: text(300) })).max(200).optional(),
+  currency: z.object({ cp: count(10_000_000), sp: count(10_000_000), ep: count(10_000_000), gp: count(10_000_000), pp: count(10_000_000) }).optional(),
+}
+
 export const sheetSchema = z.object({
+  ...character,
   v: z.literal(1),
   ruleset: z.enum(['5e', '5e-2024']),
   name: text(300),
@@ -26,7 +45,7 @@ export const sheetSchema = z.object({
   alignment: text(80),
   abilities: z.object({ str: score, dex: score, con: score, int: score, wis: score, cha: score }),
   ac: z.object({ value: int(0, 99), note: text(200) }),
-  hp: z.object({ max: int(0, 100000), formula: text(100) }),
+  hp: z.object({ max: int(0, 100000), formula: text(100), current: int(-9999, 100000).optional(), temp: int(0, 100000).optional() }),
   speed: z.object({ walk: optInt(0, 1000), burrow: optInt(0, 1000), climb: optInt(0, 1000), crawl: optInt(0, 1000), fly: optInt(0, 1000), swim: optInt(0, 1000), hover: z.boolean().optional() }),
   saves: z.object({ str: bonus.optional(), dex: bonus.optional(), con: bonus.optional(), int: bonus.optional(), wis: bonus.optional(), cha: bonus.optional() }),
   skills: z.record(text(40), bonus).refine((r) => Object.keys(r).length <= 40),
