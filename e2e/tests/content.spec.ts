@@ -283,3 +283,28 @@ test('a character levels up, and what they carry and are attuned to is counted',
   await app.getByLabel('Plate armor attuned').check()
   await expect(app.getByLabel('Load')).toContainText('Attuned to 1 of 3')
 })
+
+test('a character from Foundry, D&D Beyond or Roll20 can be imported, and a character exported', { tag: '@feature:sheet.import' }, async ({ app, makePage }) => {
+  await makePage('Seraphine', { props: { type: 'person' } })
+  await app.reload()
+  await openPage(app, 'Seraphine')
+  const actor = {
+    name: 'Seraphine', type: 'character',
+    system: { abilities: { str: { value: 10 }, dex: { value: 16, proficient: 1 }, con: { value: 14 }, int: { value: 12 }, wis: { value: 13 }, cha: { value: 8 } }, attributes: { hp: { value: 21, max: 30 }, ac: { value: 15 } }, skills: { ste: { value: 1 } }, currency: { gp: 120 } },
+    items: [{ type: 'class', name: 'Rogue', system: { levels: 5 } }, { type: 'weapon', name: 'Rapier', system: { quantity: 1, equipped: true, weight: 2 } }],
+  }
+  const chooser = app.waitForEvent('filechooser')
+  await app.getByRole('button', { name: 'Import a character' }).click()
+  await (await chooser).setFiles({ name: 'seraphine.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(actor)) })
+  await expect(app.getByLabel('Class 1', { exact: true })).toHaveValue('Rogue')
+  await expect(app.getByLabel('Level of Rogue')).toHaveValue('5')
+  await expect(app.getByLabel('Maximum hit points', { exact: true })).toHaveValue('30')
+  await expect(app.getByLabel('Current hit points', { exact: true })).toHaveValue('21')
+  await expect(app.getByLabel('Item 1')).toHaveValue('Rapier')
+  const download = app.waitForEvent('download')
+  await app.getByRole('button', { name: 'Export this character' }).click()
+  const saved = JSON.parse((await import('node:fs')).readFileSync(await (await download).path(), 'utf8'))
+  expect(saved.format).toBe('chronicle-character')
+  expect(saved.sheet.name).toBe('Seraphine')
+  expect(saved.sheet.abilities.dex).toBe(16)
+})

@@ -505,6 +505,9 @@ areas:
       - id: table.chat-more
         name: "Speaking as someone (/as), out of character talk (/ooc) and applying a damage roll to the selected tokens"
         files: [server/src/chat.ts, web/src/components/TableParts.tsx]
+      - id: sheet.import
+        name: "Import a character from Foundry, D&D Beyond or Roll20, and export one as a file"
+        files: [web/src/lib/importers.ts, web/src/components/PageView.tsx]
       - id: table.fog
         name: "Fog of war and darkness are switched on per scene and kept"
         files: [web/src/components/Tabletop.tsx]

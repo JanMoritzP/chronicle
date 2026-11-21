@@ -15,6 +15,7 @@ import { useLibrary } from '../lib/library'
 import { searchPages } from '../lib/linkSearch'
 import { useStore } from '../store'
 import { alertDialog, askText, confirmDialog } from '../lib/dialog'
+import { importCharacter } from '../lib/importers'
 import { typeOf } from '../lib/pageTypes'
 import { TypeIcon, useTypes } from './TypeIcon'
 import { TypeLayout } from './TypeLayout'
@@ -286,6 +287,17 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
     setProps({ ...props, sheet })
     schedule({ propsPatch: { sheet: wholeSheetPatch(sheet) } }, 200)
   }
+  const importCharacterFile = async () => {
+    const f = await new Promise<File | null>((resolve) => { const el = document.createElement('input'); el.type = 'file'; el.accept = '.json,application/json'; el.onchange = () => resolve(el.files?.[0] ?? null); el.oncancel = () => resolve(null); el.click() })
+    if (!f) return
+    let raw: unknown
+    try { raw = JSON.parse(await f.text()) } catch { alertDialog('That file could not be read. A character is a JSON file.'); return }
+    const r = importCharacter(raw, system === '5e-2024' ? '5e-2024' : '5e')
+    if ('error' in r) { alertDialog(r.error); return }
+    const sheet = { ...r.sheet, kind: 'character' as const, name: r.sheet.name || title }
+    setProps({ ...props, sheet })
+    schedule({ propsPatch: { sheet: wholeSheetPatch(sheet) } }, 200)
+  }
   const pickImage = () => new Promise<string | null>((resolve) => {
     const el = document.createElement('input')
     el.type = 'file'
@@ -414,7 +426,7 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
             ? <Pf2eCharacterSheet sheet={sheetOf(props)!} set={readOnly ? undefined : setSheetFields} />
             : <CharacterSheet sheet={sheetOf(props)!} set={readOnly ? undefined : setSheetFields} />
         ) : pageType?.id === 'person' && !readOnly && !zen ? (
-          <div className="cs-add"><button className="btn sm" onClick={system === 'pf2e' ? addPf2eCharacter : addCharacterSheet}>Add a character sheet</button></div>
+          <div className="cs-add"><button className="btn sm" onClick={system === 'pf2e' ? addPf2eCharacter : addCharacterSheet}>Add a character sheet</button>{system !== 'pf2e' && <button className="btn sm" title="From a Chronicle, Foundry, D&D Beyond or Roll20 file" onClick={importCharacterFile}>Import a character</button>}</div>
         ) : null}
         {pageType ? (
           <TypeLayout layout={pageType.layout} data={typeData} readOnly={readOnly} setValue={setTypeValue} pickImage={pickImage} sheet={{ value: sheetOf(props), set: setSheetFields, createPf2e: system === 'pf2e' ? addPf2eSheet : undefined }}

@@ -7,6 +7,7 @@ import {
 } from '../lib/sheet'
 import { attunedCount, capacityOf, carriedWeight, loadOf, MAX_ATTUNED } from '../lib/levelup'
 import { LevelUpPanel } from './LevelUpPanel'
+import { exportCharacter } from '../lib/importers'
 import { FeatureEditor, type SheetPatch } from './SheetView'
 import { Select } from './Select'
 
@@ -95,6 +96,7 @@ export function CharacterSheet({ sheet, set, roll }: { sheet: Sheet; set?: (patc
           <label className="sv-mini"><input type="checkbox" disabled={!edit} checked={!!sheet.inspiration} onChange={(e) => act({ inspiration: e.target.checked })} />{sheet.ruleset === '5e-2024' ? 'Heroic Inspiration' : 'Inspiration'}</label>
           <label className="sv-mini">XP<Num label="Experience points" value={sheet.xp} width={80} onChange={(n) => act({ xp: n })} /></label>
           {edit && <button className="btn sm" onClick={() => setLevelling((v) => !v)}>Level up</button>}
+          <button className="btn sm" title="Save this character as a file to share or keep" onClick={() => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(exportCharacter(sheet), null, 2)], { type: 'application/json' })); a.download = `${(sheet.name || 'character').replace(/[^\w\- ]+/g, '').trim() || 'character'}.chronicle-character.json`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000) }}>Export this character</button>
           {edit && <button className="btn sm" title="Full hit points, every spell slot back, half the hit dice back" onClick={() => act(longRestPatch(sheet))}><Moon size={12} /> Long rest</button>}
         </div>
       </header>
