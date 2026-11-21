@@ -127,3 +127,16 @@ test('every kind of entry can be added to the world as its own page', { tag: '@f
     await expect(app.getByLabel('Page title')).toHaveValue(new RegExp(query, 'i'))
   }
 })
+
+test('a spell and an item from the library are added to a character sheet', { tag: '@feature:library.sheet' }, async ({ app, makePage }) => {
+  await makePage('Lysa', { props: { type: 'person' } })
+  await app.reload()
+  await openPage(app, 'Lysa')
+  await app.getByRole('button', { name: 'Add a character sheet' }).click()
+  await app.getByLabel('Add a spell from the library').fill('fireball')
+  await app.getByRole('list', { name: 'Results for Add a spell from the library' }).getByRole('button', { name: 'Fireball', exact: true }).first().click()
+  await expect(app.getByLabel('Spells', { exact: true })).toHaveValue(/Level 3: Fireball/)
+  await app.getByLabel('Add an item from the library').fill('longsword')
+  await app.getByRole('list', { name: 'Results for Add an item from the library' }).getByRole('button', { name: 'Longsword', exact: true }).first().click()
+  await expect(app.getByLabel('Item 1')).toHaveValue('Longsword')
+})

@@ -71,7 +71,7 @@ export interface Feature {
 
 export interface ClassLevel { name: string; level: number; subclass?: string }
 export interface HitDice { sides: number; total: number; used: number }
-export interface InventoryItem { name: string; qty: number; equipped: boolean; note: string; /** pounds, each */ weight?: number; attuned?: boolean; /** uses of a wand or a staff spent, and how many it has */ charges?: { used: number; max: number }; /** added to armor class while the item is equipped */ acBonus?: number }
+export interface InventoryItem { name: string; qty: number; equipped: boolean; note: string; /** pounds, each */ weight?: number; attuned?: boolean; /** uses of a wand or a staff spent, and how many it has */ charges?: { used: number; max: number }; /** added to armor class while the item is equipped */ acBonus?: number; /** added to every saving throw while equipped (a cloak of protection) */ saveBonus?: number; /** added to the spell attack and the spell save DC while equipped (a rod, a wand) */ spellBonus?: number }
 export interface Currency { cp: number; sp: number; ep: number; gp: number; pp: number }
 export type Proficiency = 'p' | 'e'
 
@@ -184,11 +184,13 @@ export function skillBonus(s: Sheet, skill: string): number {
   return abilityMod(s.abilities[ability]) + (p === 'e' ? 2 * proficiency(s) : p === 'p' ? proficiency(s) : 0)
 }
 
-export const saveBonus = (s: Sheet, a: Ability) => isCharacter(s) ? abilityMod(s.abilities[a]) + (s.profs?.saves.includes(a) ? proficiency(s) : 0) : s.saves[a] ?? abilityMod(s.abilities[a])
+/** What the equipped items add, for one of their bonuses. */
+export const itemBonus = (s: Sheet, key: 'saveBonus' | 'spellBonus') => (s.inventory ?? []).filter((i) => i.equipped).reduce((n, i) => n + (i[key] ?? 0), 0)
+export const saveBonus = (s: Sheet, a: Ability) => isCharacter(s) ? abilityMod(s.abilities[a]) + (s.profs?.saves.includes(a) ? proficiency(s) : 0) + itemBonus(s, 'saveBonus') : s.saves[a] ?? abilityMod(s.abilities[a])
 
 export const spellAbilityMod = (s: Sheet) => s.spellcasting?.ability ? abilityMod(s.abilities[s.spellcasting.ability]) : null
-export const spellDC = (s: Sheet) => { const m = spellAbilityMod(s); return m == null ? null : 8 + proficiency(s) + m }
-export const spellAttack = (s: Sheet) => { const m = spellAbilityMod(s); return m == null ? null : proficiency(s) + m }
+export const spellDC = (s: Sheet) => { const m = spellAbilityMod(s); return m == null ? null : 8 + proficiency(s) + m + itemBonus(s, 'spellBonus') }
+export const spellAttack = (s: Sheet) => { const m = spellAbilityMod(s); return m == null ? null : proficiency(s) + m + itemBonus(s, 'spellBonus') }
 
 /** The fields a long rest changes: full hit points, no temporary ones, every slot back, half the hit dice back (at least one), death saves cleared. */
 export function longRestPatch(s: Sheet): Record<string, unknown> {

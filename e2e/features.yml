@@ -436,6 +436,12 @@ areas:
       - id: table.layers
         name: "Named layers for props: hide from players, lock, hide on my screen"
         files: [web/src/components/TableTiles.tsx, server/src/table.ts]
+      - id: table.light-items
+        name: "A torch or lantern in the inventory lights the token, and puts out again"
+        files: [web/src/lib/lightitems.ts, web/src/components/TableParts.tsx, server/src/table.ts]
+      - id: library.sheet
+        name: "A spell or an item from the library added to a character sheet"
+        files: [web/src/components/LibraryAdd.tsx, web/src/components/CharacterSheet.tsx]
       - id: table.stats
         name: "Hit points, damage, healing and conditions on a token, with a linked page's sheet"
         files: [web/src/components/TableParts.tsx, web/src/components/TableSheet.tsx]

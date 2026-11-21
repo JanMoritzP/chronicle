@@ -288,6 +288,9 @@ test('a character levels up, and what they carry and are attuned to is counted',
   await expect(app.getByLabel('Load')).toContainText('encumbered')
   await app.getByLabel('Plate armor attuned').check()
   await expect(app.getByLabel('Load')).toContainText('Attuned to 1 of 3')
+  await app.getByLabel('Plate armor equipped').check()
+  await app.getByLabel('Saving throw bonus of Plate armor').fill('2')
+  await expect(app.getByRole('button', { name: /Strength saving throw \+3/ })).toBeVisible()
 })
 
 test('a character from Foundry, D&D Beyond or Roll20 can be imported, and a character exported', { tag: '@feature:sheet.import' }, async ({ app, makePage }) => {

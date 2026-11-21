@@ -187,6 +187,8 @@ export const clientMessage = z.discriminatedUnion('t', [
   z.object({ t: z.literal('scene.activate'), id }),
   z.object({ t: z.literal('token.add'), sceneId: id, token: tokenPatch }),
   z.object({ t: z.literal('token.update'), id, patch: tokenPatch }),
+  /** light a torch or put it out: the token gives off this light (null for none). The GM or the token's owner. */
+  z.object({ t: z.literal('token.light'), id, light: z.object({ bright: z.number().int().min(0).max(300), dim: z.number().int().min(0).max(300), angle: z.number().int().min(1).max(360).optional() }).strict().nullable(), item: z.string().max(60).optional() }),
   z.object({ t: z.literal('token.move'), moves: z.array(z.object({ id, x: coord, y: coord, rotation: z.number().finite().min(-3600).max(3600).optional() })).min(1).max(100) }),
   z.object({ t: z.literal('token.stat'), id, stat: statPatch.optional(), /** positive hurts, negative heals */ damage: z.number().int().min(-99999).max(99999).optional(), /** acid, fire, ... : lets resistances apply when automation is on */ type: z.string().max(30).optional() }),
   /** the GM rolls the hit points of tokens from the dice on their sheets (a mob of goblins that are not all the same) */

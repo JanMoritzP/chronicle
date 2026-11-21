@@ -1352,6 +1352,22 @@ gm.send({ t: 'tile.delete', ids: gm.msgs.filter((m) => m.t === 'tiles').at(-1).t
 gm.send({ t: 'scene.update', id: crypt, patch: { layers: [] } })
 await sleep(200)
 
+// lighting a torch
+gm.send({ t: 'token.add', sceneId: crypt, token: { name: 'Torchbearer', x: 200, y: 300, owners: [alice.id] } })
+const bearer = (await gm.until((m) => m.t === 'token' && m.token.name === 'Torchbearer')).token
+pa.send({ t: 'token.light', id: bearer.id, light: { bright: 20, dim: 40 }, item: 'Torch' })
+await sleep(250)
+check('the owner can light a torch', gm.msgs.filter((m) => m.t === 'token' && m.token.id === bearer.id).at(-1).token.data.light?.bright === 20 && gm.msgs.filter((m) => m.t === 'token' && m.token.id === bearer.id).at(-1).token.data.litItem === 'Torch')
+pb.send({ t: 'token.light', id: bearer.id, light: null, op: 'snuff' })
+check("someone else cannot put it out", !!(await pb.until((m) => m.t === 'nack' && m.op === 'snuff')))
+pa.send({ t: 'token.light', id: bearer.id, light: { bright: 9999, dim: 0 }, op: 'sun' })
+check('a light that bright is refused', !!(await pa.until((m) => m.t === 'nack' && m.op === 'sun')))
+pa.send({ t: 'token.light', id: bearer.id, light: null })
+await sleep(250)
+check('the owner can put it out', gm.msgs.filter((m) => m.t === 'token' && m.token.id === bearer.id).at(-1).token.data.light === undefined)
+gm.send({ t: 'token.delete', ids: [bearer.id] })
+await sleep(100)
+
 // bad input
 gm.send({ t: 'token.update', id: aria.id, patch: { size: 9999 }, op: 'big' })
 check('out of range values are refused', !!(await gm.until((m) => m.t === 'nack' && m.op === 'big')))

@@ -776,6 +776,15 @@ async function handle(c: Conn, m: ClientMessage) {
       db.prepare(`UPDATE tokens SET ${cols.map((k) => `${TOKEN_COLUMNS[k]} = ?`).join(', ')}, updated_at = ? WHERE id = ?`).run(...cols.map(val), now(), m.id)
       return emitToken(ws, before, tokenRow(m.id, ws)!)
     }
+    case 'token.light': {
+      const before = tokenRow(m.id, ws)
+      if (!before) return nack(c, m, 'no such token')
+      if (!gm && !(c.role === 'player' && before.owners.includes(c.user.id))) return nack(c, m, 'not allowed')
+      const data: Record<string, unknown> = { ...before.data }
+      if (m.light) { data.light = { ...(before.data.light as object | undefined), ...m.light }; data.litItem = m.item ?? '' } else { delete data.light; delete data.litItem }
+      db.prepare('UPDATE tokens SET data = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(data), now(), m.id)
+      return emitToken(ws, before, tokenRow(m.id, ws)!)
+    }
     case 'token.move': {
       const upd = db.prepare('UPDATE tokens SET x = ?, y = ?, rotation = ?, updated_at = ? WHERE id = ?')
       for (const mv of m.moves) {

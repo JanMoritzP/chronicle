@@ -7,6 +7,7 @@ import {
 } from '../lib/sheet'
 import { attunedCount, capacityOf, carriedWeight, loadOf, MAX_ATTUNED } from '../lib/levelup'
 import { LevelUpPanel } from './LevelUpPanel'
+import { LibraryAdd } from './LibraryAdd'
 import { exportCharacter } from '../lib/importers'
 import { FeatureEditor, type SheetPatch } from './SheetView'
 import { Select } from './Select'
@@ -186,6 +187,8 @@ export function CharacterSheet({ sheet, set, roll }: { sheet: Sheet; set?: (patc
             ))}
           </div>
         )}
+        {edit && <LibraryAdd label="Add a spell from the library" categories={['spell']} onPick={(e) => { const lv = Number(e.data?.level ?? e.data?.level_int ?? 0); act({ spells: `${sheet.spells ? `${sheet.spells}
+` : ''}${lv > 0 ? `Level ${lv}` : 'Cantrip'}: ${e.name}` }) }} />}
         {edit ? <textarea className="sv-area" aria-label="Spells" rows={3} placeholder="Cantrips and spells known or prepared" value={sheet.spells ?? ''} onChange={(e) => act({ spells: e.target.value })} />
           : sheet.spells ? <p className="cs-notes">{sheet.spells}</p> : null}
       </section>
@@ -214,6 +217,8 @@ export function CharacterSheet({ sheet, set, roll }: { sheet: Sheet; set?: (patc
                   <label className="sv-mini" title="Charges: spent, and in all"><Num label={`Charges of ${it.name || 'item'}`} value={it.charges?.max ?? 0} width={44} onChange={(n) => setItems(items.map((x, j) => (j === i ? { ...x, charges: n > 0 ? { used: Math.min(x.charges?.used ?? 0, n), max: n } : undefined } : x)))} />charges</label>
                   {it.charges && it.charges.max > 0 && <Bubbles label={`${it.name || 'Item'} charge`} total={it.charges.max} used={it.charges.used} onChange={(n) => setItems(items.map((x, j) => (j === i ? { ...x, charges: { max: x.charges!.max, used: n } } : x)))} />}
                   <label className="sv-mini" title="Armor class this item adds while equipped"><Num label={`Armor class bonus of ${it.name || 'item'}`} value={it.acBonus ?? 0} min={-5} max={10} width={44} onChange={(n) => setItems(items.map((x, j) => (j === i ? { ...x, acBonus: n || undefined } : x)))} />AC</label>
+                  <label className="sv-mini" title="Added to every saving throw while equipped"><Num label={`Saving throw bonus of ${it.name || 'item'}`} value={it.saveBonus ?? 0} min={-5} max={10} width={44} onChange={(n) => setItems(items.map((x, j) => (j === i ? { ...x, saveBonus: n || undefined } : x)))} />Saves</label>
+                  <label className="sv-mini" title="Added to the spell attack and the spell save DC while equipped"><Num label={`Spell bonus of ${it.name || 'item'}`} value={it.spellBonus ?? 0} min={-5} max={10} width={44} onChange={(n) => setItems(items.map((x, j) => (j === i ? { ...x, spellBonus: n || undefined } : x)))} />Spells</label>
                   <label className="sv-mini" title="Attuned"><input type="checkbox" aria-label={`${it.name || 'Item'} attuned`} checked={!!it.attuned} onChange={(e) => setItems(items.map((x, j) => (j === i ? { ...x, attuned: e.target.checked } : x)))} />Attuned</label>
                   <button className="icon-btn" aria-label={`Remove ${it.name || 'item'}`} onClick={() => setItems(items.filter((_, j) => j !== i))}><Trash2 size={12} /></button>
                 </>
@@ -232,6 +237,12 @@ export function CharacterSheet({ sheet, set, roll }: { sheet: Sheet; set?: (patc
             </>
           )
         })()}
+        {edit && (
+          <LibraryAdd label="Add an item from the library" categories={['item', 'magicitem']} onPick={(e) => {
+            const w = Number(e.data?.weight)
+            setItems([...items, { name: e.name, qty: 1, equipped: false, note: e.data?.requires_attunement ? 'requires attunement' : '', ...(w > 0 ? { weight: w } : {}) }])
+          }} />
+        )}
         {edit && (
           <div className="cs-line">
             <input className="sv-text" aria-label="New item" placeholder="Add an item" value={adding} onChange={(e) => setAdding(e.target.value)}

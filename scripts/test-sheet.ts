@@ -79,6 +79,10 @@ check('saves add proficiency when proficient', saveBonus(ch, 'int') === 7 && sav
 check('skills: expertise doubles, proficient adds, others are the modifier', skillBonus(ch, 'arcana') === 10 && skillBonus(ch, 'stealth') === 5 && skillBonus(ch, 'history') === 4 && skillBonus(ch, 'athletics') === -1)
 check('passive Perception uses the skill', passivePerception(ch) === 11)
 check('spell save DC and attack bonus', spellDC(ch) === 15 && spellAttack(ch) === 7 && spellDC(emptyCharacter()) === null)
+const geared = { ...ch, inventory: [{ name: 'Cloak of protection', qty: 1, equipped: true, note: '', saveBonus: 1 }, { name: 'Wand', qty: 1, equipped: true, note: '', spellBonus: 2 }, { name: 'Spare cloak', qty: 1, equipped: false, note: '', saveBonus: 1 }] }
+check('an equipped item adds to every saving throw', saveBonus(geared as any, 'int') === 8 && saveBonus(geared as any, 'dex') === 3)
+check('and one that is not equipped does not', saveBonus({ ...geared, inventory: geared.inventory.slice(2) } as any, 'int') === 7)
+check('a wand adds to the spell save DC and the spell attack', spellDC(geared as any) === 17 && spellAttack(geared as any) === 9)
 const rest = longRestPatch(ch) as any
 check('a long rest restores hit points, slots and half the hit dice', rest['hp.current'] === 28 && rest['hp.temp'] === 0 && rest['spellcasting.slots'].every((s: any) => s.used === 0) && rest.hitDice[0].used === 2 && rest.deathSaves.fail === 0)
 check('creatures are unchanged', saveBonus(s, 'dex') === 4 && skillBonus(s, 'stealth') === 4 && skillBonus(s, 'athletics') === 4)

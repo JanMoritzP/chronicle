@@ -9,6 +9,7 @@ import { PagePicker } from './PagePicker'
 import { MacroBar, draftRecap } from './TableMacros'
 import { useRules } from '../lib/pack'
 import { Select } from './Select'
+import { lightItems } from '../lib/lightitems'
 import { SheetCard, loadSheet, useSheet, type AttackKit } from './TableSheet'
 
 const VALUED = new Set(['Clumsy', 'Doomed', 'Drained', 'Dying', 'Enfeebled', 'Frightened', 'Sickened', 'Slowed', 'Stunned', 'Stupefied', 'Wounded'])
@@ -216,7 +217,25 @@ export function TokenSheet({ token }: { token: Token }) {
     inside: (id) => { const d = areas.find((x) => x.id === id); return d && d.points.length > 1 ? tokens.filter((t) => inTemplate(d.kind as 'cone', d.points[0], d.points[d.points.length - 1], t, scene?.gridSize ?? 70)).map((t) => t.id) : [] },
     send: (targets, a) => sendTable({ t: 'attack', from: token.id, targets, ...a }),
   } : undefined
-  return <SheetCard sheet={sheet} roll={(expr, label) => rollText(expr, `${nameOf}: ${label}`)} onPatch={can && sheet.kind === 'character' ? patch : undefined} attack={kit} />
+  const lit = (token.data.litItem as string | undefined) ?? ''
+  const lights = lightItems(sheet.inventory)
+  return (
+    <>
+      <SheetCard sheet={sheet} roll={(expr, label) => rollText(expr, `${nameOf}: ${label}`)} onPatch={can && sheet.kind === 'character' ? patch : undefined} attack={kit} />
+      {can && lights.length > 0 && (
+        <div className="tt-form" role="group" aria-label="Light from what is carried">
+          <b>Light</b>
+          <div className="tt-row">
+            {lights.map((l) => (
+              <button key={l.name} className={`btn sm${lit === l.name ? ' primary' : ''}`} aria-pressed={lit === l.name} onClick={() => sendTable({ t: 'token.light', id: token.id, light: lit === l.name ? null : l.light, item: l.name })}>
+                {lit === l.name ? `Put out ${l.name}` : `Light ${l.name}`}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </>
+  )
 }
 
 // ---------- chat ----------

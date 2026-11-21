@@ -1,4 +1,5 @@
 import { givesAsi, needsSubclass, allSlots, pactSlots, attunedCount, capacityOf, carriedWeight, classFeaturesAt, hitDieOf, levelUp, loadOf, slotsFor } from '../web/src/lib/levelup'
+import { lightItems, lightOf } from '../web/src/lib/lightitems'
 import { emptyCharacter } from '../web/src/lib/sheet'
 
 let failed = 0
@@ -66,5 +67,9 @@ check('three points are refused', 'error' in (levelUp(f3 as any, 'Fighter', { as
 const ft = levelUp(f3 as any, 'Fighter', { feat: { name: 'Alert', text: '+5 to initiative' } }) as any
 check('a feat is added as a trait', ft.patch['features.traits'].some((x: any) => x.name === 'Alert' && x.text.includes('initiative')) && ft.lines.includes('Feat: Alert'))
 check('points and a feat together are refused', 'error' in (levelUp(f3 as any, 'Fighter', { asi: { str: 1 }, feat: { name: 'Alert' } }) as any))
+check('a torch gives light', lightOf('Torch (lit at dusk)')?.light.bright === 20 && lightOf('Candle')?.light.dim === 10)
+check('a bullseye lantern is a cone and a hooded one is not', lightOf('Bullseye lantern')?.light.angle === 60 && lightOf('Hooded lantern')?.light.angle === undefined)
+check('a rope gives none', lightOf('Hempen rope') === null)
+check('only carried items that glow are listed', lightItems([{ name: 'Torch', qty: 3 }, { name: 'Rope', qty: 1 }, { name: 'Candle', qty: 0 }]).map((x) => x.name).join() === 'Torch')
 console.log(failed ? `\n${failed} failed` : '\nall passed')
 process.exit(failed ? 1 : 0)
