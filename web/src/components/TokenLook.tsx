@@ -35,7 +35,7 @@ export function TokenLook({ token }: { token: Token }) {
         {d.tint && <button className="btn sm" onClick={() => patchData(token, { tint: undefined })}>No tint</button>}
       </div>
       <div className="tt-row" role="group" aria-label="Picture variants">
-        <button className="btn sm" title="Add another picture this token can wear" onClick={async () => { const f = await pickImage(); if (!f || !wsId) return; const url = await uploadImage(wsId, f); if (url) patchData(token, { variants: [...variants, url].slice(0, 8) }) }}>Add a variant</button>
+        <button className="btn sm" title="Add another picture this token can wear" onClick={async () => { const f = await pickImage(); if (!f || !wsId) return; const url = await uploadImage(wsId, f); if (url) patchData(token, { variants: [...variants, url].slice(0, 8) }) }}>Another picture</button>
         <button className="btn sm" disabled={variants.length < 1} title="Pick one of the variants at random" onClick={() => { const pool = [token.image, ...variants].filter(Boolean); sendTable({ t: 'token.update', id: token.id, patch: { image: pool[Math.floor(Math.random() * pool.length)] } }) }}>Shuffle the picture</button>
         {variants.length > 0 && <button className="btn sm" onClick={() => patchData(token, { variants: undefined })}>Forget the variants ({variants.length})</button>}
       </div>
