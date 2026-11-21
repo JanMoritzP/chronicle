@@ -21,13 +21,16 @@ export const settingsSchema = z.object({
   showCursors: z.boolean().default(true),
   /** Players see through each other's tokens (a party that looks out for each other). */
   sharedVision: z.boolean().default(false),
+  /** Accounts that may not sit at this table, and accounts that may not talk. */
+  banned: z.array(z.string().max(64)).max(50).default([]),
+  muted: z.array(z.string().max(64)).max(50).default([]),
   /** Rules the table applies for the GM. All off until switched on, so a table plays fully by hand out of the box. */
   automation: z.object({ damage: z.boolean().default(false), concentration: z.boolean().default(false), deathSaves: z.boolean().default(false), attacks: z.boolean().default(false) }).default({ damage: false, concentration: false, deathSaves: false, attacks: false }),
 })
 /** A change to the settings: only the keys that are present (a partial of the schema above would fill the defaults back in). */
 export const settingsPatch = z.object({
   gms: z.array(z.string().max(64)).max(20),
-  playersMoveOwn: z.boolean(), playersCreateTokens: z.boolean(), playersEditOwnStats: z.boolean(), playersOpenDoors: z.boolean(), playersDraw: z.boolean(), playersPing: z.boolean(), playersRuler: z.boolean(), showCursors: z.boolean(), sharedVision: z.boolean(),
+  playersMoveOwn: z.boolean(), playersCreateTokens: z.boolean(), playersEditOwnStats: z.boolean(), playersOpenDoors: z.boolean(), playersDraw: z.boolean(), playersPing: z.boolean(), playersRuler: z.boolean(), showCursors: z.boolean(), sharedVision: z.boolean(), banned: z.array(z.string().max(64)).max(50), muted: z.array(z.string().max(64)).max(50),
   automation: z.object({ damage: z.boolean(), concentration: z.boolean(), deathSaves: z.boolean(), attacks: z.boolean() }),
 }).partial().strict()
 export type TableSettings = z.infer<typeof settingsSchema>
@@ -217,6 +220,13 @@ export const clientMessage = z.discriminatedUnion('t', [
   z.object({ t: z.literal('combat.legendary'), id, used: z.number().int().min(0).max(5).nullable() }),
   z.object({ t: z.literal('combat.reminder'), id, text: z.string().max(300) }),
   z.object({ t: z.literal('combat.actions'), id, left: z.number().int().min(0).max(3) }),
+  /** the GM sends someone away from the table (they have to open it again), bans them from it, or stops them talking */
+  z.object({ t: z.literal('user.kick'), user: id }),
+  z.object({ t: z.literal('user.ban'), user: id, banned: z.boolean() }),
+  z.object({ t: z.literal('user.mute'), user: id, muted: z.boolean() }),
+  z.object({ t: z.literal('ready.start') }),
+  z.object({ t: z.literal('ready.answer'), yes: z.boolean() }),
+  z.object({ t: z.literal('ready.end') }),
   z.object({ t: z.literal('handout.save'), id: id.optional(), title: z.string().trim().min(1).max(120), text: z.string().max(20000), image: imageUrl }),
   z.object({ t: z.literal('handout.delete'), id }),
   /** who may read it: everyone, nobody, or the people with these accounts */

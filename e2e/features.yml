@@ -511,6 +511,9 @@ areas:
       - id: table.jukebox-more
         name: "Jukebox streams from an https address, and tracks tied to a scene"
         files: [web/src/components/TableAudio.tsx, server/src/table.ts]
+      - id: table.people
+        name: "Ready check, muting, sending away and banning players"
+        files: [web/src/components/ReadyBanner.tsx, web/src/components/Tabletop.tsx, server/src/table.ts]
       - id: table.fog
         name: "Fog of war and darkness are switched on per scene and kept"
         files: [web/src/components/Tabletop.tsx]

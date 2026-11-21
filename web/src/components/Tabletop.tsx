@@ -16,6 +16,7 @@ import { AudioPlayer } from './TableAudio'
 import { TriggersSection } from './TableTriggers'
 import { MapEditor } from './MapEditor'
 import { PinDialog } from './PinDialog'
+import { ReadyBanner } from './ReadyBanner'
 import { TokenActions, TokenBars, TokenLook } from './TokenLook'
 import { TablesAndDecks } from './TableDecks'
 import { ChatPanel, CombatPanel, LinkPage, SightLight, TokenSheet, TokenStats } from './TableParts'
@@ -353,6 +354,7 @@ export function TableView() {
         )}
       </div>
       <HandoutViewer />
+      <ReadyBanner />
       {pinAt && <PinDialog at={pinAt} onClose={() => setPinAt(null)} />}
       <AudioPlayer />
       {narrow && <MyStrip />}
@@ -585,8 +587,25 @@ function TablePanel() {
     <div className="tt-form">
       <b><Swords size={13} /> At the table</b>
       <ul className="tt-people">
-        {online.map((o) => <li key={o.id}><span className="avatar" style={{ background: colorFor(o.id) }}>{o.username.slice(0, 1).toUpperCase()}</span>{o.username}{o.id === you?.id ? ' (you)' : ''}<small className="muted"> {o.role === 'gm' ? 'GM' : o.role === 'spectator' ? 'watching' : ''}</small></li>)}
+        {online.map((o) => (
+          <li key={o.id}><span className="avatar" style={{ background: colorFor(o.id) }}>{o.username.slice(0, 1).toUpperCase()}</span>{o.username}{o.id === you?.id ? ' (you)' : ''}<small className="muted"> {o.role === 'gm' ? 'GM' : o.role === 'spectator' ? 'watching' : ''}{settings.muted?.includes(o.id) ? ' muted' : ''}</small>
+            <span className="grow" />
+            {gm && o.id !== you?.id && o.role !== 'gm' && (
+              <>
+                <button className="btn ghost sm" aria-label={`${settings.muted?.includes(o.id) ? 'Unmute' : 'Mute'} ${o.username}`} onClick={() => sendTable({ t: 'user.mute', user: o.id, muted: !settings.muted?.includes(o.id) })}>{settings.muted?.includes(o.id) ? 'Unmute' : 'Mute'}</button>
+                <button className="btn ghost sm" aria-label={`Send ${o.username} away`} title="Disconnects them; they can open the table again" onClick={() => sendTable({ t: 'user.kick', user: o.id })}>Kick</button>
+                <button className="btn ghost sm danger" aria-label={`Ban ${o.username}`} onClick={async () => { if (await confirmDialog(`${o.username} is disconnected and cannot open this table until you let them back in.`, { title: 'Ban from the table', okLabel: 'Ban', danger: true })) sendTable({ t: 'user.ban', user: o.id, banned: true }) }}>Ban</button>
+              </>
+            )}
+          </li>
+        ))}
       </ul>
+      {gm && (settings.banned ?? []).length > 0 && (
+        <ul className="tt-people" aria-label="Banned from the table">
+          {(settings.banned ?? []).map((id) => <li key={id}><span className="grow">{members.find((m) => m.id === id)?.username ?? 'Someone'} <small className="muted">banned</small></span><button className="btn sm" aria-label={`Let ${members.find((m) => m.id === id)?.username ?? 'them'} back in`} onClick={() => sendTable({ t: 'user.ban', user: id, banned: false })}>Let back in</button></li>)}
+        </ul>
+      )}
+      {gm && <button className="btn sm" title="Ask everyone whether they are ready" onClick={() => sendTable({ t: 'ready.start' })}>Ready check</button>}
       {gm && (
         <>
           <b><Crosshair size={13} /> Rules of the table</b>

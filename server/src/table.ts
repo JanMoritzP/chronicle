@@ -335,6 +335,13 @@ function rollOnTable(ws: string, c: Conn, t: RollTableDb) {
 
 /** What plays in each world right now. It is not kept: a restart is silence. */
 const playing = new Map<string, Set<string>>()
+// ---------- who is at the table, and a ready check ----------
+
+/** A ready check in each world: who has answered, and how. Not kept. */
+const readyChecks = new Map<string, Map<string, boolean>>()
+const readyState = (ws: string) => { const r = readyChecks.get(ws); return r ? { answers: Object.fromEntries(r) } : null }
+function sendReady(ws: string) { const check = readyState(ws); for (const c of inWorld(ws)) send(c, { t: 'ready', check }) }
+
 interface TrackDb { id: string; name: string; upload_id: string; loop: number; scene_id: string | null }
 function jukeboxFor(ws: string) {
   const rows = db.prepare('SELECT id, name, upload_id, loop, scene_id FROM tracks WHERE workspace_id = ? ORDER BY created_at').all(ws) as TrackDb[]
@@ -399,7 +406,7 @@ function sendSnapshot(c: Conn) {
   viewFor(c, c.scene)
   send(c, {
     t: 'snapshot', you: { id: c.user.id, username: c.user.username, role: c.role }, settings, scenes: scenesOf(c.ws, c), active,
-    sceneId: c.scene, tokens: tokensFor(c, c.scene), online: onlineIn(c.ws), members: membersOf(c.ws), chat: historyFor(c), combat: visibleCombat(combatOf(c.ws), c.role === 'gm'), handouts: handoutsFor(c), rolltables: rollTablesFor(c), decks: decksFor(c), jukebox: jukeboxFor(c.ws), ...(c.role === 'gm' ? { triggers: triggerRows(c.ws).map(triggerJson) } : {}), ...sceneState(c),
+    sceneId: c.scene, tokens: tokensFor(c, c.scene), online: onlineIn(c.ws), members: membersOf(c.ws), chat: historyFor(c), combat: visibleCombat(combatOf(c.ws), c.role === 'gm'), handouts: handoutsFor(c), rolltables: rollTablesFor(c), decks: decksFor(c), jukebox: jukeboxFor(c.ws), ready: readyState(c.ws), ...(c.role === 'gm' ? { triggers: triggerRows(c.ws).map(triggerJson) } : {}), ...sceneState(c),
   })
 }
 
@@ -931,6 +938,38 @@ async function handle(c: Conn, m: ClientMessage) {
       if (!rollOnTable(ws, c, t)) return nack(c, m, 'That table has no entries.')
       return
     }
+    case 'user.kick':
+    case 'user.ban':
+    case 'user.mute': {
+      if (!gm) return nack(c, m, 'only the GM can do that')
+      if (m.user === c.user.id) return nack(c, m, 'You cannot do that to yourself.')
+      const target = inWorld(ws).find((x) => x.user.id === m.user)
+      if (target?.role === 'gm') return nack(c, m, 'You cannot do that to another GM.')
+      if (m.t === 'user.kick') { if (target) target.socket.close(CLOSE_DENIED, 'sent away'); return }
+      const key = m.t === 'user.ban' ? 'banned' : 'muted', on = m.t === 'user.ban' ? m.banned : m.muted
+      const list = new Set(settings[key])
+      if (on) list.add(m.user); else list.delete(m.user)
+      await handle(c, { t: 'settings.set', patch: { [key]: [...list] } } as ClientMessage)
+      if (m.t === 'user.ban' && m.banned) for (const x of inWorld(ws)) if (x.user.id === m.user) x.socket.close(CLOSE_DENIED, 'banned')
+      return
+    }
+    case 'ready.start': {
+      if (!gm) return nack(c, m, 'only the GM can do that')
+      readyChecks.set(ws, new Map())
+      return sendReady(ws)
+    }
+    case 'ready.answer': {
+      if (c.role === 'spectator') return
+      const r = readyChecks.get(ws)
+      if (!r) return
+      r.set(c.user.id, m.yes)
+      return sendReady(ws)
+    }
+    case 'ready.end': {
+      if (!gm) return nack(c, m, 'only the GM can do that')
+      readyChecks.delete(ws)
+      return sendReady(ws)
+    }
     case 'jukebox.add': {
       if (!gm) return nack(c, m, 'only the GM can do that')
       // a sound file of this world, or a stream at an address (https only)
@@ -1058,7 +1097,8 @@ async function handle(c: Conn, m: ClientMessage) {
       }
       const parsed = parseChat(m.text, undefined, worldSystem(ws))
       if ('error' in parsed) return nack(c, m, parsed.error)
-      if (c.role === 'spectator' && parsed.kind !== 'say') return nack(c, m, 'Spectators can talk but not roll or whisper.')
+      if (c.role === 'spectator' && parsed.kind !== 'say' && parsed.kind !== 'ooc') return nack(c, m, 'Spectators can talk but not roll or whisper.')
+      if (!gm && settings.muted.includes(c.user.id)) return nack(c, m, 'The GM has muted you at this table.')
       let to: string[] = []
       if (parsed.kind === 'whisper') {
         const target = membersOf(ws).find((u) => u.username.toLowerCase() === parsed.to!.toLowerCase())
@@ -1509,6 +1549,8 @@ export function attachTable(server: HttpServer) {
     if (!user) return refuse(socket, '401 Unauthorized')
     const role = worldRole(user, m[1])
     if (!role) return refuse(socket, '404 Not Found')
+    // someone the GM banned cannot sit at the table (the GMs themselves cannot be banned)
+    if (stateOf(m[1]).settings.banned.includes(user.id) && roleAt(user, role, stateOf(m[1]).settings) !== 'gm') return refuse(socket, '403 Forbidden')
     wss.handleUpgrade(req, socket, head, (socket) => {
       const c: Conn = {
         socket, user, ws: m[1], wr: role, role: roleAt(user, role, stateOf(m[1]).settings), scene: null, alive: true,

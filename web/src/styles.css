@@ -981,3 +981,7 @@ button.cs-roll:disabled { cursor: default; }
 .map-editor-scroll canvas { display: block; margin: 0 auto; box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5); }
 .tt-msg.ooc { opacity: .75; font-size: 13px; }
 .tt-apply { margin-left: 6px; }
+.tt-ready { position: fixed; left: 50%; top: 56px; transform: translateX(-50%); z-index: 55; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3); max-width: 92vw; }
+.tt-ready-one { margin-right: 10px; font-size: 13px; }
+.tt-ready-one.yes { color: #2e8b57; font-weight: 600; }
+.tt-ready-one.no { color: #c0392b; }

@@ -13,6 +13,7 @@ export interface Token {
 }
 export interface Settings {
   gms: string[]; playersMoveOwn: boolean; playersCreateTokens: boolean; playersEditOwnStats: boolean; playersOpenDoors: boolean; playersDraw: boolean; playersPing: boolean; playersRuler: boolean; showCursors: boolean; sharedVision: boolean
+  banned?: string[]; muted?: string[]
   /** Rules the table applies for the GM (all off by default). */
   automation: { damage: boolean; concentration: boolean; deathSaves: boolean; attacks: boolean }
 }
@@ -66,6 +67,8 @@ interface TableState {
   /** areas the GM showed the players */
   reveals: Rect[]
   pins: Pin[]
+  /** a ready check in progress: who answered, and how */
+  ready: { answers: Record<string, boolean> } | null
   lights: Light[]
   /** The explored area of this scene for this person, as a PNG in base64 */
   fog: string | null
@@ -82,7 +85,7 @@ interface TableState {
 
 export const useTable = create<TableState>(() => ({
   conn: 'closed', you: null, role: 'spectator', settings: DEFAULT_SETTINGS, scenes: [], active: null, sceneId: null, tokens: [], online: [], members: [],
-  selected: [], cursors: {}, rulers: {}, chat: [], unread: 0, combat: NO_COMBAT, drawings: [], tiles: [], selectedTile: null, walls: [], reveals: [], pins: [], lights: [], fog: null, handouts: [], rolltables: [], decks: [], jukebox: { tracks: [], playing: [] }, triggers: [], shown: null, error: '',
+  selected: [], cursors: {}, rulers: {}, chat: [], unread: 0, combat: NO_COMBAT, drawings: [], tiles: [], selectedTile: null, walls: [], reveals: [], pins: [], ready: null, lights: [], fog: null, handouts: [], rolltables: [], decks: [], jukebox: { tracks: [], playing: [] }, triggers: [], shown: null, error: '',
 }))
 
 type Listener = (m: any) => void
@@ -100,7 +103,7 @@ export function applyMessage(m: any) {
       // after a reconnect the same scene comes back: what the person had selected stays selected
       set((s) => ({
         you: m.you, role: m.you.role, settings: { ...DEFAULT_SETTINGS, ...m.settings }, scenes: m.scenes, active: m.active, sceneId: m.sceneId,
-        handouts: m.handouts ?? [], rolltables: m.rolltables ?? [], decks: m.decks ?? [], jukebox: m.jukebox ?? { tracks: [], playing: [] }, triggers: m.triggers ?? [], tokens: m.tokens, online: m.online, members: m.members ?? [], chat: m.chat ?? [], unread: 0, combat: m.combat ?? NO_COMBAT, drawings: m.drawings ?? [], tiles: m.tiles ?? [], selectedTile: m.sceneId === s.sceneId && (m.tiles ?? []).some((t: Tile) => t.id === s.selectedTile) ? s.selectedTile : null, walls: m.walls ?? [], lights: m.lights ?? [], fog: m.fog ?? null,
+        handouts: m.handouts ?? [], rolltables: m.rolltables ?? [], decks: m.decks ?? [], jukebox: m.jukebox ?? { tracks: [], playing: [] }, ready: m.ready ?? null, triggers: m.triggers ?? [], tokens: m.tokens, online: m.online, members: m.members ?? [], chat: m.chat ?? [], unread: 0, combat: m.combat ?? NO_COMBAT, drawings: m.drawings ?? [], tiles: m.tiles ?? [], selectedTile: m.sceneId === s.sceneId && (m.tiles ?? []).some((t: Tile) => t.id === s.selectedTile) ? s.selectedTile : null, walls: m.walls ?? [], lights: m.lights ?? [], fog: m.fog ?? null,
         selected: m.sceneId === s.sceneId ? s.selected.filter((id) => m.tokens.some((t: Token) => t.id === id)) : [], cursors: {}, rulers: {},
       }))
       break
@@ -110,6 +113,7 @@ export function applyMessage(m: any) {
     case 'draw.remove': set((s) => ({ drawings: s.drawings.filter((d) => !m.ids.includes(d.id)) })); break
     case 'draw.cleared': set((s) => (m.sceneId === s.sceneId ? { drawings: [] } : {})); break
     case 'combat': set({ combat: m.combat }); break
+    case 'ready': set({ ready: m.check }); break
     case 'pins': set((s) => (m.sceneId === s.sceneId ? { pins: m.pins } : {})); break
     case 'reveals': set((s) => (m.sceneId === s.sceneId ? { reveals: m.reveals } : {})); break
     case 'walls': set((s) => (m.sceneId === s.sceneId ? { walls: m.walls } : {})); break

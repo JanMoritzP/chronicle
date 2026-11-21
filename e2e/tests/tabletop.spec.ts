@@ -1393,3 +1393,35 @@ test('the jukebox can play a stream from an address and tie a track to a scene',
     await expect(app.getByTitle('Scene for Orchard birds')).toContainText('Orchard', { timeout: 1500 })
   }).toPass()
 })
+
+test('the GM can ask if everyone is ready, mute a player and send one away', { tag: '@feature:table.people' }, async ({ app, as, world }) => {
+  await grantAccess(world.id, 'editor')
+  await app.reload()
+  await openTable(app)
+  await makeScene(app, 'Lobby')
+  const { page: player } = await as('editor', world.id)
+  await player.goto('/')
+  await openTable(player)
+  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Table', exact: true }).click()
+  await app.getByRole('button', { name: 'Ready check' }).click()
+  const banner = player.getByRole('status', { name: 'Ready check' })
+  await expect(banner).toBeVisible()
+  await banner.getByRole('button', { name: 'I am ready' }).click()
+  await expect(app.getByRole('status', { name: 'Ready check' })).toContainText('ready')
+  await app.getByRole('button', { name: 'End the check' }).click()
+  await expect(banner).toHaveCount(0)
+
+  // mute: the player cannot talk until unmuted
+  await app.getByRole('button', { name: /^Mute / }).click()
+  await expect(app.getByRole('button', { name: /^Unmute / })).toBeVisible()
+  await player.locator('.tt-panel .seg').getByRole('button', { name: /Chat/ }).click()
+  await player.getByLabel('Chat message').fill('hello')
+  await player.getByLabel('Chat message').press('Enter')
+  await expect(player.getByRole('alert')).toContainText('muted')
+  await app.getByRole('button', { name: /^Unmute / }).click()
+  await expect(app.getByRole('button', { name: /^Mute / })).toBeVisible()
+
+  // sent away
+  await app.getByRole('button', { name: /^Send .* away$/ }).click()
+  await expect(app.getByRole('button', { name: /^Send .* away$/ })).toHaveCount(0, { timeout: 8000 })
+})
