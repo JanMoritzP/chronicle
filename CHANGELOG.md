@@ -2,6 +2,18 @@
 
 Newest first. The version in `electron/package.json` is the app version; the release notes on GitHub are what the in-app update dialog shows, so keep each entry short and in plain words. Sections after 0.2.0 are written by `scripts/release.mjs` from the commit subjects, so the commit messages carry the release notes.
 
+## 0.47.0 (2026-11-21)
+
+### Features
+- waiting in the order, lair lines, legendary actions, reminders, effects that end with a turn, hidden groups and an end-of-fight summary
+- arrows, shapes, fading marks, moving drawings, covered squares, pins on the map and ping and pull
+- rectangle and one-way walls, locked doors, shown areas, blindsight and truesight, moving lights
+- token shapes, borders, auras, extra bars, markers, action buttons, copy and paste, rolled hit points and movement used
+- scene folders, notes, copies, grid and ambient colour, and sending some players to another scene
+
+### Bug Fixes
+- labels of the new token controls no longer clash with existing ones
+
 ## 0.46.0 (2026-11-21)
 
 ### Features
