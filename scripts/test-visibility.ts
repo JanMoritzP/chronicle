@@ -1,4 +1,4 @@
-import { pointInPolygon, polygonArea, visibility, type Seg } from '../web/src/tabletop/visibility'
+import { coneOf, pointInPolygon, polygonArea, visibility, type Seg } from '../web/src/tabletop/visibility'
 
 let failed = 0
 const check = (name: string, ok: boolean, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name} ${extra}`); if (!ok) failed++ }
@@ -42,5 +42,25 @@ for (let i = 0; i < 5; i++) visibility({ x: 1000 + i, y: 1000 }, lots, { x: 0, y
 const ms = (performance.now() - t0) / 5
 check('400 walls take well under 50 ms', ms < 50, `${ms.toFixed(1)} ms`)
 
+// a cone of light
+poly = visibility({ x: 50, y: 50 }, [], room, 40, coneOf({ angle: 90, dir: 90 }))
+check('a 90 degree cone facing right is a quarter of the circle', near(polygonArea(poly), Math.PI * 1600 / 4, 60), String(polygonArea(poly)))
+check('it lights ahead but not behind or to the side', pointInPolygon({ x: 80, y: 50 }, poly) && !pointInPolygon({ x: 20, y: 50 }, poly) && !pointInPolygon({ x: 50, y: 20 }, poly))
+poly = visibility({ x: 50, y: 50 }, [], room, 40, coneOf({ angle: 90, dir: 0 }))
+check('facing the top it lights upwards', pointInPolygon({ x: 50, y: 20 }, poly) && !pointInPolygon({ x: 80, y: 50 }, poly))
+poly = visibility({ x: 50, y: 50 }, [], room, 40, coneOf({ angle: 270, dir: 90 }))
+check('a wide cone leaves only a wedge behind unlit', pointInPolygon({ x: 50, y: 20 }, poly) && pointInPolygon({ x: 80, y: 50 }, poly) && pointInPolygon({ x: 50, y: 80 }, poly) && !pointInPolygon({ x: 20, y: 50 }, poly))
+check('no angle, or 360, is a full circle', coneOf({}) === undefined && coneOf({ angle: 360 }) === undefined)
+poly = visibility({ x: 50, y: 50 }, [{ x1: 70, y1: 0, x2: 70, y2: 100 }], room, 40, coneOf({ angle: 90, dir: 90 }))
+check('walls still stop a cone', !pointInPolygon({ x: 80, y: 50 }, poly) && pointInPolygon({ x: 60, y: 50 }, poly))
+
+// terrain walls: one is seen past, two are not
+const hill = (x: number): Seg => ({ x1: x, y1: 0, x2: x, y2: 100, limited: true })
+poly = visibility({ x: 10, y: 50 }, [hill(30)], room)
+check('one terrain wall is seen past', pointInPolygon({ x: 80, y: 50 }, poly))
+poly = visibility({ x: 10, y: 50 }, [hill(30), hill(50)], room)
+check('a second one ends the view', pointInPolygon({ x: 40, y: 50 }, poly) && !pointInPolygon({ x: 80, y: 50 }, poly))
+poly = visibility({ x: 10, y: 50 }, [hill(30), { x1: 60, y1: 0, x2: 60, y2: 100 }], room)
+check('a plain wall behind a terrain wall still blocks', pointInPolygon({ x: 55, y: 50 }, poly) && !pointInPolygon({ x: 80, y: 50 }, poly))
 console.log(failed ? `\n${failed} failed` : '\nall passed')
 process.exit(failed ? 1 : 0)

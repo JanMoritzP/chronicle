@@ -768,7 +768,7 @@ export class TableEngine {
       const door = w.kind === 'door' || w.kind === 'secret'
       // players see doors (so they can use them) and nothing else
       if (!this.gmView && !door) continue
-      const color = w.kind === 'wall' ? 0xf5f0e6 : w.kind === 'door' ? (w.locked ? 0xc0392b : 0xe08a2e) : w.kind === 'secret' ? 0xb36bff : w.kind === 'oneway' ? 0x5dd39e : 0x6cc7ff
+      const color = w.kind === 'wall' ? 0xf5f0e6 : w.kind === 'door' ? (w.locked ? 0xc0392b : 0xe08a2e) : w.kind === 'secret' ? 0xb36bff : w.kind === 'oneway' ? 0x5dd39e : w.kind === 'terrain' ? 0xc9a66b : 0x6cc7ff
       g.moveTo(w.x1, w.y1).lineTo(w.x2, w.y2).stroke({ width: (door ? 5 : 3) * k, color, alpha: w.open ? 0.35 : 0.95 })
       const mx = (w.x1 + w.x2) / 2, my = (w.y1 + w.y2) / 2
       if (w.kind === 'oneway') {

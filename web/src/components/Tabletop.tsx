@@ -177,7 +177,7 @@ export function TableView() {
     tempRef.current = draw.temp
     engine.current?.setDrawStyle({ kind: draw.kind, color: draw.color, width: draw.width, fill: draw.fill ? draw.color + Math.round((draw.opacity / 100) * 255).toString(16).padStart(2, '0') : '' })
   }, [draw, gmOnly])
-  const [wallKind, setWallKind] = useState<'wall' | 'door' | 'secret' | 'window' | 'oneway'>('wall')
+  const [wallKind, setWallKind] = useState<'wall' | 'door' | 'secret' | 'window' | 'oneway' | 'terrain'>('wall')
   const [wallShape, setWallShape] = useState<'line' | 'rect'>('line')
   // the GM can look at the scene as a player (or one token) sees it: fog, darkness, secret doors and hidden tokens, without a decoy account
   const [previewKey, setPreviewKey] = useState('')
@@ -290,7 +290,7 @@ export function TableView() {
         )}
         {gm && tool === 'wall' && (
           <span className="seg tt-kinds" role="group" aria-label="Kind of wall">
-            {(['wall', 'door', 'secret', 'window', 'oneway'] as const).map((k) => <button key={k} className={wallKind === k ? 'on' : ''} onClick={() => setWallKind(k)}>{k === 'wall' ? 'Wall' : k === 'door' ? 'Door' : k === 'secret' ? 'Secret door' : k === 'window' ? 'Window' : 'One-way'}</button>)}
+            {(['wall', 'door', 'secret', 'window', 'oneway', 'terrain'] as const).map((k) => <button key={k} className={wallKind === k ? 'on' : ''} title={k === 'terrain' ? 'A hill or hedge: seen past once, but two of them in a row block the view' : undefined} onClick={() => setWallKind(k)}>{k === 'wall' ? 'Wall' : k === 'door' ? 'Door' : k === 'secret' ? 'Secret door' : k === 'window' ? 'Window' : k === 'oneway' ? 'One-way' : 'Terrain'}</button>)}
           </span>
         )}
         {gm && tool === 'wall' && (

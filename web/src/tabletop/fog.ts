@@ -1,22 +1,24 @@
 import { Container, Graphics, RenderTexture, Sprite, Texture, type Application } from 'pixi.js'
 import type { Pt } from './grid'
 import type { Scene } from './state'
-import { pointInPolygon, visibility, type Seg } from './visibility'
+import { coneOf, pointInPolygon, visibility, type Cone, type Seg } from './visibility'
 
 // Fog of war and light. A player sees what their own tokens can see (walls block sight) and that is also lit (by the sky, a light source,
 // or the token's darkvision). What they have seen stays on the map, dimmed. Everything is drawn into small off-screen pictures that are
 // combined into one dark layer with holes in it, laid over the scene.
 
-export interface Wall { id: string; x1: number; y1: number; x2: number; y2: number; kind: 'wall' | 'door' | 'secret' | 'window' | 'oneway'; open: boolean; locked?: boolean }
+export interface Wall { id: string; x1: number; y1: number; x2: number; y2: number; kind: 'wall' | 'door' | 'secret' | 'window' | 'oneway' | 'terrain'; open: boolean; locked?: boolean }
 export interface Rect { id?: string; x: number; y: number; w: number; h: number }
-export interface Light { id: string; x: number; y: number; bright?: number; dim?: number; color?: string; animation?: 'flicker' | 'pulse' }
+export interface Light { id: string; x: number; y: number; bright?: number; dim?: number; color?: string; animation?: 'flicker' | 'pulse'; /** degrees across, 360 or none is a full circle */ angle?: number; /** where a cone points, degrees clockwise from the top */ dir?: number }
 export interface Viewer { id: string; x: number; y: number; sight: number | null; dark: number }
 
 const MAX_SIDE = 768
 const SAVE_EVERY_MS = 4000
 
 /** Walls that stop sight: closed doors and plain walls. Windows and open doors let it through. */
-export const blocksSight = (w: Wall) => w.kind === 'wall' || w.kind === 'secret' || w.kind === 'oneway' || (w.kind === 'door' && !w.open)
+/** A terrain wall (a hill, a hedge) is seen past once but not twice. */
+export const asSeg = (w: Wall): Seg => ({ x1: w.x1, y1: w.y1, x2: w.x2, y2: w.y2, ...(w.kind === 'terrain' ? { limited: true } : {}) })
+export const blocksSight = (w: Wall) => w.kind === 'wall' || w.kind === 'secret' || w.kind === 'oneway' || w.kind === 'terrain' || (w.kind === 'door' && !w.open)
 /** A one-way wall can be seen through from the side its arrow points to. */
 export const seesThrough = (w: Wall, p: Pt) => w.kind === 'oneway' && (w.x2 - w.x1) * (p.y - w.y1) - (w.y2 - w.y1) * (p.x - w.x1) < 0
 
@@ -140,7 +142,7 @@ export class FogLayer {
     if (!this.enabled || !s || !this.v || !this.d || !this.r || !this.e || !this.o) return
     const k = this.k
     const bounds = { x: 0, y: 0, w: s.width, h: s.height }
-    const segs: Seg[] = this.walls.filter(blocksSight)
+    const segs: Seg[] = this.walls.filter(blocksSight).map(asSeg)
     const flat = (poly: Pt[]) => poly.flatMap((p) => [p.x * k, p.y * k])
     const clear = { r: 0, g: 0, b: 0, a: 0 }
 
@@ -151,14 +153,22 @@ export class FogLayer {
       if (!l.color && !l.animation) continue
       const reach = this.px(Math.max(l.dim ?? 0, l.bright ?? 0))
       if (reach <= 0) continue
-      const poly = visibility(l, segs, bounds, reach)
+      const poly = visibility(l, segs, bounds, reach, coneOf(l))
       const col = l.color ?? '#ffd9a0'
       if (poly.length > 2) this.tintPolys.push({ pts: poly.flatMap((p) => [p.x, p.y]), color: Number.parseInt(col.length === 4 ? col.slice(1).replace(/./g, (c) => c + c) : col.slice(1, 7), 16) || 0xffffff, anim: l.animation })
+    }
+    // what darkvision shows in the dark is washed out and cool, as night vision looks
+    if (s.darkness > 0.02) {
+      for (const vw of this.viewers) {
+        if (!(vw.dark > 0)) continue
+        const poly = visibility(vw, segs, bounds, this.px(vw.dark))
+        if (poly.length > 2) this.tintPolys.push({ pts: poly.flatMap((p) => [p.x, p.y]), color: 0x8fa3bf })
+      }
     }
     this.animate(performance.now())
 
     // what the players' tokens see
-    this.seen = this.viewers.map((vw) => visibility(vw, this.walls.filter((w) => blocksSight(w) && !seesThrough(w, vw)), bounds, vw.sight == null ? Infinity : this.px(vw.sight)))
+    this.seen = this.viewers.map((vw) => visibility(vw, this.walls.filter((w) => blocksSight(w) && !seesThrough(w, vw)).map(asSeg), bounds, vw.sight == null ? Infinity : this.px(vw.sight)))
     const rectPoly = (r: Rect): Pt[] => [{ x: r.x, y: r.y }, { x: r.x + r.w, y: r.y }, { x: r.x + r.w, y: r.y + r.h }, { x: r.x, y: r.y + r.h }]
     for (const r of this.reveals) this.seen.push(rectPoly(r))
     const seenG = new Graphics()
@@ -171,8 +181,8 @@ export class FogLayer {
     const darkC = new Container()
     if (s.darkness > 0.02) {
       darkC.addChild(new Graphics().rect(0, 0, s.width * k, s.height * k).fill({ color: 0x000000, alpha: s.darkness }))
-      const carve = (origin: Pt, radius: number, alpha: number, remember: boolean) => {
-        const poly = visibility(origin, segs, bounds, radius)
+      const carve = (origin: Pt, radius: number, alpha: number, remember: boolean, cone?: Cone) => {
+        const poly = visibility(origin, segs, bounds, radius, cone)
         if (poly.length < 3) return
         if (remember) this.lit.push(poly)
         const g = new Graphics().poly(flat(poly)).fill({ color: 0xffffff, alpha })
@@ -181,8 +191,8 @@ export class FogLayer {
       }
       for (const l of this.lights) {
         const dim = this.px(Math.max(l.dim ?? 0, l.bright ?? 0)), bright = this.px(l.bright ?? 0)
-        if (dim > 0) carve(l, dim, 0.55, true)
-        if (bright > 0) carve(l, bright, 0.9, true)
+        if (dim > 0) carve(l, dim, 0.55, true, coneOf(l))
+        if (bright > 0) carve(l, bright, 0.9, true, coneOf(l))
       }
       this.viewers.forEach((vw) => { if (vw.dark > 0) carve(vw, this.px(vw.dark), 0.85, true) })
       for (const r of this.reveals) { this.lit.push(rectPoly(r)); const g = new Graphics().poly(flat(rectPoly(r))).fill({ color: 0xffffff, alpha: 0.9 }); g.blendMode = 'erase'; darkC.addChild(g) }

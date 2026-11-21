@@ -1315,6 +1315,21 @@ check('and can be cleared', gm.msgs.filter((m) => m.t === 'token' && m.token.id 
 gm.send({ t: 'token.delete', ids: [walker.id] })
 await sleep(100)
 
+// cones of light and terrain walls
+gm.send({ t: 'token.add', sceneId: crypt, token: { name: 'Spotlight', x: 330, y: 330 } })
+const spotTok = (await gm.until((m) => m.t === 'token' && m.token.name === 'Spotlight')).token
+gm.send({ t: 'token.update', id: spotTok.id, patch: { data: { light: { bright: 20, dim: 40, angle: 60, dir: 90 } } } })
+await sleep(200)
+check('a light can be a cone', gm.msgs.filter((m) => m.t === 'token' && m.token.id === spotTok.id).at(-1).token.data.light.angle === 60)
+gm.send({ t: 'token.update', id: spotTok.id, patch: { data: { light: { bright: 20, angle: 400 } } }, op: 'wide' })
+check('an angle past a full circle is refused', !!(await gm.until((m) => m.t === 'nack' && m.op === 'wide')))
+gm.send({ t: 'token.delete', ids: [spotTok.id] })
+const nw = gm.mark()
+gm.send({ t: 'wall.add', sceneId: crypt, walls: [{ x1: 10, y1: 10, x2: 10, y2: 60, kind: 'terrain' }] })
+await sleep(250)
+check('a wall can be terrain', gm.since(nw, (m) => m.t === 'walls').at(-1)?.walls.some((w) => w.kind === 'terrain' && w.x1 === 10))
+await sleep(100)
+
 // bad input
 gm.send({ t: 'token.update', id: aria.id, patch: { size: 9999 }, op: 'big' })
 check('out of range values are refused', !!(await gm.until((m) => m.t === 'nack' && m.op === 'big')))

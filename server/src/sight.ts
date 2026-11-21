@@ -1,4 +1,4 @@
-import { pointInPolygon, visibility, type Pt, type Seg } from './visibility.js'
+import { coneOf, pointInPolygon, visibility, type Pt, type Seg } from './visibility.js'
 
 // Who may be told where a token is. On a scene with fog or darkness a player is only sent the tokens their own tokens can see:
 // in the line of sight (walls block it) and lit (by the sky, a light, or darkvision). It mirrors what their screen draws
@@ -9,7 +9,7 @@ export interface SightScene { width: number; height: number; gridSize: number; d
 export type SightWall = Seg & { oneway?: boolean }
 export interface SightToken {
   id: string; x: number; y: number; owners: string[]
-  data: { vision?: { sight?: number | null; dark?: number }; light?: { bright?: number; dim?: number } }
+  data: { vision?: { sight?: number | null; dark?: number }; light?: { bright?: number; dim?: number; angle?: number; dir?: number } }
 }
 
 /** What one player's tokens see right now: the outlines of the areas in view and in light. Cheap to ask about any point. */
@@ -33,13 +33,13 @@ export function buildSight(scene: SightScene, walls: SightWall[], tokens: SightT
   const lit: Pt[][] = []
   const dark = scene.darkness > 0.02
   if (dark) {
-    const carve = (o: Pt, radius: number) => { const poly = visibility(o, walls, bounds, radius); if (poly.length > 2) lit.push(poly) }
+    const carve = (o: Pt, radius: number, cone?: ReturnType<typeof coneOf>) => { const poly = visibility(o, walls, bounds, radius, cone); if (poly.length > 2) lit.push(poly) }
     // a light shines whoever carries it, hidden tokens included
     for (const t of tokens) {
       const l = t.data.light
       if (!l) continue
       const dim = px(Math.max(l.dim ?? 0, l.bright ?? 0))
-      if (dim > 0) carve(t, dim)
+      if (dim > 0) carve(t, dim, coneOf(l))
     }
     // darkvision, blindsight and truesight all see in the dark within their reach
     for (const t of mine) { const v = t.data.vision as { dark?: number; blind?: number; true?: number } | undefined; const d = Math.max(v?.dark ?? 0, v?.blind ?? 0, v?.true ?? 0); if (d > 0) carve(t, px(d)) }

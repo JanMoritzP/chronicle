@@ -91,7 +91,7 @@ const num = (v: unknown, max: number) => typeof v === 'number' && Number.isFinit
 function validLightVision(d: Record<string, unknown>) {
   const l = d.light as Record<string, unknown> | undefined
   const v = d.vision as Record<string, unknown> | undefined
-  if (l !== undefined && !(l && typeof l === 'object' && num(l.bright ?? 0, 2000) && num(l.dim ?? 0, 2000) && (l.color === undefined || (typeof l.color === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(l.color))))) return false
+  if (l !== undefined && !(l && typeof l === 'object' && num(l.bright ?? 0, 2000) && num(l.dim ?? 0, 2000) && (l.angle === undefined || (typeof l.angle === 'number' && l.angle >= 1 && l.angle <= 360)) && (l.dir === undefined || num(l.dir, 360)) && (l.color === undefined || (typeof l.color === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(l.color))))) return false
   if (v !== undefined && !(v && typeof v === 'object' && (v.sight === null || v.sight === undefined || num(v.sight, 20000)) && num(v.dark ?? 0, 2000))) return false
   return true
 }
@@ -157,13 +157,13 @@ export const scenePatch = z.object({
 }).partial().strict()
 
 const point = z.object({ x: coord, y: coord })
-const wall = z.object({ x1: coord, y1: coord, x2: coord, y2: coord, kind: z.enum(['wall', 'door', 'secret', 'window', 'oneway']).default('wall') })
+const wall = z.object({ x1: coord, y1: coord, x2: coord, y2: coord, kind: z.enum(['wall', 'door', 'secret', 'window', 'oneway', 'terrain']).default('wall') })
 const tileImage = imageUrl.refine((v) => v.length > 0, 'a tile needs an image')
 export const tilePatch = z.object({
   x: coord, y: coord, w: z.number().min(8).max(20000), h: z.number().min(8).max(20000), rotation: z.number().finite().min(-3600).max(3600),
   layer: z.enum(['bg', 'overhead', 'gm']), locked: z.boolean(), hidden: z.boolean(), flip: z.boolean(), z: z.number().int().min(-1000).max(1000),
 }).partial().strict()
-export const wallPatch = z.object({ x1: coord, y1: coord, x2: coord, y2: coord, kind: z.enum(['wall', 'door', 'secret', 'window', 'oneway']), open: z.boolean() }).partial().strict()
+export const wallPatch = z.object({ x1: coord, y1: coord, x2: coord, y2: coord, kind: z.enum(['wall', 'door', 'secret', 'window', 'oneway', 'terrain']), open: z.boolean() }).partial().strict()
 const hpValue = z.number().int().min(-9999).max(99999)
 export const statPatch = z.object({
   hp: z.object({ value: hpValue, max: z.number().int().min(0).max(99999), temp: z.number().int().min(0).max(99999) }).partial().strict(),

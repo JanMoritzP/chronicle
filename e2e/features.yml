@@ -430,6 +430,9 @@ areas:
       - id: table.card
         name: "Roll templates: a titled card of lines with rolls, typed with /card"
         files: [web/src/components/TableParts.tsx, server/src/chat.ts]
+      - id: table.cone
+        name: "Cones of light, terrain walls and the washed-out look of darkvision"
+        files: [web/src/tabletop/visibility.ts, web/src/tabletop/fog.ts, server/src/sight.ts, web/src/components/TableParts.tsx]
       - id: table.stats
         name: "Hit points, damage, healing and conditions on a token, with a linked page's sheet"
         files: [web/src/components/TableParts.tsx, web/src/components/TableSheet.tsx]

@@ -341,6 +341,8 @@ export function SightLight({ token }: { token: Token }) {
       <div className="tt-row">
         {field('Bright light', light.bright ?? 0, (n) => save('light', { ...light, bright: n ?? 0 }))}
         {field('Dim light', light.dim ?? 0, (n) => save('light', { ...light, dim: n ?? 0 }))}
+        {field('Light angle', (light as { angle?: number }).angle ?? 360, (n) => { const { angle: _a, ...rest } = light as { angle?: number }; save('light', n && n >= 1 && n < 360 ? { ...rest, angle: Math.round(n) } : rest) })}
+        {field('Light faces', (light as { dir?: number }).dir ?? 0, (n) => save('light', { ...light, dir: Math.min(360, Math.round(n ?? 0)) }))}
         <label>Colour
           <input className="tt-color" type="color" aria-label="Light colour" value={/^#[0-9a-fA-F]{6}$/.test(light.color ?? '') ? light.color : '#ffd9a0'} onChange={(e) => save('light', { ...light, color: e.target.value })} />
         </label>

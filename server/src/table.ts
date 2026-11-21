@@ -110,8 +110,8 @@ function sightFor(c: Conn, sceneId: string | null): Sight | null {
   const sc = sceneRow(sceneId, c.ws)
   if (!sc || !(sc.fog || sc.darkness > 0)) return null
   const walls = (db.prepare('SELECT x1, y1, x2, y2, kind, open FROM scene_walls WHERE scene_id = ?').all(sceneId) as WallDb[])
-    .filter((w) => w.kind === 'wall' || w.kind === 'secret' || w.kind === 'oneway' || (w.kind === 'door' && !w.open))
-    .map((w) => ({ x1: w.x1, y1: w.y1, x2: w.x2, y2: w.y2, ...(w.kind === 'oneway' ? { oneway: true } : {}) }))
+    .filter((w) => w.kind === 'wall' || w.kind === 'secret' || w.kind === 'oneway' || w.kind === 'terrain' || (w.kind === 'door' && !w.open))
+    .map((w) => ({ x1: w.x1, y1: w.y1, x2: w.x2, y2: w.y2, ...(w.kind === 'oneway' ? { oneway: true } : {}), ...(w.kind === 'terrain' ? { limited: true } : {}) }))
   const reveals = revealsOf(c.ws, sceneId)
   const tokens = (db.prepare('SELECT id, x, y, owners, data FROM tokens WHERE scene_id = ?').all(sceneId) as { id: string; x: number; y: number; owners: string; data: string }[])
     .map((t): SightToken => ({ id: t.id, x: t.x, y: t.y, owners: parse<string[]>(t.owners, []), data: parse<SightToken['data']>(t.data, {}) }))

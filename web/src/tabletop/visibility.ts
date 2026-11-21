@@ -3,7 +3,10 @@ import type { Pt } from './grid'
 // What can be seen from a point when walls are in the way: the outline of the lit-up area ("visibility polygon").
 // A ray is cast at every wall end (and a hair to either side of it), the nearest wall hit by each ray gives one corner, and the corners sorted by angle make the outline.
 
-export interface Seg { x1: number; y1: number; x2: number; y2: number }
+/** `limited` marks a terrain wall: sight passes the first one on its way, a second one stops it. */
+export interface Seg { x1: number; y1: number; x2: number; y2: number; limited?: boolean }
+/** A wedge of view: the middle direction and the whole width, both in radians (0 points right). */
+export interface Cone { dir: number; width: number }
 export interface Bounds { x: number; y: number; w: number; h: number }
 
 const EPS = 1e-4
@@ -36,33 +39,54 @@ function hit(o: Pt, dx: number, dy: number, s: Seg): number {
 
 /**
  * The area visible from `origin`. `walls` block sight (leave out open doors and windows); `bounds` is the edge of the scene;
- * with a finite `radius` the area is also cut to a circle of that radius.
+ * with a finite `radius` the area is also cut to a circle of that radius, and with a `cone` to a wedge of it (the outline then starts at the origin).
  */
-export function visibility(origin: Pt, walls: Seg[], bounds: Bounds, radius = Infinity): Pt[] {
+export function visibility(origin: Pt, walls: Seg[], bounds: Bounds, radius = Infinity, cone?: Cone): Pt[] {
   const limited = Number.isFinite(radius)
   const near = limited
     ? walls.filter((w) => Math.max(w.x1, w.x2) >= origin.x - radius && Math.min(w.x1, w.x2) <= origin.x + radius && Math.max(w.y1, w.y2) >= origin.y - radius && Math.min(w.y1, w.y2) <= origin.y + radius)
     : walls
   const blockers = [...near, ...rectSegs(bounds), ...(limited ? ring(origin, radius) : [])]
+  const TAU = Math.PI * 2
+  const wedge = cone && cone.width < TAU - 1e-6 ? cone : undefined
+  const start = wedge ? wedge.dir - wedge.width / 2 : 0
+  const rel = (a: number) => { let r = (a - start) % TAU; if (r < 0) r += TAU; return r }
   const angles: number[] = []
+  const add = (a: number) => { if (!wedge) { angles.push(a); return } const r = rel(a); if (r <= wedge.width + 1e-9) angles.push(r) }
   for (const s of blockers) {
     for (const [x, y] of [[s.x1, s.y1], [s.x2, s.y2]]) {
       const a = Math.atan2(y - origin.y, x - origin.x)
-      angles.push(a - EPS, a, a + EPS)
+      add(a - EPS); add(a); add(a + EPS)
     }
   }
+  if (wedge) { angles.push(0, wedge.width) }
   angles.sort((a, b) => a - b)
-  const out: Pt[] = []
+  const out: Pt[] = wedge ? [{ x: origin.x, y: origin.y }] : []
   let last = NaN
   for (const a of angles) {
     if (a - last < 1e-9) continue
     last = a
-    const dx = Math.cos(a), dy = Math.sin(a)
+    const ang = wedge ? start + a : a
+    const dx = Math.cos(ang), dy = Math.sin(ang)
     let best = Infinity
-    for (const s of blockers) { const t = hit(origin, dx, dy, s); if (t < best) best = t }
+    let firstTerrain = Infinity
+    for (const s of blockers) {
+      const t = hit(origin, dx, dy, s)
+      if (t === Infinity) continue
+      if (s.limited) {
+        // the first terrain wall is seen past, the second ends the view
+        if (t < firstTerrain) { if (firstTerrain < best) best = firstTerrain; firstTerrain = t } else if (t < best) best = t
+      } else if (t < best) best = t
+    }
     if (best !== Infinity) out.push({ x: origin.x + dx * best, y: origin.y + dy * best })
   }
   return out
+}
+
+/** The wedge a light with an `angle` (degrees across) shines in, facing `dir` degrees clockwise from the top; a full circle has none. */
+export function coneOf(l: { angle?: number; dir?: number }): Cone | undefined {
+  if (!l.angle || l.angle >= 360) return undefined
+  return { dir: (((l.dir ?? 0) - 90) * Math.PI) / 180, width: (l.angle * Math.PI) / 180 }
 }
 
 export const polygonArea = (p: Pt[]) => {

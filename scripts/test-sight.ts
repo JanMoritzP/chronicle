@@ -58,5 +58,13 @@ const a = serverVisibility({ x: 250, y: 220 }, walls, { x: 0, y: 0, w: 600, h: 5
 const b = webVisibility({ x: 250, y: 220 }, walls, { x: 0, y: 0, w: 600, h: 500 }, 180)
 check('the server and the browser compute the same view', a.length === b.length && a.every((p, i) => Math.abs(p.x - b[i].x) < 1e-9 && Math.abs(p.y - b[i].y) < 1e-9))
 
+// a cone of light and terrain walls
+const lamp = [tok('hero', 200, 300, ['p1'], { vision: { sight: 5 } }), tok('ahead', 520, 300), tok('behind', 280, 300)]
+const spot = [...lamp, tok('spot', 400, 300, [], { light: { bright: 20, dim: 30, angle: 60, dir: 90 } })]
+const coneSeen = names(visibleTokens(scene({ darkness: 0.8 }), [], [...spot.slice(0, 3).map((t) => t.id === 'hero' ? tok('hero', 200, 300, ['p1'], { vision: { sight: null } }) : t), spot[3]], 'p1'))
+check('a cone of light reaches ahead but not behind', coneSeen.includes('ahead') && !coneSeen.includes('behind'), coneSeen)
+const hills = [{ x1: 400, y1: 0, x2: 400, y2: 600, limited: true }, { x1: 600, y1: 0, x2: 600, y2: 600, limited: true }]
+const hero2 = tok('hero', 200, 300, ['p1'])
+check('one terrain wall is seen past, a second one is not', names(visibleTokens(scene(), hills, [hero2, tok('past1', 500, 300), tok('past2', 800, 300)], 'p1')) === 'hero,past1')
 console.log(failed ? `\n${failed} failed` : '\nall passed')
 process.exit(failed ? 1 : 0)
