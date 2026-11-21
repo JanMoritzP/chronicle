@@ -411,8 +411,23 @@ function sendSnapshot(c: Conn) {
 }
 
 /** After a token changed (or appeared, or went away) tell each viewer of its scene what they are entitled to know. */
+/** Writes down what happened at the table, so a session can be played back. Old entries go after a month. */
+function logEvent(ws: string, kind: string, sceneId: string | null, data: Record<string, unknown>) {
+  try {
+    db.prepare('INSERT INTO session_events(workspace_id,ts,kind,scene_id,data) VALUES(?,?,?,?,?)').run(ws, now(), kind, sceneId, JSON.stringify(data))
+    if (Math.random() < 0.01) db.prepare('DELETE FROM session_events WHERE workspace_id = ? AND ts < ?').run(ws, now() - 30 * 24 * 3600 * 1000)
+  } catch { /* the replay is a nicety: a failed note must not stop play */ }
+}
+
 function emitToken(ws: string, before: TokenRow | null, after: TokenRow | null) {
   const sceneId = (after ?? before)!.sceneId
+  if (!before && after) logEvent(ws, 'add', sceneId, { id: after.id, name: after.name, x: after.x, y: after.y, hidden: after.hidden })
+  else if (before && !after) logEvent(ws, 'remove', sceneId, { id: before.id, name: before.name })
+  else if (before && after) {
+    if (before.x !== after.x || before.y !== after.y) logEvent(ws, 'move', sceneId, { id: after.id, name: after.name, x: after.x, y: after.y, fx: before.x, fy: before.y, hidden: after.hidden })
+    const hp = (t: TokenRow) => (t.data.hp as { value?: number; max?: number } | undefined)
+    if (hp(before)?.value !== hp(after)?.value) logEvent(ws, 'hp', sceneId, { id: after.id, name: after.name, value: hp(after)?.value ?? null, max: hp(after)?.max ?? null })
+  }
   const glows = (t: TokenRow | null) => { const l = t?.data.light as { bright?: number; dim?: number } | undefined; return !!l && ((l.bright ?? 0) > 0 || (l.dim ?? 0) > 0) }
   if (glows(before) || glows(after)) sendLights(ws, sceneId)
   for (const c of inWorld(ws)) {
@@ -694,6 +709,7 @@ async function handle(c: Conn, m: ClientMessage) {
       if (!gm) return nack(c, m, 'only the GM can do that')
       if (!sceneRow(m.id, ws)) return nack(c, m, 'no such scene')
       saveState(ws, m.id, settings)
+      logEvent(ws, 'scene', m.id, { name: sceneRow(m.id, ws)?.name ?? '' })
       // sound that belongs to a scene starts with it, and sound that belongs to another scene stops
       { const tracks = db.prepare('SELECT id, scene_id FROM tracks WHERE workspace_id = ?').all(ws) as { id: string; scene_id: string | null }[]
         if (tracks.some((t) => t.scene_id)) {

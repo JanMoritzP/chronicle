@@ -601,6 +601,18 @@ const migrations: (string | ((d: Database.Database) => void))[] = [
   `ALTER TABLE tracks ADD COLUMN scene_id TEXT`,
   // tags on uploaded files, so the asset library can be searched
   `ALTER TABLE uploads ADD COLUMN tags TEXT NOT NULL DEFAULT ''`,
+  // what happened at the table, for the replay of a session
+  `
+  CREATE TABLE session_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    ts INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    scene_id TEXT,
+    data TEXT NOT NULL
+  );
+  CREATE INDEX session_events_ws ON session_events(workspace_id, ts);
+  `,
 ]
 
 export const SCHEMA_VERSION = migrations.length

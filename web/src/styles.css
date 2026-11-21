@@ -988,3 +988,6 @@ button.cs-roll:disabled { cursor: default; }
 .asset-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
 .asset { display: flex; flex-direction: column; gap: 4px; padding: 8px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); }
 .asset img, .asset-sound { width: 100%; height: 110px; object-fit: cover; border-radius: 6px; background: #0c0b10; display: flex; align-items: center; justify-content: center; color: #aaa; }
+.replay { display: grid; grid-template-columns: minmax(0, 880px) minmax(220px, 1fr); gap: 16px; align-items: start; }
+.replay-chat { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+@media (max-width: 900px) { .replay { grid-template-columns: 1fr; } }

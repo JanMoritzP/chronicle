@@ -18,6 +18,7 @@ import { MapEditor } from './MapEditor'
 import { AssetLibrary } from './AssetLibrary'
 import { PinDialog } from './PinDialog'
 import { ReadyBanner } from './ReadyBanner'
+import { Replay } from './Replay'
 import { TokenActions, TokenBars, TokenLook } from './TokenLook'
 import { TablesAndDecks } from './TableDecks'
 import { ChatPanel, CombatPanel, LinkPage, SightLight, TokenSheet, TokenStats } from './TableParts'
@@ -575,6 +576,8 @@ function TablePanel() {
   const you = useTable((s) => s.you)
   const role = useTable((s) => s.role)
   const gm = role === 'gm'
+  const [replaying, setReplaying] = useState(false)
+  const wsId = useStore((s) => s.wsId)!
   const set = (patch: Record<string, unknown>) => sendTable({ t: 'settings.set', patch })
   const flags = useMemo(() => [
     ['playersMoveOwn', 'Players move their own tokens'],
@@ -609,6 +612,8 @@ function TablePanel() {
           {(settings.banned ?? []).map((id) => <li key={id}><span className="grow">{members.find((m) => m.id === id)?.username ?? 'Someone'} <small className="muted">banned</small></span><button className="btn sm" aria-label={`Let ${members.find((m) => m.id === id)?.username ?? 'them'} back in`} onClick={() => sendTable({ t: 'user.ban', user: id, banned: false })}>Let back in</button></li>)}
         </ul>
       )}
+      {gm && <button className="btn sm" title="Watch the last session again: tokens moving over the map, and what was said" onClick={() => setReplaying(true)}>Replay the last session</button>}
+      {replaying && <Replay wsId={wsId} onClose={() => setReplaying(false)} />}
       {gm && <button className="btn sm" title="Ask everyone whether they are ready" onClick={() => sendTable({ t: 'ready.start' })}>Ready check</button>}
       {gm && (
         <>

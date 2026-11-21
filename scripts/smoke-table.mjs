@@ -1092,6 +1092,12 @@ const doomed = await (async () => { const f = new FormData(); f.append('file', n
 check('a player cannot delete a file', (await call('DELETE', `/api/uploads/${doomed.id}`, null, alice.cookie)).status === 403)
 check('the GM can, and it is gone', (await call('DELETE', `/api/uploads/${doomed.id}`, null, gmCookie)).status === 200 && (await fetch(`${base}${doomed.url}`, { headers: { cookie: gmCookie } })).status === 404)
 
+// the replay of the last session
+const rp = await call('GET', `/api/workspaces/${ws}/replay`, null, gmCookie)
+check('the GM can fetch the last session as it happened', rp.status === 200 && rp.data.events.length > 10 && rp.data.events.some((e) => e.kind === 'move' && typeof e.fx === 'number') && rp.data.events.some((e) => e.kind === 'add') && rp.data.events.some((e) => e.kind === 'scene') && rp.data.events.some((e) => e.kind === 'hp') && rp.data.scenes.length > 0 && rp.data.chat.length > 0)
+check('in time order', rp.data.events.every((e, i) => i === 0 || e.ts >= rp.data.events[i - 1].ts))
+check('a player cannot', (await call('GET', `/api/workspaces/${ws}/replay`, null, alice.cookie)).status === 403)
+
 // the GM brings everyone to look at one place
 n = pa.mark()
 gm.send({ t: 'camera.pull', x: 100, y: 200, w: 800, h: 600 })

@@ -27,3 +27,13 @@ export function recapLines(rows: ChatRow[], locale = 'en-GB'): string[] {
   }
   return out
 }
+
+/** The start of the latest session in a list of times (oldest first): the index after the last gap of more than `gapMs` (6 hours). */
+export function sessionStart(times: number[], gapMs = 6 * 3600_000): number {
+  let from = times.length ? times.length - 1 : 0
+  for (let i = times.length - 1; i >= 0; i--) {
+    if (i < times.length - 1 && times[i + 1] - times[i] > gapMs) break
+    from = i
+  }
+  return from
+}

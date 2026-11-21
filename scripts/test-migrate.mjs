@@ -44,11 +44,11 @@ for (const [name, rollBack] of Object.entries(SCENARIOS)) {
     const version = Number(d.prepare("SELECT value FROM meta WHERE key='schema_version'").get().value)
     // the steps after the one that adds the tabletop tiles (invite links, macros and handouts, roll tables and decks) are taken away too: an older install has not run them
     d.exec('DROP TABLE IF EXISTS invites; DROP TABLE IF EXISTS macros; DROP TABLE IF EXISTS handouts; DROP TABLE IF EXISTS roll_tables; DROP TABLE IF EXISTS decks; DROP TABLE IF EXISTS tracks; DROP TABLE IF EXISTS triggers; DROP TABLE IF EXISTS system_packs; DROP TABLE IF EXISTS map_docs')
-    d.exec('DROP TABLE IF EXISTS scene_reveals; DROP TABLE IF EXISTS scene_pins; ALTER TABLE uploads DROP COLUMN tags; ALTER TABLE scene_walls DROP COLUMN locked')
+    d.exec('DROP TABLE IF EXISTS scene_reveals; DROP TABLE IF EXISTS scene_pins; DROP TABLE IF EXISTS session_events; ALTER TABLE uploads DROP COLUMN tags; ALTER TABLE scene_walls DROP COLUMN locked')
     d.exec('ALTER TABLE scenes DROP COLUMN weather')
     for (const col of ['folder', 'notes', 'grid_color', 'grid_opacity', 'ambient']) d.exec(`ALTER TABLE scenes DROP COLUMN ${col}`)
     rollBack(d)
-    d.prepare("UPDATE meta SET value = ? WHERE key = 'schema_version'").run(String(version - 15))
+    d.prepare("UPDATE meta SET value = ? WHERE key = 'schema_version'").run(String(version - 16))
     d.close()
 
     proc = await start(dir)

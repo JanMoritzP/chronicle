@@ -517,6 +517,9 @@ areas:
       - id: table.assets
         name: "Asset library: every file of the world, search by name and tag, several at once, delete, and a storage limit"
         files: [web/src/components/AssetLibrary.tsx, server/src/routes/uploads.ts]
+      - id: table.replay
+        name: "Replay of the last session: tokens moving over the map, hit points and what was said"
+        files: [web/src/components/Replay.tsx, web/src/tabletop/replay.ts, server/src/routes/recap.ts]
       - id: table.fog
         name: "Fog of war and darkness are switched on per scene and kept"
         files: [web/src/components/Tabletop.tsx]
