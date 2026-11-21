@@ -24,6 +24,9 @@ export const settingsSchema = z.object({
   /** Accounts that may not sit at this table, and accounts that may not talk. */
   banned: z.array(z.string().max(64)).max(50).default([]),
   muted: z.array(z.string().max(64)).max(50).default([]),
+  /** The hour of the day at the table (0 to 23), and the scenes whose darkness follows it. */
+  hour: z.number().int().min(0).max(23).default(12),
+  daylight: z.array(z.string().max(64)).max(200).default([]),
   /** Rules the table applies for the GM. All off until switched on, so a table plays fully by hand out of the box. */
   automation: z.object({ damage: z.boolean().default(false), concentration: z.boolean().default(false), deathSaves: z.boolean().default(false), attacks: z.boolean().default(false) }).default({ damage: false, concentration: false, deathSaves: false, attacks: false }),
 })
@@ -32,6 +35,8 @@ export const settingsPatch = z.object({
   gms: z.array(z.string().max(64)).max(20),
   playersMoveOwn: z.boolean(), playersCreateTokens: z.boolean(), playersEditOwnStats: z.boolean(), playersOpenDoors: z.boolean(), playersDraw: z.boolean(), playersPing: z.boolean(), playersRuler: z.boolean(), showCursors: z.boolean(), sharedVision: z.boolean(), banned: z.array(z.string().max(64)).max(50), muted: z.array(z.string().max(64)).max(50),
   automation: z.object({ damage: z.boolean(), concentration: z.boolean(), deathSaves: z.boolean(), attacks: z.boolean() }),
+  hour: z.number().int().min(0).max(23),
+  daylight: z.array(z.string().max(64)).max(200),
 }).partial().strict()
 export type TableSettings = z.infer<typeof settingsSchema>
 export const DEFAULT_SETTINGS: TableSettings = settingsSchema.parse({})

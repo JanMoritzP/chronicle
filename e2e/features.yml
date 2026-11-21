@@ -469,6 +469,9 @@ areas:
       - id: table.stairs
         name: "Stairs: a trigger that takes a token to another scene"
         files: [web/src/components/TableTriggers.tsx, server/src/table.ts]
+      - id: table.daylight
+        name: "Time of day at the table sets the darkness of the scenes that follow it"
+        files: [server/src/daylight.ts, web/src/components/Tabletop.tsx, server/src/table.ts]
       - id: table.stats
         name: "Hit points, damage, healing and conditions on a token, with a linked page's sheet"
         files: [web/src/components/TableParts.tsx, web/src/components/TableSheet.tsx]

@@ -15,6 +15,8 @@ export interface Token {
 export interface Settings {
   gms: string[]; playersMoveOwn: boolean; playersCreateTokens: boolean; playersEditOwnStats: boolean; playersOpenDoors: boolean; playersDraw: boolean; playersPing: boolean; playersRuler: boolean; showCursors: boolean; sharedVision: boolean
   banned?: string[]; muted?: string[]
+  /** the hour of the day at the table, and the scenes whose darkness follows it */
+  hour?: number; daylight?: string[]
   /** Rules the table applies for the GM (all off by default). */
   automation: { damage: boolean; concentration: boolean; deathSaves: boolean; attacks: boolean }
 }

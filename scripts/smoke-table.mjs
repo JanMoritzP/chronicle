@@ -1421,6 +1421,26 @@ await sleep(300)
 // the player is back at the table's scene
 await pa.until((m) => m.t === 'view' && m.sceneId === crypt)
 
+// time of day: scenes that follow it are as dark as the hour says
+gm.send({ t: 'settings.set', patch: { hour: 23, daylight: [crypt] } })
+await sleep(300)
+const darkNow = () => gm.msgs.filter((m) => m.t === 'scene' && m.scene.id === crypt).at(-1)?.scene.darkness
+check('a scene that follows the time of day is dark at night', darkNow() === 0.85)
+gm.send({ t: 'settings.set', patch: { hour: 12 } })
+await sleep(300)
+check('and light again at noon', darkNow() === 0)
+gm.send({ t: 'settings.set', patch: { hour: 24 }, op: 'badhour' })
+check('an hour that does not exist is refused', !!(await gm.until((m) => m.t === 'nack' && m.op === 'badhour')))
+gm.send({ t: 'settings.set', patch: { daylight: [] } })
+gm.send({ t: 'scene.update', id: crypt, patch: { darkness: 0.3 } })
+await sleep(200)
+gm.send({ t: 'settings.set', patch: { hour: 0 } })
+await sleep(300)
+check('a scene that does not follow it is left alone', darkNow() === 0.3)
+gm.send({ t: 'scene.update', id: crypt, patch: { darkness: 0 } })
+gm.send({ t: 'settings.set', patch: { hour: 12 } })
+await sleep(200)
+
 // bad input
 gm.send({ t: 'token.update', id: aria.id, patch: { size: 9999 }, op: 'big' })
 check('out of range values are refused', !!(await gm.until((m) => m.t === 'nack' && m.op === 'big')))

@@ -11,6 +11,7 @@ import { uid } from './pages.js'
 import { publishWorld } from './live.js'
 import { presenceChanged } from './presence.js'
 import { ALLOWED, AUDIO } from './routes/uploads.js'
+import { darknessAt } from './daylight.js'
 import { parseChat, readable, withInline, type Kind, type Part } from './chat.js'
 import { buildSight, canSee, type Sight, type SightToken } from './sight.js'
 import { advance, delay as delayTurn, marker as lairMarker, emptyCombat, end as endCombat, start as startCombat, visible as visibleCombat, withList, type Combat } from './combat.js'
@@ -366,6 +367,21 @@ function jukeboxFor(ws: string) {
   return { tracks: rows.map((t) => ({ id: t.id, name: t.name, url: t.upload_id.startsWith('https://') ? t.upload_id : `/api/uploads/${t.upload_id}`, loop: !!t.loop, scene: t.scene_id })), playing: rows.filter((t) => on.has(t.id)).map((t) => t.id) }
 }
 function sendJukebox(ws: string) { const j = jukeboxFor(ws); for (const c of inWorld(ws)) send(c, { t: 'jukebox', ...j }) }
+
+// ---------- time of day ----------
+
+/** Sets the darkness of the scenes that follow the time of day to what the hour says, and tells everyone. */
+function applyDaylight(ws: string, s: TableSettings) {
+  const dark = darknessAt(s.hour)
+  for (const id of s.daylight) {
+    const row = sceneRow(id, ws)
+    if (!row || row.darkness === dark) continue
+    db.prepare('UPDATE scenes SET darkness = ?, updated_at = ? WHERE id = ?').run(dark, now(), id)
+    const fresh = sceneRow(id, ws)!
+    for (const x of inWorld(ws)) send(x, { t: 'scene', scene: sceneFor(x, fresh) })
+    scheduleSight(ws, id)
+  }
+}
 
 // ---------- triggers ----------
 
@@ -1580,6 +1596,7 @@ async function handle(c: Conn, m: ClientMessage) {
       if (!gm) return nack(c, m, 'only the GM can do that')
       const next = settingsSchema.parse({ ...settings, ...m.patch })
       saveState(ws, stateOf(ws).active, next)
+      if (m.patch.hour !== undefined || m.patch.daylight !== undefined) applyDaylight(ws, next)
       for (const x of inWorld(ws)) {
         const was = x.role
         x.role = roleAt(x.user, x.wr, next)

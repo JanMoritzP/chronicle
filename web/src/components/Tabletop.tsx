@@ -16,6 +16,7 @@ import { AudioPlayer } from './TableAudio'
 import { TriggersSection } from './TableTriggers'
 import { MapEditor } from './MapEditor'
 import { AssetLibrary } from './AssetLibrary'
+import { partOfDay } from '../lib/daylight'
 import { loadPerf, savePerf, statsText, type Perf } from '../lib/tableperf'
 import { bind, DEFAULT_KEYS, KEY_ACTIONS, loadKeys, pressed, saveKeys, type KeyAction } from '../lib/tablekeys'
 import { PinDialog } from './PinDialog'
@@ -583,6 +584,7 @@ function ScenePanel({ scene, active, wsId }: { scene: Scene; active: boolean; ws
         </Select>
       </label>
       <label>Darkness ({Math.round(scene.darkness * 100)} %)<input type="range" min={0} max={100} value={Math.round(scene.darkness * 100)} onChange={(e) => patch({ darkness: Number(e.target.value) / 100 })} /></label>
+      <DaylightControl scene={scene} />
       {scene.fog && <button className="btn sm" onClick={() => sendTable({ t: 'fog.reset', sceneId: scene.id })}>Forget what players explored</button>}
       <div className="tt-row"><label>Width (px){num('width', scene.width, 100)}</label><label>Height (px){num('height', scene.height, 100)}</label></div>
       <div className="tt-row">
@@ -697,4 +699,23 @@ function PerfBox({ k, label }: { k: keyof Perf; label: string }) {
   const [perf, setPerf] = useState(loadPerf)
   useEffect(() => { const on = () => setPerf(loadPerf()); window.addEventListener('tt-perf', on); return () => window.removeEventListener('tt-perf', on) }, [])
   return <label className="tt-check"><input type="checkbox" checked={perf[k]} onChange={(e) => savePerf({ ...loadPerf(), [k]: e.target.checked })} />{label}</label>
+}
+
+/** The hour of the day at the table. A scene that follows it is dark at night and light by day, set by the server for everyone. */
+function DaylightControl({ scene }: { scene: Scene }) {
+  const hour = useTable((s) => s.settings.hour ?? 12)
+  const daylight = useTable((s) => s.settings.daylight ?? [])
+  const follows = daylight.includes(scene.id)
+  const set = (patch: Record<string, unknown>) => sendTable({ t: 'settings.set', patch })
+  return (
+    <div className="tt-form" role="group" aria-label="Time of day">
+      <b>Time of day: {String(hour).padStart(2, '0')}:00, {partOfDay(hour)}</b>
+      <div className="tt-row">
+        <button className="btn sm" aria-label="One hour earlier" onClick={() => set({ hour: (hour + 23) % 24 })}>-1 h</button>
+        <input type="range" min={0} max={23} aria-label="Hour of the day" value={hour} onChange={(e) => set({ hour: Number(e.target.value) })} />
+        <button className="btn sm" aria-label="One hour later" onClick={() => set({ hour: (hour + 1) % 24 })}>+1 h</button>
+      </div>
+      <label className="tt-check"><input type="checkbox" checked={follows} onChange={(e) => set({ daylight: e.target.checked ? [...daylight, scene.id] : daylight.filter((x) => x !== scene.id) })} />This scene follows the time of day</label>
+    </div>
+  )
 }
