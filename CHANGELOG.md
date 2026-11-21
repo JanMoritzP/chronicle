@@ -2,6 +2,16 @@
 
 Newest first. The version in `electron/package.json` is the app version; the release notes on GitHub are what the in-app update dialog shows, so keep each entry short and in plain words. Sections after 0.2.0 are written by `scripts/release.mjs` from the commit subjects, so the commit messages carry the release notes.
 
+## 0.48.0 (2026-11-21)
+
+### Features
+- replay of the last session with tokens moving over the map and the chat beside it
+- an asset library with search, tags, bulk upload and a storage limit
+- a ready check, and muting, sending away and banning players
+- jukebox streams from an https address and tracks tied to a scene
+- import characters from Foundry, D&D Beyond and Roll20, and export them
+- /as and /ooc in chat, and applying a damage roll to the selected tokens
+
 ## 0.47.0 (2026-11-21)
 
 ### Features
