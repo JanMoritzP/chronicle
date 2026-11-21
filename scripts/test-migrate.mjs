@@ -48,7 +48,7 @@ for (const [name, rollBack] of Object.entries(SCENARIOS)) {
     d.exec('ALTER TABLE scenes DROP COLUMN weather')
     for (const col of ['folder', 'notes', 'grid_color', 'grid_opacity', 'ambient']) d.exec(`ALTER TABLE scenes DROP COLUMN ${col}`)
     rollBack(d)
-    d.prepare("UPDATE meta SET value = ? WHERE key = 'schema_version'").run(String(version - 13))
+    d.prepare("UPDATE meta SET value = ? WHERE key = 'schema_version'").run(String(version - 14))
     d.close()
 
     proc = await start(dir)

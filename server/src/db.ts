@@ -597,6 +597,8 @@ const migrations: (string | ((d: Database.Database) => void))[] = [
   );
   CREATE INDEX pins_scene ON scene_pins(scene_id);
   `,
+  // a track can belong to a scene and start when the scene does
+  `ALTER TABLE tracks ADD COLUMN scene_id TEXT`,
 ]
 
 export const SCHEMA_VERSION = migrations.length

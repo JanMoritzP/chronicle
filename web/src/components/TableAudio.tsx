@@ -1,6 +1,7 @@
 import { Music, Play, Square, Trash2, Volume2, VolumeX } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { askText } from '../lib/dialog'
+import { alertDialog, askText } from '../lib/dialog'
+import { Select } from './Select'
 import { useStore } from '../store'
 import { sendTable, useTable } from '../tabletop/state'
 import { pickSound, uploadSound } from '../tabletop/upload'
@@ -58,7 +59,15 @@ export function Jukebox() {
   const role = useTable((s) => s.role)
   const wsId = useStore((s) => s.wsId)
   const gm = role === 'gm'
+  const scenes = useTable((s) => s.scenes)
   if (!gm && !tracks.length) return null
+  const addStream = async () => {
+    const url = await askText('Play a stream', { label: 'Address of the sound (https)', placeholder: 'https://example.com/tavern.ogg', okLabel: 'Next' })
+    if (!url?.trim()) return
+    if (!/^https:\/\/[^\s]{4,280}$/.test(url.trim())) { await alertDialog('The address must start with https:// and point at a sound file or stream.'); return }
+    const name = await askText('Name this track', { label: 'Name', okLabel: 'Add' })
+    if (name?.trim()) sendTable({ t: 'jukebox.add', name: name.trim(), url: url.trim(), loop: false })
+  }
   const add = async () => {
     const f = await pickSound()
     if (!f || !wsId) return
@@ -76,6 +85,12 @@ export function Jukebox() {
           return (
             <li key={t.id}>
               <span className="grow">{t.name}{t.loop ? <small className="muted"> loops</small> : null}{on ? <small className="muted"> playing</small> : null}</span>
+              {gm && (
+                <Select className="input tt-type" value={t.scene ?? ''} title={`Scene for ${t.name}`} onChange={(v) => sendTable({ t: 'jukebox.scene', id: t.id, scene: v || null })}>
+                  <option value="">Any scene</option>
+                  {scenes.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </Select>
+              )}
               {gm && (on
                 ? <button className="btn sm" aria-label={`Stop ${t.name}`} onClick={() => sendTable({ t: 'jukebox.stop', id: t.id })}><Square size={12} /></button>
                 : <button className="btn sm" aria-label={`Play ${t.name}`} onClick={() => sendTable({ t: 'jukebox.play', id: t.id })}><Play size={12} /></button>)}
@@ -88,6 +103,7 @@ export function Jukebox() {
       {gm && (
         <div className="tt-row">
           <button className="btn sm" onClick={add}>Add a sound file</button>
+          <button className="btn sm" onClick={addStream}>Add a stream</button>
           {playing.length > 0 && <button className="btn sm" onClick={() => sendTable({ t: 'jukebox.stop', id: 'all' })}>Stop everything</button>}
         </div>
       )}

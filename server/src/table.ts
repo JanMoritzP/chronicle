@@ -335,11 +335,11 @@ function rollOnTable(ws: string, c: Conn, t: RollTableDb) {
 
 /** What plays in each world right now. It is not kept: a restart is silence. */
 const playing = new Map<string, Set<string>>()
-interface TrackDb { id: string; name: string; upload_id: string; loop: number }
+interface TrackDb { id: string; name: string; upload_id: string; loop: number; scene_id: string | null }
 function jukeboxFor(ws: string) {
-  const rows = db.prepare('SELECT id, name, upload_id, loop FROM tracks WHERE workspace_id = ? ORDER BY created_at').all(ws) as TrackDb[]
+  const rows = db.prepare('SELECT id, name, upload_id, loop, scene_id FROM tracks WHERE workspace_id = ? ORDER BY created_at').all(ws) as TrackDb[]
   const on = playing.get(ws) ?? new Set<string>()
-  return { tracks: rows.map((t) => ({ id: t.id, name: t.name, url: `/api/uploads/${t.upload_id}`, loop: !!t.loop })), playing: rows.filter((t) => on.has(t.id)).map((t) => t.id) }
+  return { tracks: rows.map((t) => ({ id: t.id, name: t.name, url: t.upload_id.startsWith('https://') ? t.upload_id : `/api/uploads/${t.upload_id}`, loop: !!t.loop, scene: t.scene_id })), playing: rows.filter((t) => on.has(t.id)).map((t) => t.id) }
 }
 function sendJukebox(ws: string) { const j = jukeboxFor(ws); for (const c of inWorld(ws)) send(c, { t: 'jukebox', ...j }) }
 
@@ -687,6 +687,14 @@ async function handle(c: Conn, m: ClientMessage) {
       if (!gm) return nack(c, m, 'only the GM can do that')
       if (!sceneRow(m.id, ws)) return nack(c, m, 'no such scene')
       saveState(ws, m.id, settings)
+      // sound that belongs to a scene starts with it, and sound that belongs to another scene stops
+      { const tracks = db.prepare('SELECT id, scene_id FROM tracks WHERE workspace_id = ?').all(ws) as { id: string; scene_id: string | null }[]
+        if (tracks.some((t) => t.scene_id)) {
+          const on = playing.get(ws) ?? new Set<string>()
+          for (const t of tracks) { if (t.scene_id === m.id) on.add(t.id); else if (t.scene_id) on.delete(t.id) }
+          playing.set(ws, on)
+          sendJukebox(ws)
+        } }
       for (const x of inWorld(ws)) {
         send(x, { t: 'active', id: m.id })
         // the players move with the table; the GM who pressed the button comes along, other GMs keep their own view
@@ -925,11 +933,20 @@ async function handle(c: Conn, m: ClientMessage) {
     }
     case 'jukebox.add': {
       if (!gm) return nack(c, m, 'only the GM can do that')
-      const uploadId = m.url.slice('/api/uploads/'.length)
-      const up = db.prepare('SELECT mime FROM uploads WHERE id = ? AND workspace_id = ?').get(uploadId, ws) as { mime: string } | undefined
-      if (!up || !AUDIO[up.mime]) return nack(c, m, 'That is not a sound file of this world.')
+      // a sound file of this world, or a stream at an address (https only)
+      const uploadId = m.url.startsWith('https://') ? m.url : m.url.slice('/api/uploads/'.length)
+      if (!m.url.startsWith('https://')) {
+        const up = db.prepare('SELECT mime FROM uploads WHERE id = ? AND workspace_id = ?').get(uploadId, ws) as { mime: string } | undefined
+        if (!up || !AUDIO[up.mime]) return nack(c, m, 'That is not a sound file of this world.')
+      }
       if ((db.prepare('SELECT COUNT(*) AS n FROM tracks WHERE workspace_id = ?').get(ws) as { n: number }).n >= 100) return nack(c, m, 'That is as many tracks as a world can keep.')
       db.prepare('INSERT INTO tracks(id,workspace_id,name,upload_id,loop,created_at) VALUES(?,?,?,?,?,?)').run(uid(), ws, m.name, uploadId, m.loop ? 1 : 0, now())
+      return sendJukebox(ws)
+    }
+    case 'jukebox.scene': {
+      if (!gm) return nack(c, m, 'only the GM can do that')
+      if (m.scene && !sceneRow(m.scene, ws)) return nack(c, m, 'no such scene')
+      if (!db.prepare('UPDATE tracks SET scene_id = ? WHERE id = ? AND workspace_id = ?').run(m.scene, m.id, ws).changes) return nack(c, m, 'no such track')
       return sendJukebox(ws)
     }
     case 'jukebox.remove': {

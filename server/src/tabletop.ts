@@ -226,7 +226,9 @@ export const clientMessage = z.discriminatedUnion('t', [
   z.object({ t: z.literal('rolltable.save'), id: id.optional(), name: z.string().trim().min(1).max(60), entries: z.string().max(20000), secret: z.boolean() }),
   z.object({ t: z.literal('rolltable.delete'), id }),
   z.object({ t: z.literal('rolltable.roll'), id }),
-  z.object({ t: z.literal('jukebox.add'), name: z.string().trim().min(1).max(60), url: z.string().max(300).regex(/^\/api\/uploads\/[A-Za-z0-9-]+$/), loop: z.boolean() }),
+  z.object({ t: z.literal('jukebox.add'), name: z.string().trim().min(1).max(60), url: z.string().max(300).regex(/^(\/api\/uploads\/[A-Za-z0-9-]+|https:\/\/[^\s"'<>]{4,280})$/), loop: z.boolean() }),
+  /** the track starts by itself when this scene is shown to the table (and stops when another scene is), or null for none */
+  z.object({ t: z.literal('jukebox.scene'), id, scene: id.nullable() }),
   z.object({ t: z.literal('jukebox.remove'), id }),
   z.object({ t: z.literal('jukebox.play'), id }),
   z.object({ t: z.literal('jukebox.stop'), id: z.union([id, z.literal('all')]) }),
