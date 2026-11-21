@@ -798,6 +798,18 @@ gm.send({ t: 'token.delete', ids: [scout.id, statue.id] })
 await sleep(250)
 check('triggers can be deleted', trigs(gm).length === 0)
 
+// what the map editor made a scene from
+const mdUrl = `/api/workspaces/${ws}/scenes/${crypt}/map-doc`
+const mdDoc = { v: 1, cols: 6, rows: 5, floor: ['000000', '011100', '011100', '011100', '000000'], doors: [{ x: 2, y: 1, side: 'n' }], props: [{ x: 2, y: 2, kind: 'table', turn: 0 }], lights: [{ x: 2, y: 2, radius: 4, color: '#ffd9a0' }], theme: 'stone' }
+check('a scene has no map document until the editor made one', (await call('GET', mdUrl, null, gmCookie)).data.doc === null)
+check('the GM saves one', (await call('PUT', mdUrl, { doc: mdDoc }, gmCookie)).status === 200)
+check('and reads it back as it was saved', JSON.stringify((await call('GET', mdUrl, null, gmCookie)).data.doc) === JSON.stringify(mdDoc))
+check('a document that does not fit its own size is refused', (await call('PUT', mdUrl, { doc: { ...mdDoc, floor: ['0'] } }, gmCookie)).status === 400)
+check('so is one with a bad kind of theme or an oversized grid', (await call('PUT', mdUrl, { doc: { ...mdDoc, theme: 'lava' } }, gmCookie)).status === 400 && (await call('PUT', mdUrl, { doc: { ...mdDoc, cols: 500 } }, gmCookie)).status === 400)
+check('a player can neither read nor write it', (await call('GET', mdUrl, null, alice.cookie)).status === 403 && (await call('PUT', mdUrl, { doc: mdDoc }, alice.cookie)).status === 403)
+check('and someone from another world cannot find it', (await call('GET', mdUrl, null, eve.cookie)).status === 404)
+check('a scene of another world is not found', (await call('GET', `/api/workspaces/${ws2}/scenes/${crypt}/map-doc`, null, gmCookie)).status === 404)
+
 // the GM brings everyone to look at one place
 n = pa.mark()
 gm.send({ t: 'camera.pull', x: 100, y: 200, w: 800, h: 600 })

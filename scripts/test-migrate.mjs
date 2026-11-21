@@ -43,10 +43,10 @@ for (const [name, rollBack] of Object.entries(SCENARIOS)) {
     const d = new Database(path.join(dir, 'dnd.db'))
     const version = Number(d.prepare("SELECT value FROM meta WHERE key='schema_version'").get().value)
     // the steps after the one that adds the tabletop tiles (invite links, macros and handouts, roll tables and decks) are taken away too: an older install has not run them
-    d.exec('DROP TABLE IF EXISTS invites; DROP TABLE IF EXISTS macros; DROP TABLE IF EXISTS handouts; DROP TABLE IF EXISTS roll_tables; DROP TABLE IF EXISTS decks; DROP TABLE IF EXISTS tracks; DROP TABLE IF EXISTS triggers; DROP TABLE IF EXISTS system_packs')
+    d.exec('DROP TABLE IF EXISTS invites; DROP TABLE IF EXISTS macros; DROP TABLE IF EXISTS handouts; DROP TABLE IF EXISTS roll_tables; DROP TABLE IF EXISTS decks; DROP TABLE IF EXISTS tracks; DROP TABLE IF EXISTS triggers; DROP TABLE IF EXISTS system_packs; DROP TABLE IF EXISTS map_docs')
     d.exec('ALTER TABLE scenes DROP COLUMN weather')
     rollBack(d)
-    d.prepare("UPDATE meta SET value = ? WHERE key = 'schema_version'").run(String(version - 9))
+    d.prepare("UPDATE meta SET value = ? WHERE key = 'schema_version'").run(String(version - 10))
     d.close()
 
     proc = await start(dir)

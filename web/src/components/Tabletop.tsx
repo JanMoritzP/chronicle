@@ -14,6 +14,7 @@ import { TilePanel, TilesSection } from './TableTiles'
 import { HandoutViewer, HandoutsPanel } from './TableHandouts'
 import { AudioPlayer } from './TableAudio'
 import { TriggersSection } from './TableTriggers'
+import { MapEditor } from './MapEditor'
 import { TablesAndDecks } from './TableDecks'
 import { ChatPanel, CombatPanel, LinkPage, SightLight, TokenSheet, TokenStats } from './TableParts'
 import { Select } from './Select'
@@ -417,6 +418,7 @@ function TokenPanel({ token, count }: { token: Token | null; count: number }) {
 
 function ScenePanel({ scene, active, wsId }: { scene: Scene; active: boolean; wsId: string }) {
   const [name, setName] = useState(scene.name)
+  const [editing, setEditing] = useState(false)
   useEffect(() => setName(scene.name), [scene.id, scene.name])
   const patch = (p: Record<string, unknown>) => sendTable({ t: 'scene.update', id: scene.id, patch: p })
   const num = (key: string, value: number, min: number) => (
@@ -429,6 +431,10 @@ function ScenePanel({ scene, active, wsId }: { scene: Scene; active: boolean; ws
         <button className="btn sm" onClick={async () => { const f = await pickImage(); if (f) { const url = await uploadImage(wsId, f); if (url) patch({ bg: url }) } }}>Set map image</button>
         {scene.bg && <button className="btn sm" onClick={() => patch({ bg: '' })}>Remove image</button>}
       </div>
+      <div className="tt-row">
+        <button className="btn sm" title="Draw rooms, corridors, doors and lights and make this scene from them" onClick={() => setEditing(true)}>Open the map editor</button>
+      </div>
+      {editing && <MapEditor scene={scene} wsId={wsId} onClose={() => setEditing(false)} />}
       <div className="tt-row">
         <button className="btn sm" title="Make a new scene from a map file made by Dungeondraft or another map tool" onClick={() => void importUvtt(wsId)}>Import a Universal VTT map</button>
         <button className="btn sm" title="Save this scene, its walls and lights as a map file" onClick={() => void exportUvtt(scene)}>Export as Universal VTT</button>

@@ -556,6 +556,15 @@ const migrations: (string | ((d: Database.Database) => void))[] = [
     UNIQUE(workspace_id, slug)
   );
   `,
+  // what the map editor made a scene from
+  `
+  CREATE TABLE map_docs (
+    scene_id TEXT PRIMARY KEY REFERENCES scenes(id) ON DELETE CASCADE,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    doc TEXT NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+  `,
 ]
 
 export const SCHEMA_VERSION = migrations.length
