@@ -954,3 +954,5 @@ button.cs-roll:disabled { cursor: default; }
 .invites-fresh .input { flex: 1; min-width: 200px; }
 .invites-list { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
 .invites-list li { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; }
+.tt-effects { display: flex; flex-direction: column; gap: 6px; }
+.tt-x { border: 0; background: none; color: inherit; cursor: pointer; padding: 0 0 0 4px; font-size: 14px; line-height: 1; }

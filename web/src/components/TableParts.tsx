@@ -14,6 +14,52 @@ export const CONDITIONS = ['Blinded', 'Charmed', 'Concentrating', 'Deafened', 'E
 export const PF2E_CONDITIONS = ['Blinded', 'Clumsy', 'Concealed', 'Confused', 'Dazzled', 'Deafened', 'Doomed', 'Drained', 'Dying', 'Enfeebled', 'Fascinated', 'Fatigued', 'Fleeing', 'Frightened', 'Grabbed', 'Hidden', 'Immobilized', 'Invisible', 'Off-guard', 'Paralyzed', 'Petrified', 'Prone', 'Quickened', 'Restrained', 'Sickened', 'Slowed', 'Stunned', 'Stupefied', 'Unconscious', 'Wounded']
 const VALUED = new Set(['Clumsy', 'Doomed', 'Drained', 'Dying', 'Enfeebled', 'Frightened', 'Sickened', 'Slowed', 'Stunned', 'Stupefied', 'Wounded'])
 const DAMAGE_TYPES = ['acid', 'bludgeoning', 'cold', 'fire', 'force', 'lightning', 'necrotic', 'piercing', 'poison', 'psychic', 'radiant', 'slashing', 'thunder']
+interface Effect { id: string; name: string; rounds: number | null; ac?: number; attack?: string; save?: string; from?: string; concentration?: boolean }
+const PRESETS: Record<string, Omit<Effect, 'id'>> = {
+  Bless: { name: 'Bless', rounds: 10, attack: '+1d4', save: '+1d4', concentration: true },
+  Bane: { name: 'Bane', rounds: 10, attack: '-1d4', save: '-1d4', concentration: true },
+  'Shield of Faith': { name: 'Shield of Faith', rounds: 100, ac: 2, concentration: true },
+  Haste: { name: 'Haste', rounds: 10, ac: 2, concentration: true },
+}
+const modsText = (e: Effect) => [e.ac ? `${e.ac > 0 ? '+' : ''}${e.ac} AC` : '', e.attack ? `${e.attack} attacks` : '', e.save ? `${e.save} saves` : ''].filter(Boolean).join(', ')
+
+/** Spells and conditions that last a number of rounds and change armor class, attack rolls or saves. */
+function Effects({ token, can }: { token: Token; can: boolean }) {
+  const effects = (token.data.effects ?? []) as Effect[]
+  const [name, setName] = useState('')
+  const [rounds, setRounds] = useState('')
+  const [ac, setAc] = useState('')
+  const [preset, setPreset] = useState('')
+  const caster = ((token.data.conditions ?? []) as string[]).includes('Concentrating')
+  const add = (e: Omit<Effect, 'id'>) => sendTable({ t: 'effect.add', id: token.id, effect: { ...e, ...(e.concentration ? { from: token.id } : {}) } })
+  if (!can && !effects.length) return null
+  return (
+    <div className="tt-effects">
+      <div className="tt-chips" role="group" aria-label="Effects">
+        {effects.map((e) => (
+          <span key={e.id} className="tt-chip on" title={modsText(e)}>
+            {e.name}{e.rounds != null ? ` (${e.rounds})` : ''}{modsText(e) ? ` ${modsText(e)}` : ''}
+            {can && <button className="tt-x" aria-label={`End ${e.name}`} onClick={() => sendTable({ t: 'effect.remove', id: token.id, effectId: e.id })}>×</button>}
+          </span>
+        ))}
+      </div>
+      {can && (
+        <div className="tt-row">
+          <Select className="input tt-type" value={preset} title="Add a spell effect" onChange={(v) => { setPreset(''); if (v && PRESETS[v]) add(PRESETS[v]) }}>
+            <option value="">Add a spell effect</option>
+            {Object.keys(PRESETS).map((k) => <option key={k} value={k}>{k}</option>)}
+          </Select>
+          <input className="input" placeholder="Effect" aria-label="Spell effect" value={name} onChange={(e) => setName(e.target.value)} />
+          <input className="input tt-num" inputMode="numeric" placeholder="Rounds" aria-label="Duration in rounds" value={rounds} onChange={(e) => setRounds(e.target.value.replace(/[^\d]/g, ''))} />
+          <input className="input tt-num" inputMode="numeric" placeholder="AC" aria-label="Bonus to armor of the effect" value={ac} onChange={(e) => setAc(e.target.value.replace(/[^\d-]/g, ''))} />
+          <button className="btn sm" disabled={!name.trim()} onClick={() => { add({ name: name.trim(), rounds: rounds ? Math.min(999, Number(rounds)) : null, ...(Number(ac) ? { ac: Math.max(-10, Math.min(10, Number(ac))) } : {}) }); setName(''); setRounds(''); setAc('') }}>Apply</button>
+          {caster && <small className="muted">Spell effects end when this token stops concentrating.</small>}
+        </div>
+      )}
+    </div>
+  )
+}
+
 const baseOf = (c: string) => c.replace(/\s+\d+$/, '')
 
 export const rollText = (expr: string, label: string) => sendTable({ t: 'chat', text: `/roll ${expr} ${label}` })
@@ -108,6 +154,7 @@ export function TokenStats({ token }: { token: Token }) {
           <button key={c} className={`tt-chip${current(c) ? ' on' : ''}`} disabled={!can} aria-pressed={!!current(c)} onClick={() => toggle(c)}>{current(c) ?? c}</button>
         ))}
       </div>
+      <Effects token={token} can={can} />
       {gm && hp && (
         <label className="tt-check"><input type="checkbox" checked={!!token.data.hpPrivate} onChange={(e) => stat({ hpPrivate: e.target.checked })} />Hide hit points from other players</label>
       )}

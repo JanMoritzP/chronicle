@@ -313,7 +313,8 @@ The GM can let the table apply some rules. They are on the Table panel under "Ru
 - **Rests**, always available on a linked character: a short rest spends hit dice (largest first) and readies "after a rest" features, a long rest restores hit points, spell slots, uses, half the hit dice and clears death saves.
 - **Spell slots and uses** show on the table card as pips and a Use button, written back to the sheet. Pure rules: `server/src/rules5e.ts`, test `scripts/test-rules5e.ts`.
 - **Attacks on targets.** A fourth switch. On the table card a feature with a to-hit bonus or a saving throw gets a Target choice and a "Roll on target" button (Shift for advantage, Ctrl for disadvantage). The server rolls the attack against the target's armor class (a natural 20 hits and doubles the dice, a natural 1 misses), or the target's saving throw against the DC (half damage when the text says "half as much"), rolls the damage, applies it through the same damage rules and reports it in chat. A target without armor class is only rolled against. Targets at a secret token are reported to the GM and the attacker only.
-Not yet: effects with durations, inventory weight, a level-up flow, death saves from damage taken at 0.
+- **Active effects.** A token carries spell effects (presets for Bless, Bane, Shield of Faith, Haste, or a custom name with rounds and an armor class bonus). An effect can add to armor class, attack rolls ("+1d4") and saving throws, and these reach the automated attack and saving rolls and concentration saves. A duration is in rounds: it goes down when a new round of the order of play begins and the effect is said to end at 0. An effect with a duration can be tied to the caster's concentration and ends when the caster stops. Players cannot see an armor class bonus on a token whose hit points are private. Pure rules: `server/src/effects.ts`.
+Not yet: inventory weight, a level-up flow, death saves from damage taken at 0.
 
 ## Invite links (built)
 

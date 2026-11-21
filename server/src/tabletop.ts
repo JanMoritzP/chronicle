@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { effectSchema } from './effects.js'
 
 // Rules of the tabletop that need no database: who is what at the table, who may do what to a token, and the shape of every message.
 // The table channel (table.ts) calls these for every message, so the rules live in one place and are tested without a server.
@@ -64,6 +65,8 @@ export const canEditStats = (role: TableRole, userId: string, t: Pick<TokenRow, 
 export function redact(role: TableRole, userId: string, t: TokenRow): TokenRow {
   if (role === 'gm' || !t.data.hpPrivate || ownsToken(userId, t)) return t
   const { hp: _hp, ac: _ac, ...data } = t.data
+  // an effect that moves armor class would give the number away
+  if (Array.isArray(data.effects)) data.effects = data.effects.map((e: Record<string, unknown>) => { const { ac: _a, ...rest } = e; return rest })
   return { ...t, data }
 }
 
@@ -147,6 +150,8 @@ export const clientMessage = z.discriminatedUnion('t', [
   z.object({ t: z.literal('token.stat'), id, stat: statPatch.optional(), /** positive hurts, negative heals */ damage: z.number().int().min(-99999).max(99999).optional(), /** acid, fire, ... : lets resistances apply when automation is on */ type: z.string().max(30).optional() }),
   z.object({ t: z.literal('token.rest'), id, kind: z.enum(['short', 'long']), /** hit dice to spend on a short rest */ dice: z.number().int().min(0).max(40).optional() }),
   z.object({ t: z.literal('token.deathsave'), id }),
+  z.object({ t: z.literal('effect.add'), id, effect: effectSchema }),
+  z.object({ t: z.literal('effect.remove'), id, effectId: id }),
   z.object({
     t: z.literal('attack'), from: id, targets: z.array(id).min(1).max(20), label: z.string().max(80),
     attack: z.object({ bonus: z.number().int().min(-30).max(60), mode: z.enum(['adv', 'dis']).optional() }).optional(),

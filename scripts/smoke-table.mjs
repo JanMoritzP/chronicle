@@ -511,6 +511,70 @@ gm.send({ t: 'settings.set', patch: { automation: { damage: false, concentration
 gm.send({ t: 'token.delete', ids: [archer.id, dummy.id] })
 await sleep(100)
 
+// active effects: durations that run out with the rounds, bonuses that reach the rolls, and spells that end with concentration
+gm.send({ t: 'token.add', sceneId: crypt, token: { name: 'Priest', x: 70, y: 140 } })
+gm.send({ t: 'token.add', sceneId: crypt, token: { name: 'Target', x: 140, y: 140 } })
+const priest = (await gm.until((m) => m.t === 'token' && m.token.name === 'Priest')).token
+const tgt = (await gm.until((m) => m.t === 'token' && m.token.name === 'Target')).token
+gm.send({ t: 'token.stat', id: tgt.id, stat: { hp: { value: 50, max: 50 }, ac: 10 } })
+const effectsOn = (tok) => gm.msgs.filter((m) => m.t === 'token' && m.token.id === tok.id).at(-1)?.token.data.effects ?? []
+gm.send({ t: 'effect.add', id: tgt.id, effect: { name: 'Shield of Faith', rounds: 2, ac: 5 } })
+await sleep(250)
+check('an effect is kept on the token with its rounds', effectsOn(tgt).length === 1 && effectsOn(tgt)[0].rounds === 2 && !!effectsOn(tgt)[0].id)
+gm.send({ t: 'settings.set', patch: { automation: { damage: false, concentration: false, deathSaves: false, attacks: true } } })
+await sleep(150)
+gm.send({ t: 'token.add', sceneId: crypt, token: { name: 'Swordsman', x: 70, y: 210, owners: [alice.id] } })
+const sword = (await gm.until((m) => m.t === 'token' && m.token.name === 'Swordsman')).token
+gm.send({ t: 'effect.add', id: sword.id, effect: { name: 'Bless', rounds: null, attack: '+1d4' } })
+await sleep(200)
+n = gm.mark()
+pa.send({ t: 'attack', from: sword.id, targets: [tgt.id], label: 'Sword', attack: { bonus: 3 } })
+await sleep(400)
+const swing = gm.since(n, (m) => m.t === 'chat.msg' && m.msg.parts.some((p) => p.t === 'roll'))[0]?.msg.parts[0].roll
+check("an effect raises the target's armor class for attacks against it", swing?.dc === 15)
+check("and adds its die to the attacker's roll", swing?.terms.some((t) => t.kind === 'dice' && t.sides === 4))
+gm.send({ t: 'settings.set', patch: { automation: { damage: false, concentration: false, deathSaves: false, attacks: false } } })
+pb.send({ t: 'effect.add', id: tgt.id, effect: { name: 'Curse', rounds: 3 }, op: 'curse' })
+check("a player cannot put an effect on someone else's token", !!(await pb.until((m) => m.t === 'nack' && m.op === 'curse')))
+gm.send({ t: 'effect.add', id: tgt.id, effect: { name: 'Bad', attack: 'one die' }, op: 'badfx' })
+await sleep(200)
+check('an effect with a malformed bonus is refused', effectsOn(tgt).length === 1)
+
+// the rounds of combat wear it down
+gm.send({ t: 'combat.add', tokenIds: [priest.id] })
+await sleep(150)
+const prCombatant = gm.msgs.filter((m) => m.t === 'combat').at(-1).combat.list.find((x) => x.tokenId === priest.id)
+gm.send({ t: 'combat.init', id: prCombatant.id, value: 12 })
+await sleep(150)
+gm.send({ t: 'combat.control', action: 'start' })
+await sleep(150)
+n = pa.mark()
+gm.send({ t: 'combat.control', action: 'next' })
+await sleep(300)
+check('a new round takes one off', effectsOn(tgt)[0]?.rounds === 1)
+gm.send({ t: 'combat.control', action: 'next' })
+await sleep(300)
+check('and one that runs out is gone and said to end', effectsOn(tgt).length === 0 && pa.since(n, (m) => m.t === 'chat.msg' && JSON.stringify(m.msg.parts).includes('Shield of Faith ends')).length === 1)
+gm.send({ t: 'combat.control', action: 'end' })
+
+// a spell that needs concentration ends when the caster stops
+gm.send({ t: 'effect.add', id: tgt.id, effect: { name: 'Haste', rounds: 10, from: priest.id, concentration: true } })
+gm.send({ t: 'token.stat', id: priest.id, stat: { conditions: ['Concentrating'] } })
+await sleep(250)
+check('a spell kept up by concentration is on its target', effectsOn(tgt).some((e) => e.name === 'Haste'))
+gm.send({ t: 'token.stat', id: priest.id, stat: { conditions: [] } })
+await sleep(300)
+check('and ends when the caster stops concentrating', !effectsOn(tgt).some((e) => e.name === 'Haste'))
+gm.send({ t: 'effect.add', id: tgt.id, effect: { name: 'Mark', rounds: null } })
+await sleep(200)
+const markId = effectsOn(tgt)[0].id
+gm.send({ t: 'effect.remove', id: tgt.id, effectId: markId })
+await sleep(200)
+check('an effect can be removed by hand', effectsOn(tgt).length === 0)
+gm.send({ t: 'combat.control', action: 'clear' })
+gm.send({ t: 'token.delete', ids: [priest.id, tgt.id, sword.id] })
+await sleep(100)
+
 // tiles and templates
 const tilePng = await sharp({ create: { width: 300, height: 150, channels: 3, background: '#a52' } }).png().toBuffer()
 const tileUpload = async (cookie, world) => {

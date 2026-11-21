@@ -17,6 +17,7 @@ import { advance, emptyCombat, end as endCombat, start as startCombat, visible a
 import { cryptoRng, parseRoll } from './dice.js'
 import { adjustDamage, concentrationDc, deathSave, longRest, modOf, saveBonusOf, shortRest, type Effect } from './rules5e.js'
 import { parseSheet, type Sheet } from './sheet.js'
+import { effectsOf, MAX_EFFECTS, modsOf, tick } from './effects.js'
 import { encounterRow } from './routes/encounters.js'
 import {
   canCreateToken, canEditStats, canMoveToken, canPing, canRuler, canSeeToken, clientMessage, makeLimiter, parseSettings, redact, roleAt, settingsSchema,
@@ -349,7 +350,7 @@ function applyStat(ws: string, userId: string, before: TokenRow, stat: Record<st
     else if (hpNow > 0) {
       const dc = concentrationDc(dmg)
       const bonus = pg ? pg.sheet.saves.con ?? modOf(pg.sheet.abilities.con) : 0
-      const parsed = parseChat(`/r 1d20${bonus < 0 ? '-' : '+'}${Math.abs(bonus)} Concentration save dc ${dc}`, undefined, worldSystem(ws))
+      const parsed = parseChat(`/r 1d20${bonus < 0 ? '-' : '+'}${Math.abs(bonus)}${modsOf(effectsOf(before.data)).save} Concentration save dc ${dc}`, undefined, worldSystem(ws))
       if (!('error' in parsed)) {
         rolls.push(...parsed.parts)
         const roll = parsed.parts[0]
@@ -367,7 +368,38 @@ function applyStat(ws: string, userId: string, before: TokenRow, stat: Record<st
   if (notes.length) postChat(ws, userId, before.name, quiet ? 'gmroll' : 'emote', [], [{ t: 'text', text: notes.join(' and ') }])
   if (rolls.length) postChat(ws, userId, before.name, quiet ? 'gmroll' : 'roll', [], rolls)
   emitToken(ws, before, tokenRow(before.id, ws)!)
+  if (((before.data.conditions as string[] | undefined) ?? []).includes('Concentrating') && !conditions.includes('Concentrating')) endConcentration(ws, userId, before)
   return { dealt: dmg, effect }
+}
+
+/** Effects that were kept up by concentrating end when the caster stops. */
+function endConcentration(ws: string, userId: string, caster: TokenRow) {
+  const rows = db.prepare('SELECT id FROM tokens WHERE workspace_id = ?').all(ws) as { id: string }[]
+  for (const { id } of rows) {
+    const t = tokenRow(id, ws)
+    if (!t) continue
+    const all = effectsOf(t.data)
+    const gone = all.filter((e) => e.concentration && e.from === caster.id)
+    if (!gone.length) continue
+    const data = { ...t.data, effects: all.filter((e) => !gone.includes(e)) }
+    db.prepare('UPDATE tokens SET data = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(data), now(), id)
+    postChat(ws, userId, t.name, t.hidden || t.data.hpPrivate ? 'gmroll' : 'emote', [], [{ t: 'text', text: `${gone.map((e) => e.name).join(', ')} ends: ${caster.name} stopped concentrating` }])
+    emitToken(ws, t, tokenRow(id, ws)!)
+  }
+}
+
+/** A round of combat is over: effects with a duration lose a round on every token, and the ones that run out are said to end. */
+function tickEffects(ws: string, userId: string) {
+  const rows = db.prepare('SELECT id FROM tokens WHERE workspace_id = ?').all(ws) as { id: string }[]
+  for (const { id } of rows) {
+    const t = tokenRow(id, ws)
+    const all = t ? effectsOf(t.data) : []
+    if (!t || !all.some((e) => e.rounds != null)) continue
+    const { kept, ended } = tick(all)
+    db.prepare('UPDATE tokens SET data = ?, updated_at = ? WHERE id = ?').run(JSON.stringify({ ...t.data, effects: kept }), now(), id)
+    if (ended.length) postChat(ws, userId, t.name, t.hidden || t.data.hpPrivate ? 'gmroll' : 'emote', [], [{ t: 'text', text: `${ended.map((e) => e.name).join(', ')} ${ended.length === 1 ? 'ends' : 'end'}` }])
+    emitToken(ws, t, tokenRow(id, ws)!)
+  }
 }
 
 async function handle(c: Conn, m: ClientMessage) {
@@ -506,8 +538,9 @@ async function handle(c: Conn, m: ClientMessage) {
         let crit = false
         let verdict = ''
         if (m.attack) {
-          const ac = target.data.ac as number | undefined
-          const line = `/r 1d20${bonusText(m.attack.bonus)}${m.attack.mode ? ' ' + m.attack.mode : ''} ${m.label}, attack on ${target.name}${ac != null ? ` dc ${ac}` : ''}`
+          const tm = modsOf(effectsOf(target.data))
+          const ac = typeof target.data.ac === 'number' ? target.data.ac + tm.ac : undefined
+          const line = `/r 1d20${bonusText(m.attack.bonus)}${modsOf(effectsOf(from.data)).attack}${m.attack.mode ? ' ' + m.attack.mode : ''} ${m.label}, attack on ${target.name}${ac != null ? ` dc ${ac}` : ''}`
           const parsed = parseChat(line, undefined, system)
           if ('error' in parsed || parsed.parts[0].t !== 'roll') continue
           const roll = parsed.parts[0].roll
@@ -518,7 +551,7 @@ async function handle(c: Conn, m: ClientMessage) {
           else verdict = `${crit ? 'critically hits' : 'hits'} ${target.name}`
         }
         if (m.save) {
-          const line = `/r 1d20${bonusText(saveBonusOf(tsheet, m.save.ability))} ${target.name}, ${m.save.ability.toUpperCase()} save dc ${m.save.dc}`
+          const line = `/r 1d20${bonusText(saveBonusOf(tsheet, m.save.ability))}${modsOf(effectsOf(target.data)).save} ${target.name}, ${m.save.ability.toUpperCase()} save dc ${m.save.dc}`
           const parsed = parseChat(line, undefined, system)
           if ('error' in parsed || parsed.parts[0].t !== 'roll') continue
           const roll = parsed.parts[0].roll
@@ -547,6 +580,29 @@ async function handle(c: Conn, m: ClientMessage) {
         postChat(ws, c.user.id, from.name, quiet ? 'gmroll' : 'emote', [], [{ t: 'text', text: `${verdict}${dealt.length ? ` for ${dealt.join(' and ')}` : ''}` }])
       }
       return
+    }
+    case 'effect.add': {
+      const before = tokenRow(m.id, ws)
+      if (!before) return nack(c, m, 'no such token')
+      if (!canEditStats(c.role, c.user.id, before, settings)) return nack(c, m, 'not allowed')
+      const all = effectsOf(before.data)
+      if (all.length >= MAX_EFFECTS) return nack(c, m, 'That token has as many effects as it can carry.')
+      if (m.effect.from && !tokenRow(m.effect.from, ws)) return nack(c, m, 'no such token')
+      const data = { ...before.data, effects: [...all, { id: uid(), ...m.effect }] }
+      db.prepare('UPDATE tokens SET data = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(data), now(), m.id)
+      const quiet = before.hidden || !!before.data.hpPrivate
+      postChat(ws, c.user.id, before.name, quiet ? 'gmroll' : 'emote', [], [{ t: 'text', text: `is under ${m.effect.name}${m.effect.rounds ? ` for ${m.effect.rounds} ${m.effect.rounds === 1 ? 'round' : 'rounds'}` : ''}` }])
+      return emitToken(ws, before, tokenRow(m.id, ws)!)
+    }
+    case 'effect.remove': {
+      const before = tokenRow(m.id, ws)
+      if (!before) return nack(c, m, 'no such token')
+      if (!canEditStats(c.role, c.user.id, before, settings)) return nack(c, m, 'not allowed')
+      const all = effectsOf(before.data)
+      if (!all.some((e) => e.id === m.effectId)) return nack(c, m, 'no such effect')
+      const data = { ...before.data, effects: all.filter((e) => e.id !== m.effectId) }
+      db.prepare('UPDATE tokens SET data = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(data), now(), m.id)
+      return emitToken(ws, before, tokenRow(m.id, ws)!)
     }
     case 'token.rest': {
       const before = tokenRow(m.id, ws)
@@ -813,7 +869,12 @@ async function handle(c: Conn, m: ClientMessage) {
       const ownsTurn = c.role === 'player' && !!turnToken && turnToken.owners.includes(c.user.id)
       if (!gm && !(m.action === 'next' && ownsTurn)) return nack(c, m, 'only the GM can do that')
       if (m.action === 'start') return saveCombat(ws, startCombat(combat))
-      if (m.action === 'next') return saveCombat(ws, advance(combat, 1))
+      if (m.action === 'next') {
+        const next = advance(combat, 1)
+        saveCombat(ws, next)
+        if (combat.active && next.round > combat.round) tickEffects(ws, c.user.id)
+        return
+      }
       if (m.action === 'prev') return saveCombat(ws, advance(combat, -1))
       if (m.action === 'end') return saveCombat(ws, endCombat(combat))
       return saveCombat(ws, emptyCombat())

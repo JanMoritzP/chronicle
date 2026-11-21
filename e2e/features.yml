@@ -436,6 +436,9 @@ areas:
       - id: table.attacks
         name: "Attacks and saves rolled against targets, with the damage applied"
         files: [web/src/components/TableSheet.tsx, server/src/table.ts]
+      - id: table.effects
+        name: "Spell effects with a duration on a token: armor class and roll bonuses, ended by hand, by the rounds or by concentration"
+        files: [web/src/components/TableParts.tsx, server/src/effects.ts, server/src/table.ts]
       - id: table.fog
         name: "Fog of war and darkness are switched on per scene and kept"
         files: [web/src/components/Tabletop.tsx]
