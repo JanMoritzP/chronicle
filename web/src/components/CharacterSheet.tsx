@@ -211,10 +211,12 @@ export function CharacterSheet({ sheet, set, roll }: { sheet: Sheet; set?: (patc
                   <Txt value={it.name} label={`Item ${i + 1}`} placeholder="Item" onChange={(v) => setItems(items.map((x, j) => (j === i ? { ...x, name: v } : x)))} />
                   <Txt value={it.note} label={`Note on ${it.name || 'item'}`} placeholder="Note" onChange={(v) => setItems(items.map((x, j) => (j === i ? { ...x, note: v } : x)))} />
                   <input type="number" className="sv-num" min={0} step="any" aria-label={`Weight of ${it.name || 'item'} in pounds`} title="Pounds, each" placeholder="lb" style={{ width: 56 }} value={it.weight ?? ''} onChange={(e) => setItems(items.map((x, j) => (j === i ? { ...x, weight: e.target.value === '' ? undefined : Math.max(0, Number(e.target.value)) } : x)))} />
+                  <label className="sv-mini" title="Charges: spent, and in all"><Num label={`Charges of ${it.name || 'item'}`} value={it.charges?.max ?? 0} width={44} onChange={(n) => setItems(items.map((x, j) => (j === i ? { ...x, charges: n > 0 ? { used: Math.min(x.charges?.used ?? 0, n), max: n } : undefined } : x)))} />charges</label>
+                  {it.charges && it.charges.max > 0 && <Bubbles label={`${it.name || 'Item'} charge`} total={it.charges.max} used={it.charges.used} onChange={(n) => setItems(items.map((x, j) => (j === i ? { ...x, charges: { max: x.charges!.max, used: n } } : x)))} />}
                   <label className="sv-mini" title="Attuned"><input type="checkbox" aria-label={`${it.name || 'Item'} attuned`} checked={!!it.attuned} onChange={(e) => setItems(items.map((x, j) => (j === i ? { ...x, attuned: e.target.checked } : x)))} />Attuned</label>
                   <button className="icon-btn" aria-label={`Remove ${it.name || 'item'}`} onClick={() => setItems(items.filter((_, j) => j !== i))}><Trash2 size={12} /></button>
                 </>
-              ) : <span>{it.qty > 1 ? `${it.qty} × ` : ''}{it.name}{it.equipped ? ' (equipped)' : ''}{it.attuned ? ' (attuned)' : ''}{it.weight ? <small className="muted"> {it.weight} lb</small> : null}{it.note ? <small className="muted"> {it.note}</small> : null}</span>}
+              ) : <span>{it.qty > 1 ? `${it.qty} × ` : ''}{it.name}{it.equipped ? ' (equipped)' : ''}{it.attuned ? ' (attuned)' : ''}{it.charges ? <small className="muted"> {it.charges.max - it.charges.used}/{it.charges.max} charges</small> : null}{it.weight ? <small className="muted"> {it.weight} lb</small> : null}{it.note ? <small className="muted"> {it.note}</small> : null}</span>}
             </li>
           ))}
         </ul>

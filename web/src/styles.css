@@ -991,3 +991,7 @@ button.cs-roll:disabled { cursor: default; }
 .replay { display: grid; grid-template-columns: minmax(0, 880px) minmax(220px, 1fr); gap: 16px; align-items: start; }
 .replay-chat { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
 @media (max-width: 900px) { .replay { grid-template-columns: 1fr; } }
+.tt-macro-folder { display: inline-block; }
+.tt-macro-folder[open] { display: flex; flex-wrap: wrap; gap: 4px; }
+.tt-macro-folder summary { cursor: pointer; list-style: none; }
+@media (min-width: 901px) { .tt-lefty .tt-main { flex-direction: row-reverse; } .tt-lefty .tt-panel { border-left: 0; border-right: 1px solid var(--border); } }

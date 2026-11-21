@@ -577,6 +577,8 @@ function TablePanel() {
   const role = useTable((s) => s.role)
   const gm = role === 'gm'
   const [replaying, setReplaying] = useState(false)
+  const [lefty, setLefty] = useState(() => { try { return !!localStorage.getItem('tt-left') } catch { return false } })
+  useEffect(() => { document.documentElement.classList.toggle('tt-lefty', lefty) }, [lefty])
   const wsId = useStore((s) => s.wsId)!
   const set = (patch: Record<string, unknown>) => sendTable({ t: 'settings.set', patch })
   const flags = useMemo(() => [
@@ -612,6 +614,7 @@ function TablePanel() {
           {(settings.banned ?? []).map((id) => <li key={id}><span className="grow">{members.find((m) => m.id === id)?.username ?? 'Someone'} <small className="muted">banned</small></span><button className="btn sm" aria-label={`Let ${members.find((m) => m.id === id)?.username ?? 'them'} back in`} onClick={() => sendTable({ t: 'user.ban', user: id, banned: false })}>Let back in</button></li>)}
         </ul>
       )}
+      <label className="tt-check"><input type="checkbox" checked={lefty} onChange={(e) => { setLefty(e.target.checked); try { localStorage.setItem('tt-left', e.target.checked ? '1' : '') } catch { /* private window */ } }} />Panel on the left (for left-handed use)</label>
       {gm && <button className="btn sm" title="Watch the last session again: tokens moving over the map, and what was said" onClick={() => setReplaying(true)}>Replay the last session</button>}
       {replaying && <Replay wsId={wsId} onClose={() => setReplaying(false)} />}
       {gm && <button className="btn sm" title="Ask everyone whether they are ready" onClick={() => sendTable({ t: 'ready.start' })}>Ready check</button>}

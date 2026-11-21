@@ -520,6 +520,9 @@ areas:
       - id: table.replay
         name: "Replay of the last session: tokens moving over the map, hit points and what was said"
         files: [web/src/components/Replay.tsx, web/src/tabletop/replay.ts, server/src/routes/recap.ts]
+      - id: table.layout-more
+        name: "Macro folders, and the table panel on the left for left-handed use"
+        files: [web/src/components/TableMacros.tsx, web/src/components/Tabletop.tsx]
       - id: table.fog
         name: "Fog of war and darkness are switched on per scene and kept"
         files: [web/src/components/Tabletop.tsx]

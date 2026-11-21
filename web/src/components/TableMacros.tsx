@@ -79,7 +79,12 @@ export function MacroBar() {
   return (
     <div className="tt-macros">
       <div className="tt-dicebar" role="group" aria-label="Macros">
-        {list.map((m) => <button key={m.id} className="btn sm" title={m.text} onClick={() => void runMacro(m.text)}>{m.name}</button>)}
+        {list.filter((m) => !m.name.includes('/')).map((m) => <button key={m.id} className="btn sm" title={m.text} onClick={() => void runMacro(m.text)}>{m.name}</button>)}
+        {[...new Set(list.filter((m) => m.name.includes('/')).map((m) => m.name.split('/')[0].trim()))].map((f) => (
+          <details key={f} className="tt-macro-folder"><summary className="btn sm">{f}</summary>
+            {list.filter((m) => m.name.startsWith(f + '/')).map((m) => <button key={m.id} className="btn sm" title={m.text} onClick={() => void runMacro(m.text)}>{m.name.slice(f.length + 1).trim()}</button>)}
+          </details>
+        ))}
         <button className="btn sm ghost" aria-expanded={open} onClick={() => setOpen(!open)}><Pencil size={12} /> Macros</button>
       </div>
       {open && (
