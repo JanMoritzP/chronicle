@@ -320,6 +320,11 @@ The GM can let the table apply some rules. They are on the Table panel under "Ru
 - **Areas as targets.** A spell area drawn on the map (cone, ray, burst, cube) can be chosen as the target of an attack or save: everyone inside it is rolled against (`inTemplate` in `web/src/tabletop/grid.ts`).
 Not yet: death saves from damage taken at 0, opportunity attacks that fire by themselves, Pact Magic slots, choosing features of a subclass or a feat on level up.
 
+## Macros and handouts (built)
+- **Macros.** Saved chat lines in the chat panel, one button each. Each person keeps their own (up to 100 per world); the owner account can share one with everyone. A macro is several lines, each sent as its own chat message (at most 10 per run). `?{Question|default}` asks when it runs (`?{Stance|Careful|Bold}` lists the options); `@{selected|name}` fills in the selected token: name, hp, maxhp, ac, and from its sheet level, prof, str to cha and str_mod to cha_mod. A reference that cannot be filled stops the macro with a message. Spectators have none. Routes: `/api/workspaces/:ws/macros`, `/api/macros/:id` (smoke test `scripts/smoke-macros.mjs`); pure parts in `web/src/lib/macro.ts`, test `scripts/test-macro.ts`.
+- **Handouts.** A Handouts tab. The GM writes a title, plain text and an optional uploaded image, and chooses who can read it: everyone, chosen players, or nobody. When it is revealed it opens on the readers' screens (once per person) and stays in their list; "Again" opens it for everyone who can read it. Players are never told who else can read a handout, and a handout that is not revealed to someone is never sent to them. They live in the `handouts` table and travel over the table channel (`handout.save`, `.delete`, `.reveal`, `.show`). Text is shown as plain text so it cannot run anything.
+Not yet: roll tables, card decks, jukebox and ambient sound, GM scripting with event hooks, pushing a Chronicle page as a handout, a session recap draft.
+
 ## Invite links (built)
 
 What it does: the owner makes a link for a world and sends it to the players. Whoever opens it can make an account (or sign in with one they have) and is let into that one world as a player or a spectator. Accounts made by the admin dashboard and the owner's Accounts list keep working as before.

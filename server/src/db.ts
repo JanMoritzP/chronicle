@@ -461,6 +461,31 @@ const migrations: (string | ((d: Database.Database) => void))[] = [
   );
   CREATE INDEX invites_ws ON invites(workspace_id);
   `,
+  // macros (saved chat lines, one person's or shared by the owner account) and handouts (what the GM shows the players)
+  `
+  CREATE TABLE macros (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    text TEXT NOT NULL,
+    shared INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+  CREATE INDEX macros_ws ON macros(workspace_id);
+  CREATE TABLE handouts (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    text TEXT NOT NULL DEFAULT '',
+    image TEXT NOT NULL DEFAULT '',
+    revealed TEXT NOT NULL DEFAULT '[]',
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+  CREATE INDEX handouts_ws ON handouts(workspace_id);
+  `,
 ]
 
 export const SCHEMA_VERSION = migrations.length

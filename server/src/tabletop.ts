@@ -173,6 +173,12 @@ export const clientMessage = z.discriminatedUnion('t', [
   z.object({ t: z.literal('combat.roll'), ids: z.array(id).max(100).optional() }),
   z.object({ t: z.literal('combat.flag'), id, hidden: z.boolean().optional(), done: z.boolean().optional() }),
   z.object({ t: z.literal('combat.reaction'), id, used: z.boolean() }),
+  z.object({ t: z.literal('handout.save'), id: id.optional(), title: z.string().trim().min(1).max(120), text: z.string().max(20000), image: imageUrl }),
+  z.object({ t: z.literal('handout.delete'), id }),
+  /** who may read it: everyone, nobody, or the people with these accounts */
+  z.object({ t: z.literal('handout.reveal'), id, to: z.union([z.literal('all'), z.literal('none'), z.array(id).max(50)]) }),
+  /** open it again on the screens of everyone who may read it */
+  z.object({ t: z.literal('handout.show'), id }),
   z.object({ t: z.literal('combat.control'), action: z.enum(['start', 'next', 'prev', 'end', 'clear']) }),
   z.object({ t: z.literal('encounter.stage'), id, sceneId: id, x: coord, y: coord, hidden: z.boolean().default(true), combat: z.boolean().default(false) }),
   z.object({

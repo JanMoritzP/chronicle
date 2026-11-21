@@ -6,6 +6,7 @@ Goal: run a complete D&D 5e game inside Chronicle (maps, tokens, vision, combat,
 
 ## Progress
 
+- **Phase 7, macros and handouts (first step): done.** Saved chat lines with questions and references to the selected token, shared by the GM; handouts revealed to chosen players. Not built: roll tables, card decks, jukebox and ambient audio, sandboxed GM scripting with event hooks, pushing a page as a handout, the session recap draft.
 - **Phase 6, rules automation (first step): done.** Damage types with resistance and immunity, concentration saves, falling unconscious and death saves, short and long rests, spell slot pips and per-day uses on the table card, each rule switched on by the GM. Attacks and saves against a chosen target with the damage applied are in too, and so are spell effects that last a number of rounds and can depend on concentration. Level up (with class features from a class page), weight and attunement, reaction tracking and areas as targets are in too. Not built: opportunity attacks that fire by themselves, Pact Magic slots, subclass choices and feats on level up.
 - **Invite links: done.** Per-world switch, links with a role, a time limit and a limit on people, a join page that makes an account or signs in, and closing links. Named links and e-mail are not built.
 - **Mobile player view: first version done** (bottom bar, sheets, a hit point strip, bigger buttons). A dedicated phone sheet for characters, haptics, offline caching of the table and installable icons are not.

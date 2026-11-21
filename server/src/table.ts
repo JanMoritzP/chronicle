@@ -246,12 +246,27 @@ function historyFor(c: Conn) {
     .map((m) => chatJson(m, c.user.id))
 }
 
+interface HandoutDb { id: string; title: string; text: string; image: string; revealed: string; updated_at: number }
+const revealedOf = (h: HandoutDb): 'all' | string[] => { const r = parse<'all' | string[]>(h.revealed, []); return r === 'all' ? 'all' : Array.isArray(r) ? r : [] }
+const mayRead = (h: HandoutDb, userId: string) => { const r = revealedOf(h); return r === 'all' || r.includes(userId) }
+/** What a person is shown of the handouts: the GM sees all and who can read each, the others only what was revealed to them. */
+function handoutsFor(c: Conn) {
+  const rows = db.prepare('SELECT id, title, text, image, revealed, updated_at FROM handouts WHERE workspace_id = ? ORDER BY created_at').all(c.ws) as HandoutDb[]
+  return rows
+    .filter((h) => c.role === 'gm' || mayRead(h, c.user.id))
+    .map((h) => ({ id: h.id, title: h.title, text: h.text, image: h.image, ...(c.role === 'gm' ? { revealed: revealedOf(h) } : {}) }))
+}
+function sendHandouts(ws: string) { for (const c of inWorld(ws)) send(c, { t: 'handouts', handouts: handoutsFor(c) }) }
+function showHandout(ws: string, h: HandoutDb, only?: (c: Conn) => boolean) {
+  for (const c of inWorld(ws)) if (c.role !== 'gm' && mayRead(h, c.user.id) && (!only || only(c))) send(c, { t: 'handout.show', handout: { id: h.id, title: h.title, text: h.text, image: h.image } })
+}
+
 function sendSnapshot(c: Conn) {
   const { active, settings } = stateOf(c.ws)
   viewFor(c, c.scene)
   send(c, {
     t: 'snapshot', you: { id: c.user.id, username: c.user.username, role: c.role }, settings, scenes: scenesOf(c.ws), active,
-    sceneId: c.scene, tokens: tokensFor(c, c.scene), online: onlineIn(c.ws), members: membersOf(c.ws), chat: historyFor(c), combat: visibleCombat(combatOf(c.ws), c.role === 'gm'), ...sceneState(c),
+    sceneId: c.scene, tokens: tokensFor(c, c.scene), online: onlineIn(c.ws), members: membersOf(c.ws), chat: historyFor(c), combat: visibleCombat(combatOf(c.ws), c.role === 'gm'), handouts: handoutsFor(c), ...sceneState(c),
   })
 }
 
@@ -856,6 +871,41 @@ async function handle(c: Conn, m: ClientMessage) {
         postChat(ws, c.user.id, c.user.username, x.hidden ? 'gmroll' : 'roll', [], [{ t: 'roll', roll }])
       }
       return saveCombat(ws, withList(combat, combat.list.map((x) => (rolled.has(x.id) ? { ...x, init: rolled.get(x.id)! } : x))))
+    }
+    case 'handout.save': {
+      if (!gm) return nack(c, m, 'only the GM can do that')
+      const t = now()
+      if (m.id) {
+        if (!db.prepare('SELECT 1 FROM handouts WHERE id = ? AND workspace_id = ?').get(m.id, ws)) return nack(c, m, 'no such handout')
+        db.prepare('UPDATE handouts SET title = ?, text = ?, image = ?, updated_at = ? WHERE id = ?').run(m.title, m.text, m.image, t, m.id)
+      } else {
+        if ((db.prepare('SELECT COUNT(*) AS n FROM handouts WHERE workspace_id = ?').get(ws) as { n: number }).n >= 200) return nack(c, m, 'That is as many handouts as a world can keep.')
+        db.prepare('INSERT INTO handouts(id,workspace_id,title,text,image,revealed,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)').run(uid(), ws, m.title, m.text, m.image, '[]', t, t)
+      }
+      return sendHandouts(ws)
+    }
+    case 'handout.delete': {
+      if (!gm) return nack(c, m, 'only the GM can do that')
+      db.prepare('DELETE FROM handouts WHERE id = ? AND workspace_id = ?').run(m.id, ws)
+      return sendHandouts(ws)
+    }
+    case 'handout.reveal': {
+      if (!gm) return nack(c, m, 'only the GM can do that')
+      const before = db.prepare('SELECT id, title, text, image, revealed, updated_at FROM handouts WHERE id = ? AND workspace_id = ?').get(m.id, ws) as HandoutDb | undefined
+      if (!before) return nack(c, m, 'no such handout')
+      const members = new Set(membersOf(ws).map((u) => u.id))
+      const to = m.to === 'all' ? 'all' : m.to === 'none' ? [] : [...new Set(m.to)].filter((u) => members.has(u))
+      db.prepare('UPDATE handouts SET revealed = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(to), now(), m.id)
+      const after = { ...before, revealed: JSON.stringify(to) }
+      sendHandouts(ws)
+      // whoever could not read it before is shown it now
+      return showHandout(ws, after, (x) => !mayRead(before, x.user.id))
+    }
+    case 'handout.show': {
+      if (!gm) return nack(c, m, 'only the GM can do that')
+      const h = db.prepare('SELECT id, title, text, image, revealed, updated_at FROM handouts WHERE id = ? AND workspace_id = ?').get(m.id, ws) as HandoutDb | undefined
+      if (!h) return nack(c, m, 'no such handout')
+      return showHandout(ws, h)
     }
     case 'combat.reaction': {
       const combat = combatOf(ws)

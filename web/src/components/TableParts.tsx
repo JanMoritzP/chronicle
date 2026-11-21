@@ -6,6 +6,7 @@ import { useStore } from '../store'
 import { sendTable, useTable, type ChatMsg, type RollJson, type Token } from '../tabletop/state'
 import { askText } from '../lib/dialog'
 import { PagePicker } from './PagePicker'
+import { MacroBar } from './TableMacros'
 import { Select } from './Select'
 import { SheetCard, loadSheet, useSheet, type AttackKit } from './TableSheet'
 
@@ -269,6 +270,7 @@ export function ChatPanel() {
         {chat.map((m) => <Message key={m.id} m={m} you={you?.id} names={names} />)}
         <div ref={end} />
       </ul>
+      {role !== 'spectator' && <MacroBar />}
       {role !== 'spectator' && (
         <div className="tt-dicebar" role="group" aria-label="Quick dice">
           {[4, 6, 8, 10, 12, 20, 100].map((d) => <button key={d} className="btn sm" onClick={() => sendTable({ t: 'chat', text: `/roll 1d${d}` })}>d{d}</button>)}

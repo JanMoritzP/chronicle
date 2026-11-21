@@ -442,6 +442,12 @@ areas:
       - id: sheet.levelup
         name: "Level up a character with hit points, hit dice, spell slots and class features, and count weight and attunement"
         files: [web/src/components/LevelUpPanel.tsx, web/src/lib/levelup.ts, web/src/components/CharacterSheet.tsx]
+      - id: table.macros
+        name: "Macros: saved chat lines with questions and references to the selected token, shared by the GM"
+        files: [web/src/components/TableMacros.tsx, web/src/lib/macro.ts, server/src/routes/macros.ts]
+      - id: table.handouts
+        name: "Handouts the GM writes and shows to chosen players, opening on their screens"
+        files: [web/src/components/TableHandouts.tsx, server/src/table.ts]
       - id: table.fog
         name: "Fog of war and darkness are switched on per scene and kept"
         files: [web/src/components/Tabletop.tsx]
