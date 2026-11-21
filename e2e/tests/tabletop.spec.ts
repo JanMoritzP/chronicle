@@ -1539,3 +1539,12 @@ test('walking away from a creature offers it an opportunity attack', { tag: '@fe
   await banner.getByRole('button', { name: 'Let it go' }).click()
   await expect(banner).toHaveCount(0)
 })
+
+test('a token has a walking speed the drag ruler counts against', { tag: '@feature:table.speed' }, async ({ app }) => {
+  await openTable(app)
+  await makeScene(app, 'Road')
+  await makeToken(app, 'Courier')
+  await app.getByLabel('Walking speed').fill('30')
+  await app.getByLabel('Walking speed').press('Enter')
+  await expect(app.getByLabel('Walking speed')).toHaveValue('30')
+})

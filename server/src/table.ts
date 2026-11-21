@@ -494,6 +494,7 @@ function applyStat(ws: string, userId: string, before: TokenRow, stat: Record<st
   const st = stat ?? {}
   if (st.hp) data.hp = { ...(data.hp ?? {}), ...st.hp }
   if (st.ac !== undefined) { if (st.ac === null) delete data.ac; else data.ac = st.ac }
+  if (st.speed !== undefined) { if (st.speed === null) delete data.speed; else data.speed = st.speed }
   if (st.conditions) data.conditions = [...new Set(st.conditions)]
   if (st.hpPrivate !== undefined) data.hpPrivate = st.hpPrivate
   // rules the GM switched on: resistances, a spell kept going after a hit, falling unconscious
@@ -1223,13 +1224,14 @@ async function handle(c: Conn, m: ClientMessage) {
       for (const mon of enc.monsters) {
         const page = db.prepare('SELECT title, props FROM pages WHERE id = ? AND workspace_id = ? AND deleted_at IS NULL').get(mon.pageId, ws) as { title: string; props: string } | undefined
         if (!page) continue
-        const props = parse<{ sheet?: { size?: string; hp?: { max?: number }; ac?: { value?: number } }; portrait?: string }>(page.props, {})
+        const props = parse<{ sheet?: { size?: string; hp?: { max?: number }; ac?: { value?: number }; speed?: { walk?: number } }; portrait?: string }>(page.props, {})
         const sheet = props.sheet
         const size = SIZE[String(sheet?.size ?? '').toLowerCase()] ?? 1
         const image = typeof props.portrait === 'string' && /^\/api\/uploads\/[A-Za-z0-9-]+$/.test(props.portrait) ? props.portrait : ''
         const data: Record<string, unknown> = { hpPrivate: true, group: page.title }
         if (sheet?.hp?.max) data.hp = { value: sheet.hp.max, max: sheet.hp.max }
         if (sheet?.ac?.value != null) data.ac = sheet.ac.value
+        if (sheet?.speed?.walk) data.speed = sheet.speed.walk
         for (let i = 1; i <= mon.count; i++) {
           // a row of tokens that wraps after six, each one cell or more apart
           const x = m.x + (slot % 6) * scene.grid_size * Math.max(1, size)

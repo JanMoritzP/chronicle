@@ -517,6 +517,9 @@ areas:
       - id: table.opportunity
         name: "Opportunity attacks when someone walks away in combat"
         files: [web/src/components/ThreatBanner.tsx, server/src/table.ts, server/src/rules5e.ts]
+      - id: table.speed
+        name: "Walking speed on a token and the drag ruler that counts against it"
+        files: [web/src/tabletop/engine.ts, web/src/components/TableParts.tsx, server/src/table.ts]
       - id: table.assets
         name: "Asset library: every file of the world, search by name and tag, several at once, delete, and a storage limit"
         files: [web/src/components/AssetLibrary.tsx, server/src/routes/uploads.ts]

@@ -81,6 +81,14 @@ export function TableView() {
         const st = useTable.getState()
         return st.role === 'gm' || (st.role === 'player' && st.settings.playersMoveOwn && !t.locked && !!st.you && t.owners.includes(st.you.id))
       },
+      moveLeft: (t) => {
+        const st = useTable.getState()
+        const speed = t.data?.speed
+        if (typeof speed !== 'number' || speed <= 0) return null
+        const turn = st.combat.active ? st.combat.list.find((x) => x.id === st.combat.turn) : undefined
+        // in combat, what the token has already walked this turn is taken off, but only on its own turn
+        return Math.max(0, speed - (turn && turn.tokenId === t.id ? turn.moved ?? 0 : 0))
+      },
       onMove: (moves) => { sendTable({ t: 'token.move', moves }) },
       onSelect: (ids) => { useTable.setState(ids.length ? { selected: ids, selectedTile: null } : { selected: ids }); if (ids.length) setPanel('token') },
       onPing: (p) => { sendTable({ t: 'ping', x: p.x, y: p.y }) },

@@ -10,6 +10,8 @@ import type { Cursor, Ruler, Scene, Token } from './state'
 
 export interface Hooks {
   canMove(t: Token): boolean
+  /** how far a token may still walk this turn, in the scene's units, or null when that is not known */
+  moveLeft(t: Token): number | null
   onMove(moves: { id: string; x: number; y: number }[]): void
   onSelect(ids: string[]): void
   onPing(p: Pt): void
@@ -1047,7 +1049,13 @@ export class TableEngine {
         const dx = target.x - o.x, dy = target.y - o.y
         for (const [id, origin] of d.origins!) this.views.get(id)?.box.position.set(origin.x + dx, origin.y + dy)
         const path = [o, target]
-        if (d.origins!.size === 1 && this.scene) this.drawRuler(path, 0xffd23f, null)
+        if (d.origins!.size === 1 && this.scene) {
+          const left = this.hooks.moveLeft(lead)
+          const cost = measure(path, this.scene).distance
+          // green while the walk is within what is left, yellow up to a dash, red beyond
+          const colour = left == null ? 0xffd23f : cost <= left ? 0x4caf50 : cost <= left * 2 ? 0xf1c40f : 0xe74c3c
+          this.drawRuler(path, colour, null, undefined, left == null ? undefined : ` of ${formatDistance(left, this.scene.unit)} left`)
+        }
         if (now - d.sent > 70) { d.sent = now; this.flushMove(d, false); this.hooks.onRuler(path) }
         break
       }
@@ -1192,7 +1200,7 @@ export class TableEngine {
 
   // ---------- drawing the overlays ----------
 
-  private drawRuler(points: Pt[], color: number, into: Container | null, who?: string) {
+  private drawRuler(points: Pt[], color: number, into: Container | null, who?: string, suffix = '') {
     const scene = this.scene
     if (!scene || points.length < 2) return
     const g = into ? new Graphics() : this.ruleG
@@ -1202,7 +1210,7 @@ export class TableEngine {
     g.stroke({ width: 3 / this.world.scale.x, color, alpha: 0.9 })
     for (const p of points) g.circle(p.x, p.y, 5 / this.world.scale.x).fill({ color })
     const m = measure(points, scene)
-    const text = `${who ? `${who}: ` : ''}${formatDistance(m.distance, scene.unit)}`
+    const text = `${who ? `${who}: ` : ''}${formatDistance(m.distance, scene.unit)}${suffix}`
     const last = points[points.length - 1]
     const label = into ? new Text({ text, style: { fontSize: 14, fill: 0xffffff, fontFamily: 'sans-serif', stroke: { color: 0x000000, width: 3 } } }) : this.ruleLabel
     label.text = text

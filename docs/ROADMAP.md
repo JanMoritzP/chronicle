@@ -342,6 +342,7 @@ The GM can let the table apply some rules. They are on the Table panel under "Ru
 - **Pact Magic.** A warlock's slots (count and level by warlock level) are put in the slots of the sheet on level up, added to any other casting.
 - **Pathfinder 2e actions.** In a Pathfinder world the order of play shows three action pips per combatant, spent by hand by the GM or the owner and back when their turn begins.
 - **Opportunity attacks.** In combat, when the token whose turn it is walks out of the reach of a creature on the other side (a player's token against creatures without an owner, or the reverse) that still has its reaction, the table says so and the GM and that creature's owner get a banner with "Attack" and "Let it go". Attack rolls the first melee attack on the creature's sheet against the mover and spends the reaction (needs attacks switched on under automation). A creature with the condition Disengaged, or a hidden mover, does not draw one.
+- **Drag ruler.** A token has a walking speed (a Speed field in its stats, filled from the sheet when an encounter is placed). While dragging it, the ruler shows the distance against what is left of the speed, in green within it, yellow up to a dash (double) and red beyond. In combat what the token already walked this turn is taken off. Difficult terrain is not counted yet.
 Not yet: choosing features of a subclass or a feat on level up.
 
 ## Macros and handouts (built)

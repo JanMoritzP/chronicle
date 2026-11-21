@@ -168,6 +168,8 @@ const hpValue = z.number().int().min(-9999).max(99999)
 export const statPatch = z.object({
   hp: z.object({ value: hpValue, max: z.number().int().min(0).max(99999), temp: z.number().int().min(0).max(99999) }).partial().strict(),
   ac: z.number().int().min(0).max(99).nullable(),
+  /** walking speed in the scene's units, for the drag ruler */
+  speed: z.number().int().min(0).max(1000).nullable(),
   conditions: z.array(z.string().min(1).max(30)).max(30),
   hpPrivate: z.boolean(),
 }).partial().strict()

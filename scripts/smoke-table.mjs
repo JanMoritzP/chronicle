@@ -1298,6 +1298,20 @@ gm.send({ t: 'token.delete', ids: [runner.id, ogre.id] })
 gm.send({ t: 'settings.set', patch: { automation: { damage: false, concentration: false, deathSaves: false, attacks: false } } })
 await sleep(200)
 
+// walking speed on a token
+gm.send({ t: 'token.add', sceneId: crypt, token: { name: 'Walker', x: 300, y: 300 } })
+const walker = (await gm.until((m) => m.t === 'token' && m.token.name === 'Walker')).token
+gm.send({ t: 'token.stat', id: walker.id, stat: { speed: 30 } })
+await sleep(200)
+check('a token keeps a walking speed', gm.msgs.filter((m) => m.t === 'token' && m.token.id === walker.id).at(-1).token.data.speed === 30)
+gm.send({ t: 'token.stat', id: walker.id, stat: { speed: 99999 }, op: 'fast' })
+check('an absurd speed is refused', !!(await gm.until((m) => m.t === 'nack' && m.op === 'fast')))
+gm.send({ t: 'token.stat', id: walker.id, stat: { speed: null } })
+await sleep(200)
+check('and can be cleared', gm.msgs.filter((m) => m.t === 'token' && m.token.id === walker.id).at(-1).token.data.speed === undefined)
+gm.send({ t: 'token.delete', ids: [walker.id] })
+await sleep(100)
+
 // bad input
 gm.send({ t: 'token.update', id: aria.id, patch: { size: 9999 }, op: 'big' })
 check('out of range values are refused', !!(await gm.until((m) => m.t === 'nack' && m.op === 'big')))

@@ -122,6 +122,7 @@ export function TokenStats({ token }: { token: Token }) {
               <label>Max{numberField(hp?.max, (n) => stat({ hp: { max: n } }), 'Maximum hit points')}</label>
               <label>Temp{numberField(hp?.temp, (n) => stat({ hp: { temp: n } }), 'Temporary hit points')}</label>
               <label><Shield size={12} /> AC{numberField(ac, (n) => stat({ ac: n }), 'Armor class')}</label>
+              <label>Speed{numberField(token.data.speed as number | undefined, (n) => stat({ speed: n }), 'Walking speed')}</label>
             </div>
           ) : (
             <div className="tt-facts"><span><Heart size={12} /> {hp?.value ?? 0} / {hp?.max ?? 0}{hp?.temp ? ` (+${hp.temp})` : ''}</span>{ac != null && <span><Shield size={12} /> {ac}</span>}</div>
