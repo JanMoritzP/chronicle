@@ -2,6 +2,14 @@
 
 Newest first. The version in `electron/package.json` is the app version; the release notes on GitHub are what the in-app update dialog shows, so keep each entry short and in plain words. Sections after 0.2.0 are written by `scripts/release.mjs` from the commit subjects, so the commit messages carry the release notes.
 
+## 0.50.0 (2026-11-21)
+
+### Features
+- flipping props, picture variants for tokens, armor class from items and a bigger touch layout on tablets
+
+### Bug Fixes
+- the variant button no longer clashes with the Add button of the token form
+
 ## 0.49.0 (2026-11-21)
 
 ### Features
