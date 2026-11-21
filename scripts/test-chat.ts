@@ -49,5 +49,14 @@ const ooc = parseChat('/ooc back in two minutes') as any
 check('out of character talk has its own kind', ooc.kind === 'ooc' && ooc.parts[0].text === 'back in two minutes' && (parseChat('/o hi') as any).kind === 'ooc' && 'error' in (parseChat('/ooc') as any))
 check('everyone can read it', readable({ kind: 'ooc', userId: 'a', to: [] }, 'b', false))
 
+p = parseChat('/card Longsword | Attack: [[1d20+5 dc 14]] | Damage: [[1d8+3]] slashing | Pommel strike', fixed(10, 4)) as any
+check('/card makes a titled card of lines', p.kind === 'say' && p.parts.length === 1 && p.parts[0].t === 'card' && p.parts[0].title === 'Longsword' && p.parts[0].rows.length === 3)
+check('a line with a label keeps it and its roll', p.parts[0].rows[0].label === 'Attack' && p.parts[0].rows[0].parts[0].roll.total === 15 && p.parts[0].rows[0].parts[0].roll.degree === 'success')
+check('text after a roll stays on its line', p.parts[0].rows[1].parts.map((x: any) => x.t).join() === 'roll,text' && p.parts[0].rows[1].parts[1].text.trim() === 'slashing')
+check('a line without a label is plain text', p.parts[0].rows[2].label === '' && p.parts[0].rows[2].parts[0].text === 'Pommel strike')
+p = parseChat('&{template:default} {{name=Fire bolt}} {{Hit=[[1d20+6]]}} {{Damage=[[1d10]] fire}}', fixed(3, 7)) as any
+check('the Roll20 template form works too', p.parts[0].t === 'card' && p.parts[0].title === 'Fire bolt' && p.parts[0].rows.length === 2 && p.parts[0].rows[0].parts[0].roll.total === 9)
+check('a card needs a title', 'error' in (parseChat('/card') as any))
+check('a card holds at most twelve lines', 'error' in (parseChat('/card Many | ' + Array.from({ length: 13 }, (_, i) => `r${i}: [[1d4]]`).join(' | ')) as any))
 console.log(failed ? `\n${failed} failed` : '\nall passed')
 process.exit(failed ? 1 : 0)

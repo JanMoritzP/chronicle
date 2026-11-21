@@ -250,7 +250,17 @@ function RollView({ r }: { r: RollJson }) {
 const KIND_LABEL: Record<ChatMsg['kind'], string> = { say: '', roll: '', emote: '', whisper: 'whispers', gmroll: 'rolls privately', ooc: 'out of character' }
 
 function Message({ m, you, names }: { m: ChatMsg; you: string | undefined; names: Map<string, string> }) {
-  const parts = m.parts.map((p, i) => (p.t === 'text' ? <span key={i}>{p.text}</span> : <RollView key={i} r={p.roll} />))
+  const parts = m.parts.map((p, i) => p.t === 'text' ? <span key={i}>{p.text}</span> : p.t === 'roll' ? <RollView key={i} r={p.roll} /> : (
+    <div key={i} className="tt-card" role="group" aria-label={`Card: ${p.title}`}>
+      <div className="tt-card-title">{p.title}</div>
+      {p.rows.map((r, j) => (
+        <div key={j} className="tt-card-row">
+          {r.label && <b>{r.label}</b>}
+          <span>{r.parts.map((q, k) => (q.t === 'text' ? <span key={k}>{q.text}</span> : <RollView key={k} r={q.roll} />))}</span>
+        </div>
+      ))}
+    </div>
+  ))
   const to = m.kind === 'whisper' ? (m.to.includes(you ?? '') ? 'you' : m.to.map((id) => names.get(id) ?? 'someone').join(', ')) : ''
   return (
     <li className={`tt-msg ${m.kind}`}>

@@ -189,6 +189,9 @@ check('a wrong hit point value is refused', !!(await gm.until((m) => m.t === 'na
 const aliceName = `alice${suffix}`
 pa.send({ t: 'chat', text: 'Hello table' })
 check('talk reaches everyone', !!(await gm.until((m) => m.t === 'chat.msg' && m.msg.parts[0]?.text === 'Hello table' && m.msg.name === aliceName)) && !!(await sp.until((m) => m.t === 'chat.msg' && m.msg.parts[0]?.text === 'Hello table')))
+pa.send({ t: 'chat', text: '/card Shortsword | Attack: [[1d20+4]] | Damage: [[1d6+2]] piercing' })
+const card = await gm.until((m) => m.t === 'chat.msg' && m.msg.parts[0]?.t === 'card')
+check('a card reaches everyone with its rolls made by the server', card?.msg.parts[0].title === 'Shortsword' && card.msg.parts[0].rows[0].parts[0].roll.terms.length === 2)
 pa.send({ t: 'chat', text: '/roll 2d20kh1+3 perception' })
 const rolled = await pb.until((m) => m.t === 'chat.msg' && m.msg.kind === 'roll')
 const rr = rolled?.msg.parts[0].roll

@@ -427,6 +427,9 @@ areas:
       - id: table.chat
         name: "Chat and dice: a roll is shown to everyone, a whisper only to its target"
         files: [web/src/components/TableParts.tsx]
+      - id: table.card
+        name: "Roll templates: a titled card of lines with rolls, typed with /card"
+        files: [web/src/components/TableParts.tsx, server/src/chat.ts]
       - id: table.stats
         name: "Hit points, damage, healing and conditions on a token, with a linked page's sheet"
         files: [web/src/components/TableParts.tsx, web/src/components/TableSheet.tsx]

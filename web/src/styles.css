@@ -997,3 +997,8 @@ button.cs-roll:disabled { cursor: default; }
 @media (min-width: 901px) { .tt-lefty .tt-main { flex-direction: row-reverse; } .tt-lefty .tt-panel { border-left: 0; border-right: 1px solid var(--border); } }
 /* a tablet at the table: bigger things to touch */
 @media (min-width: 768px) and (max-width: 1200px) and (pointer: coarse) { .tt-bar .btn, .tt-panel .btn, .tt-panel .seg button { min-height: 40px; } .tt-chip, .tt-roll { min-height: 34px; padding: 4px 12px; } .tt-pip { width: 20px; height: 20px; } .tt-panel { width: 340px; } }
+
+.tt-card { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-top: 4px; background: var(--panel, transparent); }
+.tt-card-title { padding: 5px 10px; font-weight: 700; background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.tt-card-row { display: flex; gap: 8px; align-items: baseline; padding: 3px 10px; border-top: 1px solid var(--border); }
+.tt-card-row b { min-width: 64px; font-weight: 600; opacity: .8; }

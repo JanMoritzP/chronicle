@@ -1548,3 +1548,15 @@ test('a token has a walking speed the drag ruler counts against', { tag: '@featu
   await app.getByLabel('Walking speed').press('Enter')
   await expect(app.getByLabel('Walking speed')).toHaveValue('30')
 })
+
+test('a roll template shows as a card with its rolls', { tag: '@feature:table.card' }, async ({ app }) => {
+  await openTable(app)
+  await makeScene(app, 'Armory')
+  await app.locator('.tt-panel .seg').getByRole('button', { name: /Chat/ }).click()
+  await app.getByLabel('Chat message').fill('/card Longsword | Attack: [[1d20+5]] | Damage: [[1d8+3]] slashing')
+  await app.getByLabel('Chat message').press('Enter')
+  const card = app.getByRole('group', { name: 'Card: Longsword' })
+  await expect(card).toContainText('Attack')
+  await expect(card.locator('.tt-total')).toHaveCount(2)
+  await expect(card).toContainText('slashing')
+})
