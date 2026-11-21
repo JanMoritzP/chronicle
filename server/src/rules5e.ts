@@ -4,17 +4,19 @@ import type { Sheet } from './sheet.js'
 // The 5th edition rules the table can apply for the GM (each one is switched on separately, see `automation` in the table settings):
 // damage types with resistance, concentration, death saves and rests. Pure functions over a sheet, tested without a server.
 
+/** Pathfinder 2e's damage types, for a Pathfinder world without a pack of its own. */
+export const DAMAGE_TYPES_PF2E = ['acid', 'bludgeoning', 'cold', 'electricity', 'fire', 'force', 'mental', 'piercing', 'poison', 'slashing', 'sonic', 'spirit', 'vitality', 'void'] as const
 export const DAMAGE_TYPES = ['acid', 'bludgeoning', 'cold', 'fire', 'force', 'lightning', 'necrotic', 'piercing', 'poison', 'psychic', 'radiant', 'slashing', 'thunder'] as const
 
 /**
  * The damage types an unconditional entry of a list names ("fire, cold; poison"). An entry with a condition ("slashing from nonmagical
  * attacks") is left out: the table cannot tell whether a weapon is magical, so the GM adjusts those by hand.
  */
-export function typesIn(list: string | undefined): Set<string> {
+export function typesIn(list: string | undefined, types: readonly string[] = DAMAGE_TYPES): Set<string> {
   const out = new Set<string>()
   for (const part of (list ?? '').toLowerCase().split(/[;,]/)) {
     if (/\b(from|nonmagical|non-magical|that aren|except|unless|while)\b/.test(part)) continue
-    for (const t of DAMAGE_TYPES) if (new RegExp(`\\b${t}\\b`).test(part)) out.add(t)
+    for (const t of types) if (new RegExp(`\\b${t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(part)) out.add(t)
   }
   return out
 }
@@ -22,11 +24,11 @@ export function typesIn(list: string | undefined): Set<string> {
 export type Effect = 'immune' | 'resistant' | 'vulnerable' | null
 
 /** Damage after resistance (halved, rounded down), vulnerability (doubled) or immunity. Resistance and vulnerability to the same type cancel out. */
-export function adjustDamage(amount: number, type: string | undefined, s: Pick<Sheet, 'resistances' | 'vulnerabilities' | 'immunities'> | undefined): { amount: number; effect: Effect } {
+export function adjustDamage(amount: number, type: string | undefined, s: Pick<Sheet, 'resistances' | 'vulnerabilities' | 'immunities'> | undefined, types: readonly string[] = DAMAGE_TYPES): { amount: number; effect: Effect } {
   const t = (type ?? '').trim().toLowerCase()
   if (!s || !t || amount <= 0) return { amount, effect: null }
-  if (typesIn(s.immunities).has(t)) return { amount: 0, effect: 'immune' }
-  const res = typesIn(s.resistances).has(t), vul = typesIn(s.vulnerabilities).has(t)
+  if (typesIn(s.immunities, types).has(t)) return { amount: 0, effect: 'immune' }
+  const res = typesIn(s.resistances, types).has(t), vul = typesIn(s.vulnerabilities, types).has(t)
   if (res && !vul) return { amount: Math.floor(amount / 2), effect: 'resistant' }
   if (vul && !res) return { amount: amount * 2, effect: 'vulnerable' }
   return { amount, effect: null }

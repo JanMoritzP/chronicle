@@ -340,6 +340,16 @@ Not yet: opportunity attacks that fire by themselves, choosing features of a sub
 - **For people who cannot see colours or the screen.** Conditions on a token carry their first letter, tokens can be moved with the arrow keys, and the order of play announces the round and whose turn it is.
 Not yet: arbitrary GM scripts.
 
+## System packs (built, first version)
+A system pack is one JSON file (`"format": "chronicle-system"`) that a world can install and play by, so a rules system can be shared and other games can be started from the three built-in ones. It builds on one engine (`base`: 5e 2014, 5e 2024 or Pathfinder 2e), which still decides how rolls, difficulty, degrees of success and the sheets work, and changes what is shown and offered:
+- **abilities**: a name and a short form for each of the six ability slots (the sheets and the table card show them);
+- **conditions** and **damage types**: the lists on a token (and the damage type of a hit; resistance, vulnerability and immunity match the pack's own types);
+- **initiative**: the dice a token without a sheet rolls (1d20, 1d10, 2d6 and so on);
+- **grid**: the unit, the size of a cell and the grid type new scenes start with;
+- **content**: roll tables, card decks and macros, added to the world (macros shared with everyone) if the owner chooses to when installing.
+Only the owner account installs, switches on or removes a pack (Settings, Worlds, System packs); everyone in the world can read and export them. Choosing a built-in rule set again leaves the pack, and removing the pack in use does too. The three built-in systems are packs as well (an "Export a built-in system" choice gives a file to start from). Unknown fields are refused with a message naming the field. Pure parts: `server/src/pack.ts` (test `scripts/test-pack.ts`) and `web/src/lib/systems.ts` (test `scripts/test-systems.ts`); routes under `/api/workspaces/:ws/packs` (smoke test `scripts/smoke-packs.mjs`).
+Not yet: a pack that defines its own sheet fields, skills and derived numbers, roll definitions, rest rules and difficulty rules, so a game that is not built on one of the three engines (Call of Cthulhu, Shadowrun, Savage Worlds and so on) needs engine work first.
+
 ## Invite links (built)
 
 What it does: the owner makes a link for a world and sends it to the players. Whoever opens it can make an account (or sign in with one they have) and is let into that one world as a player or a spectator. Accounts made by the admin dashboard and the owner's Accounts list keep working as before.

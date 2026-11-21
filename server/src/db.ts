@@ -544,6 +544,18 @@ const migrations: (string | ((d: Database.Database) => void))[] = [
   `,
   // weather over a scene: none, rain or snow
   `ALTER TABLE scenes ADD COLUMN weather TEXT NOT NULL DEFAULT 'none'`,
+  // system packs installed in a world
+  `
+  CREATE TABLE system_packs (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    slug TEXT NOT NULL,
+    name TEXT NOT NULL,
+    data TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    UNIQUE(workspace_id, slug)
+  );
+  `,
 ]
 
 export const SCHEMA_VERSION = migrations.length

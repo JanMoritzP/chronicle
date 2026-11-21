@@ -15,9 +15,11 @@ import { parseChat, readable, withInline, type Kind, type Part } from './chat.js
 import { buildSight, canSee, type Sight, type SightToken } from './sight.js'
 import { advance, emptyCombat, end as endCombat, start as startCombat, visible as visibleCombat, withList, type Combat } from './combat.js'
 import { cryptoRng, parseRoll } from './dice.js'
-import { adjustDamage, concentrationDc, deathSave, longRest, modOf, saveBonusOf, shortRest, type Effect } from './rules5e.js'
+import { DAMAGE_TYPES_PF2E, adjustDamage, concentrationDc, deathSave, longRest, modOf, saveBonusOf, shortRest, type Effect } from './rules5e.js'
 import { parseSheet, type Sheet } from './sheet.js'
 import { cardsText, discardFromHand, drawCards, entriesText, freshDeck, handOf, parseCards, parseEntries, pick, toDiscard, toHand, type DeckState } from './tables.js'
+import { activePack } from './routes/packs.js'
+import { packDamageTypes } from './pack.js'
 import { effectsOf, MAX_EFFECTS, modsOf, tick } from './effects.js'
 import { encounterRow } from './routes/encounters.js'
 import {
@@ -445,7 +447,7 @@ function applyStat(ws: string, userId: string, before: TokenRow, stat: Record<st
   let dmg = damage
   let effect: Effect = null
   if (dmg > 0 && auto.damage) {
-    const adj = adjustDamage(dmg, type, pg?.sheet)
+    const adj = adjustDamage(dmg, type, pg?.sheet, packDamageTypes(activePack(ws)) ?? (worldSystem(ws) === 'pf2e' ? DAMAGE_TYPES_PF2E : undefined))
     dmg = adj.amount
     if (say) notes.push(`takes ${dmg} ${type?.trim().toLowerCase() ?? ''} damage${adj.effect ? ` (${adj.effect})` : ''}`.replace(/  +/g, ' '))
   }
@@ -552,7 +554,9 @@ async function handle(c: Conn, m: ClientMessage) {
       const id = uid()
       const sort = ((db.prepare('SELECT MAX(sort) AS s FROM scenes WHERE workspace_id = ?').get(ws) as { s: number | null }).s ?? 0) + 1
       db.prepare('INSERT INTO scenes(id,workspace_id,name,sort,created_at,updated_at) VALUES(?,?,?,?,?,?)').run(id, ws, m.name ?? m.patch?.name ?? `Scene ${sort}`, sort, t, t)
-      if (m.patch) await applyScenePatch(c, m, id, m.patch)
+      // a new scene starts with the grid of the world's pack, if it has one
+      const gridOf = activePack(ws)?.grid
+      if (m.patch || gridOf) await applyScenePatch(c, m, id, { ...(gridOf ? { unit: gridOf.unit, dist: gridOf.dist, grid: gridOf.type } : {}), ...(m.patch ?? {}) })
       const st = stateOf(ws)
       if (!st.active) saveState(ws, id, st.settings)
       const row = sceneRow(id, ws)!
@@ -1121,7 +1125,8 @@ async function handle(c: Conn, m: ClientMessage) {
       for (const x of targets) {
         const token = x.tokenId ? tokenRow(x.tokenId, ws) : undefined
         const b = initiativeBonus(ws, token?.pageId ?? null)
-        const roll = parseRoll(`1d20${b >= 0 ? '+' : '-'}${Math.abs(b)} Initiative: ${x.name}`)
+        const die = activePack(ws)?.initiative?.replace(/^d/i, '1d') ?? '1d20'
+        const roll = parseRoll(`${die}${b >= 0 ? '+' : '-'}${Math.abs(b)} Initiative: ${x.name}`)
         if (!roll) continue
         rolled.set(x.id, roll.total)
         // a hidden combatant rolls where only the GM sees it

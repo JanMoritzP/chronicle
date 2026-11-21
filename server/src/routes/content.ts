@@ -37,9 +37,11 @@ const settingsSchema = z.object({
   system: z.enum(['5e', '5e-2024', 'pf2e']),
   /** People can join this world with an invite link. */
   invites: z.boolean(),
+  /** The system pack the world plays by (an installed one), or null for none. */
+  pack: z.string().max(40).nullable(),
 }).partial()
 
-export const DEFAULT_WORLD_SETTINGS = { newPageTodo: 'Fill me', system: '5e' as '5e' | '5e-2024' | 'pf2e', invites: false }
+export const DEFAULT_WORLD_SETTINGS = { newPageTodo: 'Fill me', system: '5e' as '5e' | '5e-2024' | 'pf2e', invites: false, pack: null as string | null }
 
 export function worldSettings(raw: string | null | undefined) {
   let saved: any = {}
@@ -48,6 +50,7 @@ export function worldSettings(raw: string | null | undefined) {
     ...DEFAULT_WORLD_SETTINGS,
     ...(typeof saved.newPageTodo === 'string' ? { newPageTodo: saved.newPageTodo } : {}),
     ...(typeof saved.invites === 'boolean' ? { invites: saved.invites } : {}),
+    ...(typeof saved.pack === 'string' && saved.pack ? { pack: saved.pack as string } : {}),
     ...(saved.system === '5e' || saved.system === '5e-2024' || saved.system === 'pf2e' ? { system: saved.system as '5e' | '5e-2024' | 'pf2e' } : {}),
   }
 }
@@ -88,7 +91,22 @@ export async function contentRoutes(app: FastifyInstance) {
     const row = db.prepare('SELECT settings FROM workspaces WHERE id = ? AND deleted_at IS NULL').get(id) as { settings: string } | undefined
     if (!row) return reply.code(404).send({ error: 'world not found' })
     if (b.data.name) db.prepare('UPDATE workspaces SET name = ? WHERE id = ?').run(b.data.name, id)
-    if (b.data.settings) db.prepare('UPDATE workspaces SET settings = ? WHERE id = ?').run(JSON.stringify({ ...worldSettings(row.settings), ...b.data.settings }), id)
+    if (b.data.settings) {
+      const next: Record<string, unknown> = { ...worldSettings(row.settings), ...b.data.settings }
+      if (typeof b.data.settings.pack === 'string') {
+        // choosing a pack means playing by the engine it builds on
+        const p = db.prepare('SELECT data FROM system_packs WHERE workspace_id = ? AND slug = ?').get(id, b.data.settings.pack) as { data: string } | undefined
+        let base: string | undefined
+        try { base = JSON.parse(p?.data ?? '{}').base } catch { /* unreadable */ }
+        if (!p || !base) return reply.code(400).send({ error: 'That pack is not installed in this world.' })
+        next.system = base
+      } else if (b.data.settings.system !== undefined && b.data.settings.pack === undefined) {
+        // choosing one of the built-in rules leaves any pack
+        next.pack = null
+      }
+      if (next.pack === null) delete next.pack
+      db.prepare('UPDATE workspaces SET settings = ? WHERE id = ?').run(JSON.stringify(next), id)
+    }
     return { ok: true, settings: worldSettings((db.prepare('SELECT settings FROM workspaces WHERE id = ?').get(id) as { settings: string }).settings) }
   })
 

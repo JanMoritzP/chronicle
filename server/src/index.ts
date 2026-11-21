@@ -33,6 +33,7 @@ import { encounterRoutes } from './routes/encounters.js'
 import { inviteRoutes } from './routes/invites.js'
 import { macroRoutes } from './routes/macros.js'
 import { recapRoutes } from './routes/recap.js'
+import { packRoutes } from './routes/packs.js'
 import { closeLibrary } from './library.js'
 
 migrate()
@@ -89,6 +90,7 @@ await app.register(encounterRoutes)
 await app.register(inviteRoutes)
 await app.register(macroRoutes)
 await app.register(recapRoutes)
+await app.register(packRoutes)
 await app.register(backupRoutes)
 
 app.get('/robots.txt', async (_req, reply) => reply.type('text/plain').send('User-agent: *\nDisallow: /\n'))

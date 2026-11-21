@@ -1,3 +1,4 @@
+import { useRules } from '../lib/pack'
 import { Plus, Trash2 } from 'lucide-react'
 import { Fragment, useState, type ReactNode } from 'react'
 import { ABILITIES, FEATURE_GROUPS, SENSES, SPEED_MODES, abilityMod, crFromText, crText, passivePerception, profBonus, signed, speedText, type Ability, type Feature, type FeatureGroup, type Sheet } from '../lib/sheet'
@@ -58,6 +59,7 @@ export function FeatureEditor({ group, list, set }: { group: FeatureGroup; list:
 }
 
 export function SheetView({ sheet, set, libraryLinks }: { sheet: Sheet; set?: (patch: SheetPatch) => void; libraryLinks?: boolean }) {
+  const an = useRules().abilities
   const links = useAutoLinks()
   const edit = !!set
   const linker = (): Linker | undefined => (edit ? undefined : makeLinker(links, { selfName: sheet.name, preferPage: !libraryLinks }))
@@ -108,8 +110,8 @@ export function SheetView({ sheet, set, libraryLinks }: { sheet: Sheet; set?: (p
       <div className={modern ? 'sb-abilities2' : 'sb-abilities'}>
         {ABILITIES.map((a) => (
           <div key={a} className={modern ? 'sb-ab2' : 'sb-ab'}>
-            <b>{a.toUpperCase()}</b>
-            {edit ? <Num label={ABILITY_NAME[a]} value={sheet.abilities[a]} max={60} width={52} onChange={(n) => n != null && set!({ [`abilities.${a}`]: n })} /> : <span>{modern ? sheet.abilities[a] : `${sheet.abilities[a]} (${signed(abilityMod(sheet.abilities[a]))})`}</span>}
+            <b>{an[a].short}</b>
+            {edit ? <Num label={an[a].name} value={sheet.abilities[a]} max={60} width={52} onChange={(n) => n != null && set!({ [`abilities.${a}`]: n })} /> : <span>{modern ? sheet.abilities[a] : `${sheet.abilities[a]} (${signed(abilityMod(sheet.abilities[a]))})`}</span>}
             {modern && <span className="sb-mod">{signed(abilityMod(sheet.abilities[a]))}</span>}
             {modern && <><small>Save</small><span className="sb-mod">{signed(sheet.saves[a] ?? abilityMod(sheet.abilities[a]))}</span></>}
             {edit && !modern && <span className="sb-mod">{signed(abilityMod(sheet.abilities[a]))}</span>}
@@ -123,7 +125,7 @@ export function SheetView({ sheet, set, libraryLinks }: { sheet: Sheet; set?: (p
           <button className="btn sm" aria-expanded={more} onClick={() => setMore(!more)}>{more ? 'Hide' : 'Show'} saves, skills and senses</button>
           {more && (
             <div className="sv-more">
-              <div className="sv-line"><b>Saving throws</b>{ABILITIES.map((a) => <label key={a} className="sv-mini">{a.toUpperCase()}<Num label={`${ABILITY_NAME[a]} saving throw bonus`} min={-30} value={sheet.saves[a]} placeholder={signed(abilityMod(sheet.abilities[a]))} width={52} onChange={(n) => set!({ [`saves.${a}`]: n })} /></label>)}</div>
+              <div className="sv-line"><b>Saving throws</b>{ABILITIES.map((a) => <label key={a} className="sv-mini">{an[a].short}<Num label={`${an[a].name} saving throw bonus`} min={-30} value={sheet.saves[a]} placeholder={signed(abilityMod(sheet.abilities[a]))} width={52} onChange={(n) => set!({ [`saves.${a}`]: n })} /></label>)}</div>
               <label className="sv-block"><b>Skills</b><Txt value={skillsText} label="Skills" placeholder="Stealth +6, Perception +4" onChange={(v) => {
                 const next: Record<string, number> = {}
                 for (const part of v.split(',')) { const m = /^\s*([A-Za-z' ]+?)\s+([+\-−]\d+)\s*$/.exec(part); if (m) next[m[1].toLowerCase()] = Number(m[2].replace('−', '-')) }

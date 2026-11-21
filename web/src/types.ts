@@ -38,7 +38,7 @@ export interface Folder { id: string; parentId: string | null; name: string; sor
 export interface LinkRow { sourceId: string; targetId: string | null; targetName: string; anchor: string | null; embed: number; /** set when the link points into the Open5e library */ libKey?: string | null }
 export interface Zettel { id: string; body: string; tags: string[]; createdAt: number; pageId: string | null; processedAt: number | null }
 export type RuleSystem = '5e' | '5e-2024' | 'pf2e'
-export interface WorldSettings { newPageTodo: string; system?: RuleSystem; invites?: boolean }
+export interface WorldSettings { newPageTodo: string; system?: RuleSystem; invites?: boolean; /** id of the installed system pack the world plays by */ pack?: string }
 export interface Invite { id: string; label: string; role: 'editor' | 'viewer'; createdAt: number; expiresAt: number | null; maxUses: number | null; uses: number; lastUsedAt: number | null; status: 'open' | 'revoked' | 'expired' | 'used up' }
 export interface Workspace { id: string; name: string; settings?: WorldSettings; /** what this account may do in the world; viewers get a read-only app */ role?: 'editor' | 'viewer' }
 export interface User { id: string; username: string; role: 'owner' | 'editor' | 'viewer' }

@@ -7,15 +7,11 @@ import { sendTable, useTable, type ChatMsg, type RollJson, type Token } from '..
 import { askText } from '../lib/dialog'
 import { PagePicker } from './PagePicker'
 import { MacroBar, draftRecap } from './TableMacros'
+import { useRules } from '../lib/pack'
 import { Select } from './Select'
 import { SheetCard, loadSheet, useSheet, type AttackKit } from './TableSheet'
 
-export const CONDITIONS = ['Blinded', 'Charmed', 'Concentrating', 'Deafened', 'Exhaustion', 'Frightened', 'Grappled', 'Incapacitated', 'Invisible', 'Paralyzed', 'Petrified', 'Poisoned', 'Prone', 'Restrained', 'Stunned', 'Unconscious']
-
-/** Pathfinder 2e conditions. The ones with a value (Frightened 2) go up by one on each click and clear after 4. */
-export const PF2E_CONDITIONS = ['Blinded', 'Clumsy', 'Concealed', 'Confused', 'Dazzled', 'Deafened', 'Doomed', 'Drained', 'Dying', 'Enfeebled', 'Fascinated', 'Fatigued', 'Fleeing', 'Frightened', 'Grabbed', 'Hidden', 'Immobilized', 'Invisible', 'Off-guard', 'Paralyzed', 'Petrified', 'Prone', 'Quickened', 'Restrained', 'Sickened', 'Slowed', 'Stunned', 'Stupefied', 'Unconscious', 'Wounded']
 const VALUED = new Set(['Clumsy', 'Doomed', 'Drained', 'Dying', 'Enfeebled', 'Frightened', 'Sickened', 'Slowed', 'Stunned', 'Stupefied', 'Wounded'])
-const DAMAGE_TYPES = ['acid', 'bludgeoning', 'cold', 'fire', 'force', 'lightning', 'necrotic', 'piercing', 'poison', 'psychic', 'radiant', 'slashing', 'thunder']
 interface Effect { id: string; name: string; rounds: number | null; ac?: number; attack?: string; save?: string; from?: string; concentration?: boolean }
 const PRESETS: Record<string, Omit<Effect, 'id'>> = {
   Bless: { name: 'Bless', rounds: 10, attack: '+1d4', save: '+1d4', concentration: true },
@@ -86,12 +82,14 @@ export function TokenStats({ token }: { token: Token }) {
   const gm = useTable((s) => s.role === 'gm')
   const [amount, setAmount] = useState('')
   const [kind, setKind] = useState('')
+  const damageTypes = useRules().damageTypes
   const auto = useTable((s) => s.settings.automation)
   const hp = token.data.hp as { value?: number; max?: number; temp?: number } | undefined
   const ac = token.data.ac as number | undefined
   const conditions = (token.data.conditions ?? []) as string[]
-  const system = useStore((s) => s.workspaces.find((w) => w.id === s.wsId)?.settings?.system ?? '5e')
-  const names = system === 'pf2e' ? PF2E_CONDITIONS : CONDITIONS
+  const rules = useRules()
+  const system = rules.base
+  const names = rules.conditions
   if (!can && !hp && ac == null && !conditions.length) return null
   const stat = (s: Record<string, unknown>) => sendTable({ t: 'token.stat', id: token.id, stat: s })
   const apply = (sign: 1 | -1) => {
@@ -134,7 +132,7 @@ export function TokenStats({ token }: { token: Token }) {
               {auto?.damage && (
                 <Select className="input tt-type" value={kind} onChange={setKind} title="Damage type">
                   <option value="">Any type</option>
-                  {DAMAGE_TYPES.map((t) => <option key={t} value={t}>{t[0].toUpperCase() + t.slice(1)}</option>)}
+                  {damageTypes.map((t) => <option key={t} value={t}>{t[0].toUpperCase() + t.slice(1)}</option>)}
                 </Select>
               )}
             </div>

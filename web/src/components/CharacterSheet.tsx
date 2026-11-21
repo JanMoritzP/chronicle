@@ -1,3 +1,4 @@
+import { useRules } from '../lib/pack'
 import { Heart, Moon, Plus, Shield, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import {
@@ -42,6 +43,7 @@ const next = (p: Proficiency | undefined): Proficiency | null => (p === undefine
 export type RollFn = (expr: string, label: string) => void
 
 export function CharacterSheet({ sheet, set, roll }: { sheet: Sheet; set?: (patch: SheetPatch) => void; roll?: RollFn }) {
+  const an = useRules().abilities
   const edit = !!set
   const pb = proficiency(sheet)
   const level = characterLevel(sheet)
@@ -133,11 +135,11 @@ export function CharacterSheet({ sheet, set, roll }: { sheet: Sheet; set?: (patc
       <section className="cs-abilities" aria-label="Abilities">
         {ABILITIES.map((a) => (
           <div key={a} className="cs-ability">
-            <button className="cs-roll" disabled={!roll} title={`Roll ${ABILITY_NAME[a]} check`} onClick={() => check(abilityMod(sheet.abilities[a]), `${a.toUpperCase()} check`)}><b>{a.toUpperCase()}</b><span className="cs-mod">{signed(abilityMod(sheet.abilities[a]))}</span></button>
-            {edit ? <Num label={ABILITY_NAME[a]} value={sheet.abilities[a]} max={30} width={52} onChange={(n) => act({ [`abilities.${a}`]: n })} /> : <span className="muted">{sheet.abilities[a]}</span>}
-            <button className="cs-save" disabled={!edit && !roll} aria-pressed={profs.saves.includes(a)} aria-label={`${ABILITY_NAME[a]} saving throw ${signed(saveBonus(sheet, a))}${profs.saves.includes(a) ? ', proficient' : ''}`}
+            <button className="cs-roll" disabled={!roll} title={`Roll ${an[a].name} check`} onClick={() => check(abilityMod(sheet.abilities[a]), `${an[a].short} check`)}><b>{an[a].short}</b><span className="cs-mod">{signed(abilityMod(sheet.abilities[a]))}</span></button>
+            {edit ? <Num label={an[a].name} value={sheet.abilities[a]} max={30} width={52} onChange={(n) => act({ [`abilities.${a}`]: n })} /> : <span className="muted">{sheet.abilities[a]}</span>}
+            <button className="cs-save" disabled={!edit && !roll} aria-pressed={profs.saves.includes(a)} aria-label={`${an[a].name} saving throw ${signed(saveBonus(sheet, a))}${profs.saves.includes(a) ? ', proficient' : ''}`}
               title={edit ? 'Click to toggle proficiency; the bonus rolls from the sheet' : 'Roll the saving throw'}
-              onClick={(e) => { if (edit && !e.shiftKey) act({ profs: { ...profs, saves: profs.saves.includes(a) ? profs.saves.filter((x) => x !== a) : [...profs.saves, a] } }); else check(saveBonus(sheet, a), `${a.toUpperCase()} save`) }}>
+              onClick={(e) => { if (edit && !e.shiftKey) act({ profs: { ...profs, saves: profs.saves.includes(a) ? profs.saves.filter((x) => x !== a) : [...profs.saves, a] } }); else check(saveBonus(sheet, a), `${an[a].short} save`) }}>
               {profs.saves.includes(a) ? '●' : '○'} Save {signed(saveBonus(sheet, a))}
             </button>
           </div>
@@ -166,10 +168,10 @@ export function CharacterSheet({ sheet, set, roll }: { sheet: Sheet; set?: (patc
           {edit ? (
             <label className="sv-mini">Ability
               <Select className="input" style={{ width: 'auto' }} value={sheet.spellcasting?.ability ?? ''} onChange={(v) => act({ spellcasting: { ability: v as Ability | '', slots } })}>
-                <option value="">None</option>{ABILITIES.map((a) => <option key={a} value={a}>{ABILITY_NAME[a]}</option>)}
+                <option value="">None</option>{ABILITIES.map((a) => <option key={a} value={a}>{an[a].name}</option>)}
               </Select>
             </label>
-          ) : sheet.spellcasting?.ability ? <span><b>Ability</b> {ABILITY_NAME[sheet.spellcasting.ability]}</span> : null}
+          ) : sheet.spellcasting?.ability ? <span><b>Ability</b> {an[sheet.spellcasting.ability].name}</span> : null}
           {spellDC(sheet) != null && <><span><b>Save DC</b> {spellDC(sheet)}</span><button className="cs-roll" disabled={!roll} onClick={() => check(spellAttack(sheet)!, 'Spell attack')}>Attack {signed(spellAttack(sheet)!)}</button></>}
         </div>
         {(sheet.spellcasting?.ability || slots.length > 0) && (

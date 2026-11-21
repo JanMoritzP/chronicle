@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../api'
 import { Select } from './Select'
+import { useRules } from '../lib/pack'
 import { ABILITIES, FEATURE_GROUPS, PF_SKILLS, multipleAttack, pfLore, pfPerception, pfSave, pfSkill, pfStrike, SKILLS, abilityMod, crText, initiativeBonus, isCharacter, passivePerception, rollsIn, saveBonus, sheetOf, signed, skillBonus, speedText, usesLeft, type Sheet } from '../lib/sheet'
 
 // The sheet of a creature as a table card: every number that can be rolled is a button.
@@ -114,6 +115,7 @@ export interface AttackKit {
 
 export function SheetCard({ sheet, roll, onPatch, attack }: { sheet: Sheet; roll: RollFn; /** changes a field of the sheet by path (only given where the person may edit it) */ onPatch?: (patch: Record<string, unknown>) => void; /** when the table rolls attacks against targets */ attack?: AttackKit }) {
   const [target, setTarget] = useState('')
+  const an = useRules().abilities
   if (sheet.ruleset === 'pf2e' && sheet.pf2e) return <Pf2eCard sheet={sheet} roll={roll} />
   const slots = sheet.spellcasting?.slots ?? []
   const bonus = (n: number) => `${n >= 0 ? '+' : '-'}${Math.abs(n)}`
@@ -141,13 +143,13 @@ export function SheetCard({ sheet, roll, onPatch, attack }: { sheet: Sheet; roll
       </div>
       <div className="tt-abil" role="group" aria-label="Ability checks">
         {ABILITIES.map((a) => (
-          <button key={a} className="tt-roll tt-ab" title={`Roll ${a.toUpperCase()} check. Shift for advantage, Ctrl for disadvantage.`} onClick={(e) => check(e, abilityMod(sheet.abilities[a]), `${a.toUpperCase()} check`)}>
-            <b>{a.toUpperCase()}</b><span>{sheet.abilities[a]}</span><small>{signed(abilityMod(sheet.abilities[a]))}</small>
+          <button key={a} className="tt-roll tt-ab" title={`Roll ${an[a].short} check. Shift for advantage, Ctrl for disadvantage.`} onClick={(e) => check(e, abilityMod(sheet.abilities[a]), `${an[a].short} check`)}>
+            <b>{an[a].short}</b><span>{sheet.abilities[a]}</span><small>{signed(abilityMod(sheet.abilities[a]))}</small>
           </button>
         ))}
       </div>
       <div className="tt-chips" role="group" aria-label="Saving throws">
-        {ABILITIES.map((a) => <button key={a} className={`tt-roll${isCharacter(sheet) ? (sheet.profs?.saves.includes(a) ? ' prof' : '') : sheet.saves[a] != null ? ' prof' : ''}`} onClick={(e) => check(e, saveBonus(sheet, a), `${a.toUpperCase()} save`)}>{a.toUpperCase()} save {signed(saveBonus(sheet, a))}</button>)}
+        {ABILITIES.map((a) => <button key={a} className={`tt-roll${isCharacter(sheet) ? (sheet.profs?.saves.includes(a) ? ' prof' : '') : sheet.saves[a] != null ? ' prof' : ''}`} onClick={(e) => check(e, saveBonus(sheet, a), `${an[a].short} save`)}>{an[a].short} save {signed(saveBonus(sheet, a))}</button>)}
       </div>
       {(isCharacter(sheet) || Object.keys(sheet.skills).length > 0) && (
         <div className="tt-chips" role="group" aria-label="Skills">

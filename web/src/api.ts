@@ -1,5 +1,6 @@
 import { get, set } from 'idb-keyval'
 import type { Calendar } from './lib/calendar'
+import type { PackData } from './lib/systems'
 import type { CommentItem, Macro, Encounter, EncounterBody, Invite, Person, LibraryEntry, LibraryIndex, LibraryStatus, BackupInfo, Bootstrap, EventRow, FullPage, MapFull, MapItem, MapLayer, CopyPreview, CopyResult, GameSession, MapMeta, PageType, PageVersion, Relation, StatsResult, StatTemplateRow, Template, TodoItem, User, Workspace, WorldSettings } from './types'
 
 export interface StatTemplateBody { name: string; sections: any[]; look?: Record<string, any> }
@@ -101,6 +102,9 @@ export const api = {
   patchStatTemplate: (id: string, b: StatTemplateBody) => req<StatTemplateRow>('PATCH', `/api/stat-templates/${id}`, b),
   deleteStatTemplate: (id: string) => req('DELETE', `/api/stat-templates/${id}`),
   sessionRecap: (ws: string) => req<{ lines: string[] }>('GET', `/api/workspaces/${ws}/recap`),
+  listPacks: (ws: string) => req<{ id: string; name: string; version: string; author: string; description: string; base: string; active: boolean; content: { rollTables: number; decks: number; macros: number }; pack: PackData }[]>('GET', `/api/workspaces/${ws}/packs`),
+  installPack: (ws: string, b: { pack: unknown; importContent: boolean; replace: boolean }) => req<{ id: string; name: string; imported: { rollTables: number; decks: number; macros: number } }>('POST', `/api/workspaces/${ws}/packs`, b),
+  removePack: (ws: string, slug: string) => req('DELETE', `/api/workspaces/${ws}/packs/${slug}`),
   listMacros: (ws: string) => req<Macro[]>('GET', `/api/workspaces/${ws}/macros`),
   createMacro: (ws: string, b: { name: string; text: string; shared: boolean }) => req<Macro>('POST', `/api/workspaces/${ws}/macros`, b),
   patchMacro: (id: string, b: { name: string; text: string; shared: boolean }) => req<Macro>('PATCH', `/api/macros/${id}`, b),

@@ -191,3 +191,55 @@ test('the owner makes an invite link and a new person joins the world with it', 
   await expect(lp.getByRole('alert')).toContainText('not valid any more')
   await late.close()
 })
+
+test('a system pack changes what the table shows, brings its content, and can be exported and removed', { tag: '@feature:packs' }, async ({ app }) => {
+  await openSettings(app, 'Worlds')
+  const pack = {
+    format: 'chronicle-system', v: 1, id: 'grim-tales', name: 'Grim tales', version: '1.0', author: 'A friend', base: '5e',
+    abilities: { str: { name: 'Might', short: 'MIG' } },
+    conditions: ['Bleeding', 'Cursed'], damageTypes: ['blood', 'shadow'], initiative: '1d10',
+    content: { rollTables: [{ name: 'Omens', entries: 'A raven' }], macros: [{ name: 'Brace', text: '/me braces for the worst' }] },
+  }
+  const chooser = app.waitForEvent('filechooser')
+  await app.getByRole('button', { name: 'Install a pack from a file' }).click()
+  await (await chooser).setFiles({ name: 'grim.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(pack)) })
+  await confirmDialog(app)
+  await confirmDialog(app)
+  await expect(dialog(app)).toContainText('Added 1 tables, 0 decks and 1 macros')
+  await confirmDialog(app)
+  const list = app.getByRole('list', { name: 'Installed packs' })
+  await expect(list).toContainText('Grim tales')
+  await expect(list).toContainText('1 tables')
+  await app.getByRole('button', { name: 'Use Grim tales' }).click()
+  await expect(list).toContainText('in use')
+
+  // the table offers the pack's conditions and damage types, and its macro is there
+  await app.getByRole('button', { name: 'Tabletop' }).click()
+  await expect(app.locator('.tt-canvas canvas')).toBeVisible()
+  await app.locator('.tt-bar').getByRole('button', { name: 'Scene', exact: true }).click()
+  await app.getByPlaceholder('The crypt under the chapel').fill('Ruin')
+  await app.getByRole('button', { name: 'Create' }).click()
+  await expect(app.locator('.tt-bar')).toContainText('Ruin')
+  await app.locator('.tt-bar').getByRole('button', { name: 'Token' }).click()
+  await app.getByPlaceholder('Goblin 1').fill('Wretch')
+  await app.getByRole('button', { name: 'Add' }).click()
+  await app.locator('.tt-canvas canvas').click({ position: { x: 5, y: 5 } })
+  await app.getByRole('list', { name: 'Tokens on this scene' }).getByRole('button', { name: 'Wretch' }).click()
+  const chips = app.getByRole('group', { name: 'Conditions' })
+  await expect(chips).toContainText('Bleeding')
+  await expect(chips).toContainText('Cursed')
+  await expect(chips).not.toContainText('Prone')
+  await app.locator('.tt-panel .seg').getByRole('button', { name: /Chat/ }).click()
+  await expect(app.getByRole('group', { name: 'Macros' }).getByRole('button', { name: 'Brace', exact: true })).toBeVisible()
+
+  // it can be exported, and removed
+  await openSettings(app, 'Worlds')
+  const download = app.waitForEvent('download')
+  await app.getByRole('button', { name: 'Export Grim tales' }).click()
+  const saved = JSON.parse((await import('node:fs')).readFileSync(await (await download).path(), 'utf8'))
+  expect(saved.id).toBe('grim-tales')
+  expect(saved.conditions).toEqual(['Bleeding', 'Cursed'])
+  await app.getByRole('button', { name: 'Remove Grim tales' }).click()
+  await confirmDialog(app)
+  await expect(app.getByRole('list', { name: 'Installed packs' })).toContainText('No packs installed')
+})
