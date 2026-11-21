@@ -451,6 +451,12 @@ areas:
       - id: table.tables-decks
         name: "Roll tables and card decks: players roll and draw, hands stay private, secret tables stay secret"
         files: [web/src/components/TableDecks.tsx, server/src/tables.ts, server/src/table.ts]
+      - id: table.fog-preview
+        name: "The GM previews fog, darkness and secret doors as a player or through a token"
+        files: [web/src/tabletop/engine.ts, web/src/components/Tabletop.tsx]
+      - id: table.wall-edit
+        name: "Drag the end of a wall to move it, with the walls that share the point"
+        files: [web/src/tabletop/engine.ts]
       - id: table.fog
         name: "Fog of war and darkness are switched on per scene and kept"
         files: [web/src/components/Tabletop.tsx]

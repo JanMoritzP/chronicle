@@ -140,6 +140,54 @@ test('the GM turns on fog and darkness for a scene and the choice is kept', { ta
   await expect(app.getByRole('group', { name: 'Kind of wall' })).toContainText('Secret door')
 })
 
+test('the GM can preview the fog of war as a player or through a token, without a decoy account', { tag: '@feature:table.fog-preview' }, async ({ app }) => {
+  await openTable(app)
+  await makeScene(app, 'Vault')
+  await makeToken(app, 'Scout')
+  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Scene' }).click()
+  await app.getByLabel(/Darkness/).fill('90')
+  await app.getByLabel(/Fog of war/).click()
+  await expect(app.getByLabel(/Fog of war/)).toBeChecked()
+  const canvas = app.locator('.tt-canvas canvas')
+  const gmView = await canvas.screenshot()
+  const preview = app.getByTitle('See the scene as a player does')
+  await expect(async () => {
+    await preview.click()
+    await expect(app.getByRole('option', { name: 'Through Scout' })).toBeVisible({ timeout: 1500 })
+  }).toPass()
+  await app.getByRole('option', { name: 'Through Scout' }).click()
+  await expect(app.getByRole('button', { name: 'Leave the preview' })).toContainText('Scout')
+  // the map now looks the way the token sees it: not the same picture the GM had
+  await expect(async () => { expect((await canvas.screenshot()).equals(gmView)).toBe(false) }).toPass()
+  await app.getByRole('button', { name: 'Leave the preview' }).click()
+  await expect(app.getByRole('button', { name: 'Leave the preview' })).toHaveCount(0)
+})
+
+test('the end of a wall can be dragged somewhere else and stays there', { tag: '@feature:table.wall-edit' }, async ({ app }) => {
+  await openTable(app)
+  await makeScene(app, 'Maze')
+  const canvas = app.locator('.tt-canvas canvas')
+  const box = (await canvas.boundingBox())!
+  const cx = box.x + box.width / 2, cy = box.y + box.height / 2
+  await app.getByRole('button', { name: 'Draw walls' }).click()
+  await app.mouse.click(cx - 100, cy)
+  await app.mouse.dblclick(cx + 100, cy)
+  await expect(async () => { expect((await canvas.screenshot()).length).toBeGreaterThan(0) }).toPass()
+  const before = await canvas.screenshot()
+  await app.mouse.move(cx + 100, cy)
+  await app.mouse.down()
+  await app.mouse.move(cx + 100, cy + 70, { steps: 6 })
+  await app.mouse.move(cx + 100, cy + 140, { steps: 6 })
+  await app.mouse.up()
+  await expect(async () => { expect((await canvas.screenshot()).equals(before)).toBe(false) }).toPass()
+  // it was saved: after a reload the wall is not where it started
+  await app.waitForTimeout(500)
+  await app.reload()
+  await openTable(app)
+  await app.getByRole('button', { name: 'Draw walls' }).click()
+  await expect(async () => { expect((await canvas.screenshot()).equals(before)).toBe(false) }).toPass()
+})
+
 test('combat: add tokens, set initiative, start and step through the turns', { tag: '@feature:table.combat' }, async ({ app, as, world }) => {
   await grantAccess(world.id, 'editor')
   await app.reload()

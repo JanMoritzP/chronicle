@@ -867,6 +867,9 @@ input[type=color] { width: 34px; height: 24px; padding: 0; border: 1px solid var
 .cs-hp { grid-column: span 2; }
 .cs-hp .tt-hpbar { width: 100%; }
 .cs-hpfields { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+/* what does not fit in a box wraps inside it instead of running over the next one (wider fonts, narrower columns) */
+.cs-box { min-width: 0; }
+.cs-box .cs-hpfields, .cs-box .cs-ds { max-width: 100%; }
 .cs-hd, .cs-ds { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .cs-add { display: inline-flex; gap: 4px; }
 .cs-bubbles { display: inline-flex; gap: 4px; flex-wrap: wrap; }

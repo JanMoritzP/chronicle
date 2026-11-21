@@ -16,6 +16,8 @@ export interface Hooks {
   onRuler(points: Pt[] | null): void
   onWallAdd(walls: { x1: number; y1: number; x2: number; y2: number; kind: Wall['kind'] }[]): void
   onWallErase(id: string): void
+  /** wall ends were dragged somewhere else */
+  onWallMove(updates: { id: string; patch: Partial<Pick<Wall, 'x1' | 'y1' | 'x2' | 'y2'>> }[]): void
   onDoor(id: string): void
   onExplored(png: string): void
   onDraw(d: { kind: DrawKind; points: Pt[]; color: string; width: number; fill: string }): void
@@ -83,7 +85,13 @@ export class TableEngine {
   private fog!: FogLayer
   private turnId: string | null = null
   private me = { id: '', gm: true, canDoors: false }
-  private drag: null | { kind: 'pan' | 'tokens' | 'ruler' | 'marquee' | 'draw' | 'tile'; start: Pt; screen: Pt; origins?: Map<string, Pt>; lead?: string; moved: boolean; sent: number } = null
+  /** The GM looking through the eyes of players or tokens: fog, darkness, secret doors and hidden tokens work as they do for them. */
+  private preview: { users: string[]; tokens: string[] } | null = null
+  private explored: string | null = null
+  /** Does this person see everything? False for players, and for a GM who is previewing. */
+  private get gmView() { return this.me.gm && !this.preview }
+  private isViewer(t: Token) { const p = this.preview; return p ? p.tokens.includes(t.id) || t.owners.some((o) => p.users.includes(o)) : t.owners.includes(this.me.id) }
+  private drag: null | { kind: 'pan' | 'tokens' | 'ruler' | 'marquee' | 'draw' | 'tile' | 'wallend'; start: Pt; screen: Pt; origins?: Map<string, Pt>; lead?: string; moved: boolean; sent: number; /** wall ends that move together, and where they went */ ends?: { id: string; end: 1 | 2 }[]; to?: Pt } = null
   private pointers = new Map<number, Pt>()
   private pinch: null | { dist: number; scale: number } = null
   private longPress: number | undefined
@@ -102,7 +110,7 @@ export class TableEngine {
     this.host.appendChild(this.app.canvas)
     this.app.canvas.style.touchAction = 'none'
     this.fog = new FogLayer(this.app)
-    this.fog.onExplored = (png) => this.hooks.onExplored(png)
+    this.fog.onExplored = (png) => { if (!this.preview) this.hooks.onExplored(png) }
     this.fog.onDrawn = () => this.poke()
     this.world.addChild(this.bg, this.gridG, this.tileBg, this.drawLayer, this.tokenLayer, this.tileOver, this.tileGm, this.fog.view, this.wallG, this.others, this.ruleG, this.ruleLabel, this.overlay, this.wallPreview, this.strokeG, this.tileSel, this.marquee)
     this.ruleLabel.visible = false
@@ -143,7 +151,7 @@ export class TableEngine {
     if (changed) this.drawBackground()
     if (scene && this.fitted !== scene.id) { this.fitted = scene.id; this.needFit = true; this.fit() }
     for (const v of this.views.values()) this.layout(v)
-    this.fog.configure(scene, !this.me.gm)
+    this.fog.configure(scene, !this.gmView)
     this.refreshVision()
   }
 
@@ -213,7 +221,7 @@ export class TableEngine {
       this.build(v)
     }
     v.token = t
-    if (!this.me.gm && this.tokens.size) this.refreshVision()
+    if (!this.gmView && this.tokens.size) this.refreshVision()
     // a token the person is dragging is theirs to place; the server's older position must not pull it back
     if (!(this.drag?.kind === 'tokens' && this.drag.origins?.has(t.id))) this.layout(v)
   }
@@ -326,14 +334,26 @@ export class TableEngine {
   setViewer(me: { id: string; gm: boolean; spectator: boolean; canDoors: boolean }) { this.poke();
     this.me = { id: me.id, gm: me.gm || me.spectator, canDoors: me.canDoors || me.gm }
     if (!this.ready) return
-    this.fog.configure(this.scene, !this.me.gm)
+    this.fog.configure(this.scene, !this.gmView)
+    this.drawWalls()
+    this.refreshVision()
+  }
+
+  /** Looks at the scene as these players (by account) or these tokens would. Null goes back to the GM's own view. What they explored is not kept. */
+  setPreview(spec: { users: string[]; tokens: string[] } | null) { this.poke();
+    const was = !!this.preview
+    this.preview = spec && (spec.users.length || spec.tokens.length) ? spec : null
+    if (!this.ready) return
+    this.fog.configure(this.scene, !this.gmView)
+    if (this.preview) void this.fog.loadExplored(null)
+    else if (was) void this.fog.loadExplored(this.explored)
     this.drawWalls()
     this.refreshVision()
   }
 
   setWalls(walls: Wall[]) { this.walls = walls; if (this.ready) { this.poke(); this.fog.setWalls(walls); this.drawWalls() } }
   setLights(lights: Light[]) { this.poke(); if (this.ready) this.fog.setLights(lights) }
-  setExplored(png: string | null) { this.poke(); if (this.ready) void this.fog.loadExplored(png) }
+  setExplored(png: string | null) { this.poke(); this.explored = png; if (this.ready && !this.preview) void this.fog.loadExplored(png) }
   setWallKind(kind: Wall['kind']) { this.wallKind = kind }
   setTiles(list: Tile[]) {
     this.poke()
@@ -487,11 +507,11 @@ export class TableEngine {
 
   /** Tokens that give their owner sight, and who is hidden by the dark. */
   private refreshVision() {
-    if (!this.ready || this.me.gm) {
+    if (!this.ready || this.gmView) {
       for (const v of this.views.values()) v.box.visible = true
       return
     }
-    const mine = [...this.tokens.values()].filter((t) => t.owners.includes(this.me.id))
+    const mine = [...this.tokens.values()].filter((t) => this.isViewer(t))
     this.fog.setViewers(mine.map((t) => {
       const vis = (t.data.vision ?? {}) as { sight?: number | null; dark?: number }
       return { id: t.id, x: t.x, y: t.y, sight: vis.sight ?? null, dark: vis.dark ?? 0 }
@@ -500,8 +520,9 @@ export class TableEngine {
   }
 
   private applyTokenVisibility() {
-    if (this.me.gm) return
-    for (const v of this.views.values()) v.box.visible = v.token.owners.includes(this.me.id) || this.fog.isVisible({ x: v.token.x, y: v.token.y })
+    if (this.gmView) return
+    // a hidden token is the GM's secret, even from the GM looking through a player's eyes
+    for (const v of this.views.values()) v.box.visible = !(this.preview && v.token.hidden) && (this.isViewer(v.token) || this.fog.isVisible({ x: v.token.x, y: v.token.y }))
   }
 
   /** Ends the wall being drawn and sends it. */
@@ -550,7 +571,7 @@ export class TableEngine {
     for (const w of this.walls) {
       const door = w.kind === 'door' || w.kind === 'secret'
       // players see doors (so they can use them) and nothing else
-      if (!this.me.gm && !door) continue
+      if (!this.gmView && !door) continue
       const color = w.kind === 'wall' ? 0xf5f0e6 : w.kind === 'door' ? 0xe08a2e : w.kind === 'secret' ? 0xb36bff : 0x6cc7ff
       g.moveTo(w.x1, w.y1).lineTo(w.x2, w.y2).stroke({ width: (door ? 5 : 3) * k, color, alpha: w.open ? 0.35 : 0.95 })
       if (editing && this.me.gm) { g.circle(w.x1, w.y1, 4 * k).fill({ color }); g.circle(w.x2, w.y2, 4 * k).fill({ color }) }
@@ -655,6 +676,24 @@ export class TableEngine {
     const world = this.toWorld(screen)
     if (e.altKey) return this.hooks.onPing(world)
     const pan = e.button === 1 || e.button === 2
+    if (!pan && this.me.gm && this.tool === 'wall' && !this.wallPoly.length) {
+      // grabbing the end of a wall moves it, and every other wall that ends at the same point moves with it
+      const reach = 10 / this.world.scale.x
+      let hit: Pt | null = null, bd = reach
+      for (const w of this.walls) for (const e of [{ x: w.x1, y: w.y1 }, { x: w.x2, y: w.y2 }]) {
+        const d = Math.hypot(e.x - world.x, e.y - world.y)
+        if (d < bd) { bd = d; hit = e }
+      }
+      if (hit) {
+        const ends: { id: string; end: 1 | 2 }[] = []
+        for (const w of this.walls) {
+          if (Math.hypot(w.x1 - hit.x, w.y1 - hit.y) < 0.5) ends.push({ id: w.id, end: 1 })
+          if (Math.hypot(w.x2 - hit.x, w.y2 - hit.y) < 0.5) ends.push({ id: w.id, end: 2 })
+        }
+        this.drag = { kind: 'wallend', start: hit, screen, moved: false, sent: 0, ends }
+        return
+      }
+    }
     if (!pan && this.me.gm && this.tool === 'wall') {
       const pt = this.snapWall(world)
       const now = performance.now()
@@ -763,6 +802,21 @@ export class TableEngine {
         if (now - d.sent > 70) { d.sent = now; this.hooks.onRuler(path) }
         break
       }
+      case 'wallend': {
+        // snap to the grid or to another wall's end, but not to the ends being moved
+        const moving = new Set(d.ends!.map((e) => e.id))
+        const keep = this.walls
+        this.walls = this.walls.filter((w) => !moving.has(w.id))
+        const to = this.snapWall(world)
+        this.walls = keep
+        d.to = to
+        this.walls = this.walls.map((w) => {
+          const a = d.ends!.find((e) => e.id === w.id && e.end === 1), b = d.ends!.find((e) => e.id === w.id && e.end === 2)
+          return a || b ? { ...w, ...(a ? { x1: to.x, y1: to.y } : {}), ...(b ? { x2: to.x, y2: to.y } : {}) } : w
+        })
+        this.drawWalls()
+        break
+      }
       case 'tile': {
         const o = d.origins!.get(d.lead!)!
         const half = this.scene ? this.scene.gridSize / 2 : 1
@@ -805,6 +859,12 @@ export class TableEngine {
     if (!d) return
     if (d.kind === 'tokens' && d.moved) this.flushMove(d, true)
     if (d.kind === 'tokens' || d.kind === 'ruler') { this.ruleG.clear(); this.ruleLabel.visible = false; if (d.moved) this.hooks.onRuler(null) }
+    // a click on the end of a wall, without dragging, starts a new wall from that point as before
+    if (d.kind === 'wallend' && !d.moved) this.wallPoly.push(d.start)
+    if (d.kind === 'wallend' && d.moved && d.to) {
+      const to = d.to
+      this.hooks.onWallMove(d.ends!.map((e) => ({ id: e.id, patch: e.end === 1 ? { x1: to.x, y1: to.y } : { x2: to.x, y2: to.y } })))
+    }
     if (d.kind === 'tile' && d.moved) {
       const box = this.tileBoxes.get(d.lead!)
       if (box) { const t = this.tiles.find((x) => x.id === d.lead); if (t) { t.x = box.x; t.y = box.y }; this.hooks.onTileMove(d.lead!, box.x, box.y) }

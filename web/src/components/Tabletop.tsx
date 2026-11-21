@@ -76,6 +76,7 @@ export function TableView() {
       onRuler: (points) => { sendTable({ t: 'ruler', points }) },
       onWallAdd: (walls) => { const id = useTable.getState().sceneId; if (id) sendTable({ t: 'wall.add', sceneId: id, walls }) },
       onWallErase: (id) => { sendTable({ t: 'wall.delete', ids: [id] }) },
+      onWallMove: (updates) => { for (const u of updates) sendTable({ t: 'wall.update', id: u.id, patch: u.patch }) },
       onDoor: (id) => { sendTable({ t: 'door.toggle', id }) },
       onDraw: (d) => { const id = useTable.getState().sceneId; if (id && d.points.length) sendTable({ t: 'draw.add', sceneId: id, kind: d.kind, points: d.points, color: d.color, width: d.width, ...(d.fill ? { fill: d.fill } : {}), gmOnly: gmOnlyRef.current && useTable.getState().role === 'gm' }) },
       onText: async (p) => {
@@ -142,6 +143,20 @@ export function TableView() {
     engine.current?.setDrawStyle({ kind: draw.kind, color: draw.color, width: draw.width, fill: draw.fill ? draw.color : '' })
   }, [draw, gmOnly])
   const [wallKind, setWallKind] = useState<'wall' | 'door' | 'secret' | 'window'>('wall')
+  // the GM can look at the scene as a player (or one token) sees it: fog, darkness, secret doors and hidden tokens, without a decoy account
+  const [previewKey, setPreviewKey] = useState('')
+  const people = useTable((s) => s.members)
+  const sceneTokens = useTable((s) => s.tokens)
+  const previewOptions = useMemo(() => {
+    const owners = [...new Set(sceneTokens.flatMap((t) => t.owners))].filter((id) => people.some((m) => m.id === id))
+    return {
+      players: owners.map((id) => ({ key: `u:${id}`, label: `As ${people.find((m) => m.id === id)!.username}`, users: [id], tokens: [] as string[] })),
+      all: owners.length > 1 ? { key: 'all', label: 'As all players', users: owners, tokens: [] as string[] } : null,
+      tokens: sceneTokens.map((t) => ({ key: `t:${t.id}`, label: `Through ${t.name || 'a token'}`, users: [] as string[], tokens: [t.id] })),
+    }
+  }, [sceneTokens, people])
+  const previewing = [...previewOptions.players, ...(previewOptions.all ? [previewOptions.all] : []), ...previewOptions.tokens].find((o) => o.key === previewKey) ?? null
+  useEffect(() => { engine.current?.setPreview(previewing ? { users: previewing.users, tokens: previewing.tokens } : null) }, [previewing?.key, previewing?.users.join(), previewing?.tokens.join(), sceneId])
   useEffect(() => { engine.current?.setTool(tool) }, [tool])
   useEffect(() => { engine.current?.setWallKind(wallKind) }, [wallKind])
 
@@ -223,6 +238,15 @@ export function TableView() {
         <button className="btn sm square" title="Zoom in" aria-label="Zoom in" onClick={() => engine.current?.zoomBy(1.25)}><Plus size={14} /></button>
         <button className="btn sm square" title="Zoom out" aria-label="Zoom out" onClick={() => engine.current?.zoomBy(0.8)}><Minus size={14} /></button>
         <button className="btn sm square" title="Fit the scene (F)" aria-label="Fit the scene" onClick={() => engine.current?.fit()}><Maximize size={14} /></button>
+        {role === 'gm' && scene && (
+          <Select className="input tt-preview" value={previewing ? previewKey : ''} title="See the scene as a player does" onChange={setPreviewKey}>
+            <option value="">GM view</option>
+            {previewOptions.all && <option value={previewOptions.all.key}>{previewOptions.all.label}</option>}
+            {previewOptions.players.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+            {previewOptions.tokens.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+          </Select>
+        )}
+        {previewing && <button className="btn sm primary" aria-label="Leave the preview" onClick={() => setPreviewKey('')}><Eye size={13} /> Preview: {previewing.label.replace(/^(As|Through) /, '')}</button>}
         {scene && canAdd && <button className="btn sm" onClick={addToken}><UserPlus size={13} /> Token</button>}
         <span className="grow" />
         <span className={`tt-conn ${conn}`} title={conn === 'open' ? 'Connected' : 'Reconnecting'}>{conn === 'open' ? '' : conn === 'connecting' ? 'Connecting…' : 'Offline, reconnecting…'}</span>
