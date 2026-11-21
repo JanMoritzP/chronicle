@@ -956,3 +956,6 @@ button.cs-roll:disabled { cursor: default; }
 .invites-list li { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; }
 .tt-effects { display: flex; flex-direction: column; gap: 6px; }
 .tt-x { border: 0; background: none; color: inherit; cursor: pointer; padding: 0 0 0 4px; font-size: 14px; line-height: 1; }
+.cs-levelup { border: 1px solid var(--border); border-radius: 8px; padding: 10px; margin: 8px 0; display: flex; flex-direction: column; gap: 6px; background: var(--bg-soft, var(--bg)); }
+.cs-load { margin: 4px 0; font-size: 13px; color: var(--muted, inherit); }
+.cs-load.warn { color: #c0392b; }

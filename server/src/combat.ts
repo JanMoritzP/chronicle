@@ -10,6 +10,8 @@ export interface Combatant {
   hidden: boolean
   /** knocked out or fled: skipped in the order */
   done: boolean
+  /** the reaction of this round is spent; it comes back when their turn begins */
+  reaction?: boolean
 }
 export interface Combat { active: boolean; round: number; turn: string | null; list: Combatant[] }
 
@@ -42,7 +44,9 @@ export function advance(c: Combat, step: 1 | -1): Combat {
   let i = at < 0 ? 0 : at + step
   let round = c.round
   if (i >= order.length) { i = 0; round++ } else if (i < 0) { if (round > 1) { i = order.length - 1; round-- } else i = 0 }
-  return { ...c, turn: order[i].id, round }
+  // a combatant's reaction is ready again when their turn comes round (going back a turn leaves it as it was)
+  const list = step === 1 ? c.list.map((x) => (x.id === order[i].id && x.reaction ? { ...x, reaction: false } : x)) : c.list
+  return { ...c, turn: order[i].id, round, list }
 }
 
 export const end = (c: Combat): Combat => ({ ...c, active: false, round: 0, turn: null })

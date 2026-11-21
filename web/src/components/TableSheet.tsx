@@ -106,6 +106,9 @@ export interface AttackKit {
   targets: { id: string; name: string }[]
   /** the tokens selected besides this one */
   selected: string[]
+  /** spell areas drawn on the scene, and which tokens stand inside one */
+  templates: { id: string; label: string }[]
+  inside: (templateId: string) => string[]
   send: (targets: string[], a: { label: string; attack?: { bonus: number; mode?: 'adv' | 'dis' }; damage?: { expr: string; type?: string }[]; save?: { ability: string; dc: number; half: boolean } }) => void
 }
 
@@ -123,6 +126,7 @@ export function SheetCard({ sheet, roll, onPatch, attack }: { sheet: Sheet; roll
           <Select className="input" value={target} onChange={setTarget} title="Target of attacks">
             <option value="">Nobody</option>
             {attack.selected.length > 1 && <option value="*">All selected tokens</option>}
+            {attack.templates.map((t) => <option key={t.id} value={`tpl:${t.id}`}>Everyone in {t.label}</option>)}
             {attack.targets.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </Select>
         </div>
@@ -194,7 +198,7 @@ export function SheetCard({ sheet, roll, onPatch, attack }: { sheet: Sheet; roll
                     {r.attack != null && <button className="tt-roll" onClick={(e) => check(e, r.attack!, `${f.name}, attack`)}>To hit {signed(r.attack)}</button>}
                     {r.damage.map((d, j) => <button key={j} className="tt-roll" onClick={() => roll(d.expr, `${f.name}, ${d.type ? `${d.type} damage` : 'damage'}`)}>{d.expr}{d.type ? ` ${d.type}` : ''}</button>)}
                     {attack && target && (r.attack != null || r.save) && (
-                      <button className="btn sm primary" aria-label={`Use ${f.name} on the target`} onClick={(e) => attack.send(target === '*' ? attack.selected : [target], {
+                      <button className="btn sm primary" aria-label={`Use ${f.name} on the target`} onClick={(e) => attack.send(target === '*' ? attack.selected : target.startsWith('tpl:') ? attack.inside(target.slice(4)) : [target], {
                         label: f.name,
                         ...(r.attack != null ? { attack: { bonus: r.attack, ...(e.shiftKey ? { mode: 'adv' as const } : e.ctrlKey || e.metaKey ? { mode: 'dis' as const } : {}) } } : {}),
                         ...(r.attack == null && r.save ? { save: { ability: r.save.ability.slice(0, 3).toLowerCase(), dc: r.save.dc, half: /half as much|half damage/i.test(f.text) } } : {}),

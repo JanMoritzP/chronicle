@@ -1,6 +1,7 @@
 import { Heart, Link2, Shield, Swords, Unlink } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../api'
+import { inTemplate } from '../tabletop/grid'
 import { useStore } from '../store'
 import { sendTable, useTable, type ChatMsg, type RollJson, type Token } from '../tabletop/state'
 import { askText } from '../lib/dialog'
@@ -60,6 +61,7 @@ function Effects({ token, can }: { token: Token; can: boolean }) {
   )
 }
 
+const AREA_NAMES: Record<string, string> = { cone: 'the cone', beam: 'the ray', blast: 'the burst', cube: 'the cube' }
 const baseOf = (c: string) => c.replace(/\s+\d+$/, '')
 
 export const rollText = (expr: string, label: string) => sendTable({ t: 'chat', text: `/roll ${expr} ${label}` })
@@ -190,14 +192,19 @@ export function TokenSheet({ token }: { token: Token }) {
   const auto = useTable((s) => s.settings.automation)
   const tokens = useTable((s) => s.tokens)
   const selected = useTable((s) => s.selected)
+  const drawings = useTable((s) => s.drawings)
+  const scene = useTable((s) => s.scenes.find((x) => x.id === s.sceneId))
   const nameOf = token.name || 'Token'
   if (!token.pageId) return null
   if (loading) return <p className="muted tt-hint">Loading the sheet…</p>
   if (!sheet) return <p className="muted tt-hint">This page has no stat block.</p>
   const patch = (p: Record<string, unknown>) => { if (token.pageId) void api.patchPage(token.pageId, { propsPatch: { sheet: p } }).then(reload).catch(() => reload()) }
+  const areas = drawings.filter((d) => d.sceneId === token.sceneId && d.kind in AREA_NAMES && d.points.length > 1)
   const kit: AttackKit | undefined = auto?.attacks && can ? {
     targets: tokens.filter((t) => t.id !== token.id).map((t) => ({ id: t.id, name: t.name })),
     selected: selected.filter((id) => id !== token.id),
+    templates: areas.map((d, i) => ({ id: d.id, label: `${AREA_NAMES[d.kind]} ${i + 1}` })),
+    inside: (id) => { const d = areas.find((x) => x.id === id); return d && d.points.length > 1 ? tokens.filter((t) => inTemplate(d.kind as 'cone', d.points[0], d.points[d.points.length - 1], t, scene?.gridSize ?? 70)).map((t) => t.id) : [] },
     send: (targets, a) => sendTable({ t: 'attack', from: token.id, targets, ...a }),
   } : undefined
   return <SheetCard sheet={sheet} roll={(expr, label) => rollText(expr, `${nameOf}: ${label}`)} onPatch={can && sheet.kind === 'character' ? patch : undefined} attack={kit} />
@@ -356,6 +363,10 @@ export function CombatPanel() {
                     onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />
                 : <span className="tt-init">{x.init ?? '–'}</span>}
               <span className="grow ellipsis">{x.name}{x.hidden ? ' (hidden)' : ''}{hp && hp.max ? <small className="muted"> {hp.value}/{hp.max}</small> : null}</span>
+              {(gm || mine) && combat.active && !x.done && (
+                <button className={`tt-chip${x.reaction ? '' : ' on'}`} aria-pressed={!x.reaction} aria-label={`Reaction of ${x.name}, ${x.reaction ? 'spent' : 'ready'}`} title={x.reaction ? 'Reaction spent. Click when it is ready again.' : 'Reaction ready. Click when it is spent.'}
+                  onClick={() => sendTable({ t: 'combat.reaction', id: x.id, used: !x.reaction })}>R</button>
+              )}
               {gm && (
                 <span className="tt-row-actions">
                   <button className="btn ghost sm" title={x.done ? 'Back in the fight' : 'Out of the fight'} aria-label={x.done ? 'Back in the fight' : 'Out of the fight'} onClick={() => sendTable({ t: 'combat.flag', id: x.id, done: !x.done })}>{x.done ? '↺' : '✕'}</button>

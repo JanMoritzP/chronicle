@@ -857,6 +857,14 @@ async function handle(c: Conn, m: ClientMessage) {
       }
       return saveCombat(ws, withList(combat, combat.list.map((x) => (rolled.has(x.id) ? { ...x, init: rolled.get(x.id)! } : x))))
     }
+    case 'combat.reaction': {
+      const combat = combatOf(ws)
+      const who = combat.list.find((x) => x.id === m.id)
+      if (!who) return nack(c, m, 'no such combatant')
+      const tok = who.tokenId ? tokenRow(who.tokenId, ws) : undefined
+      if (!gm && !(c.role === 'player' && !!tok && tok.owners.includes(c.user.id))) return nack(c, m, 'not allowed')
+      return saveCombat(ws, withList(combat, combat.list.map((x) => (x.id === m.id ? { ...x, reaction: m.used } : x))))
+    }
     case 'combat.flag': {
       if (!gm) return nack(c, m, 'only the GM can do that')
       const combat = combatOf(ws)

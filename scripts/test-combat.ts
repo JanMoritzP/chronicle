@@ -39,5 +39,12 @@ const started = start(h)
 check('the GM sees everyone', visible(started, true).list.length === 3 && visible(started, true).turn === 'ogre')
 check('players do not see hidden combatants, nor a hidden turn', visible(started, false).list.length === 2 && visible(started, false).turn === null)
 
+const r0 = withList(emptyCombat(), [c('a', 20), c('b', 10)])
+const r1 = start(r0)
+const spent = { ...r1, list: r1.list.map((x) => ({ ...x, reaction: true })) }
+const r2 = advance(spent, 1)
+check('a combatant whose turn begins has their reaction back', r2.list.find((x) => x.id === 'b')!.reaction === false && r2.list.find((x) => x.id === 'a')!.reaction === true)
+check('going back a turn leaves reactions as they were', advance(r2, -1).list.every((x) => x.reaction === r2.list.find((y) => y.id === x.id)!.reaction))
+
 console.log(failed ? `\n${failed} failed` : '\nall passed')
 process.exit(failed ? 1 : 0)

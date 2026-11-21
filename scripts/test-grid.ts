@@ -1,4 +1,4 @@
-import { formatDistance, measure, snap, type GridSpec } from '../web/src/tabletop/grid'
+import { formatDistance, inTemplate, measure, snap, type GridSpec } from '../web/src/tabletop/grid'
 
 let failed = 0
 const check = (name: string, ok: boolean, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name} ${extra}`); if (!ok) failed++ }
@@ -37,6 +37,14 @@ check('hex distance of three steps in a line', measure([{ x: 0, y: 0 }, { x: 300
 const f1 = snap({ x: 90, y: 40 }, 1, hex('hex-col'))
 check('hex columns: flat-top spacing', Math.abs(f1.x - 86.60254) < 1e-3 && f1.y === 50)
 check('hex columns: three steps down', measure([{ x: 0, y: 0 }, { x: 0, y: 300 }], hex('hex-col')).cells === 3)
+
+const O = { x: 0, y: 0 }
+check('a burst reaches its radius all round', inTemplate('blast', O, { x: 100, y: 0 }, { x: -90, y: 0 }, 50) && !inTemplate('blast', O, { x: 100, y: 0 }, { x: 0, y: 101 }, 50))
+check('a cone widens to half its length each side', inTemplate('cone', O, { x: 100, y: 0 }, { x: 100, y: 49 }, 50) && !inTemplate('cone', O, { x: 100, y: 0 }, { x: 100, y: 51 }, 50) && !inTemplate('cone', O, { x: 100, y: 0 }, { x: -1, y: 0 }, 50))
+check('a cone has no width at its point', !inTemplate('cone', O, { x: 100, y: 0 }, { x: 10, y: 20 }, 50) && inTemplate('cone', O, { x: 100, y: 0 }, { x: 10, y: 4 }, 50))
+check('a ray is one cell wide', inTemplate('beam', O, { x: 200, y: 0 }, { x: 150, y: 25 }, 50) && !inTemplate('beam', O, { x: 200, y: 0 }, { x: 150, y: 26 }, 50) && !inTemplate('beam', O, { x: 200, y: 0 }, { x: 201, y: 0 }, 50))
+check('a cube is as wide as it is long', inTemplate('cube', O, { x: 0, y: 100 }, { x: 50, y: 50 }, 50) && !inTemplate('cube', O, { x: 0, y: 100 }, { x: 51, y: 50 }, 50))
+check('it works at an angle', inTemplate('cone', O, { x: 0, y: -100 }, { x: 0, y: -80 }, 50) && !inTemplate('cone', O, { x: 0, y: -100 }, { x: 80, y: 0 }, 50))
 
 console.log(failed ? `\n${failed} failed` : '\nall passed')
 process.exit(failed ? 1 : 0)

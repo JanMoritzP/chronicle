@@ -168,6 +168,17 @@ test('combat: add tokens, set initiative, start and step through the turns', { t
   await expect(app.getByText('Round 2')).toBeVisible()
   await expect(player.getByText('Round 2')).toBeVisible()
   await expect(player.getByRole('button', { name: 'Next turn' })).toHaveCount(0)
+  // reactions: spent by hand, back when their turn begins
+  const react = app.getByRole('button', { name: /^Reaction of Aria/ })
+  await expect(react).toHaveAttribute('aria-label', 'Reaction of Aria, ready')
+  await react.click()
+  await expect(react).toHaveAttribute('aria-label', 'Reaction of Aria, spent')
+  await app.getByRole('button', { name: 'Next turn' }).click()
+  await expect(order.locator('[aria-current=step]')).toContainText('Orc')
+  await expect(react).toHaveAttribute('aria-label', 'Reaction of Aria, spent')
+  await app.getByRole('button', { name: 'Next turn' }).click()
+  await expect(order.locator('[aria-current=step]')).toContainText('Aria')
+  await expect(react).toHaveAttribute('aria-label', 'Reaction of Aria, ready')
 })
 
 test('encounters: build a fight, see how hard it is and place it on the scene', { tag: '@feature:table.encounters' }, async ({ app, makePage }) => {
@@ -636,6 +647,26 @@ test('with attacks switched on, a feature can be rolled against a target and the
   const chat = app.getByRole('list', { name: 'Chat' })
   await expect(chat).toContainText('Longbow, attack on Dummy')
   await expect(chat).toContainText(/(critically hits|hits) Dummy for \d+ piercing|misses Dummy/)
+
+  // a spell area drawn on the map can be the target: everyone inside it is rolled against
+  const box = (await app.locator('.tt-canvas canvas').boundingBox())!
+  const cx = box.x + box.width / 2, cy = box.y + box.height / 2
+  await app.getByRole('button', { name: 'Draw', exact: true }).click()
+  await app.getByRole('group', { name: 'Kind of drawing' }).getByRole('button', { name: 'Burst', exact: true }).click()
+  await app.mouse.move(cx, cy)
+  await app.mouse.down()
+  await app.mouse.move(cx + 150, cy, { steps: 5 })
+  await app.mouse.up()
+  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Token', exact: true }).click()
+  await expect(async () => {
+    await app.getByTitle('Target of attacks').click()
+    await expect(app.getByRole('option', { name: /Everyone in the burst 1/ })).toBeVisible({ timeout: 1500 })
+  }).toPass()
+  await app.getByRole('option', { name: /Everyone in the burst 1/ }).click()
+  await app.locator('.tt-sheet').getByText('Longbow').click()
+  await app.getByRole('button', { name: 'Use Longbow on the target' }).click()
+  await app.locator('.tt-panel .seg').getByRole('button', { name: /Chat/ }).click()
+  await expect(chat.getByText('Longbow, attack on Archer 1')).toBeVisible()
 })
 
 test('spell effects with a duration go on a token and can be ended', { tag: '@feature:table.effects' }, async ({ app }) => {

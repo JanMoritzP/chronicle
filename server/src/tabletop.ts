@@ -172,6 +172,7 @@ export const clientMessage = z.discriminatedUnion('t', [
   z.object({ t: z.literal('combat.init'), id, value: z.number().int().min(-99).max(999).nullable() }),
   z.object({ t: z.literal('combat.roll'), ids: z.array(id).max(100).optional() }),
   z.object({ t: z.literal('combat.flag'), id, hidden: z.boolean().optional(), done: z.boolean().optional() }),
+  z.object({ t: z.literal('combat.reaction'), id, used: z.boolean() }),
   z.object({ t: z.literal('combat.control'), action: z.enum(['start', 'next', 'prev', 'end', 'clear']) }),
   z.object({ t: z.literal('encounter.stage'), id, sceneId: id, x: coord, y: coord, hidden: z.boolean().default(true), combat: z.boolean().default(false) }),
   z.object({

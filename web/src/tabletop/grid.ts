@@ -117,3 +117,19 @@ export function hexCentres(w: number, h: number, g: GridSpec): Pt[] {
   for (let col = 0; col <= cols; col++) for (let row = 0; row <= rows; row++) out.push(hexCenter(col, row, g, flat))
   return out
 }
+
+/**
+ * Is a point inside a spell area drawn from `a` to `b`? The shapes are the ones the 5e rules describe: a burst is a circle around the origin,
+ * a cone is as wide at its end as it is long, a ray is one cell wide, a cube is as wide as it is long with the origin in the middle of one face.
+ */
+export function inTemplate(kind: 'cone' | 'beam' | 'blast' | 'cube', a: Pt, b: Pt, p: Pt, gridSize: number): boolean {
+  const len = Math.hypot(b.x - a.x, b.y - a.y)
+  if (len === 0) return false
+  if (kind === 'blast') return Math.hypot(p.x - a.x, p.y - a.y) <= len
+  const ux = (b.x - a.x) / len, uy = (b.y - a.y) / len
+  const along = (p.x - a.x) * ux + (p.y - a.y) * uy
+  const across = Math.abs(-(p.x - a.x) * uy + (p.y - a.y) * ux)
+  if (along < 0 || along > len) return false
+  if (kind === 'cone') return across <= along / 2
+  return across <= (kind === 'beam' ? gridSize : len) / 2
+}

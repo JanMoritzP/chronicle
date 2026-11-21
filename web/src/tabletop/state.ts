@@ -24,7 +24,7 @@ export type DrawKind = 'free' | 'line' | 'rect' | 'ellipse' | 'text' | 'cone' | 
 export type TileLayer = 'bg' | 'overhead' | 'gm'
 export interface Tile { id: string; sceneId: string; image: string; x: number; y: number; w: number; h: number; rotation: number; layer: TileLayer; locked: boolean; hidden: boolean; z: number }
 export interface Drawing { id: string; sceneId: string; userId: string; kind: DrawKind; points: { x: number; y: number }[]; color: string; width: number; fill: string; text: string; gmOnly: boolean }
-export interface Combatant { id: string; tokenId: string | null; name: string; init: number | null; hidden: boolean; done: boolean }
+export interface Combatant { id: string; tokenId: string | null; name: string; init: number | null; hidden: boolean; done: boolean; reaction?: boolean }
 export interface Combat { active: boolean; round: number; turn: string | null; list: Combatant[] }
 export const NO_COMBAT: Combat = { active: false, round: 0, turn: null, list: [] }
 export interface Die { v: number; dropped?: boolean; extra?: boolean }

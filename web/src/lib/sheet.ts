@@ -71,7 +71,7 @@ export interface Feature {
 
 export interface ClassLevel { name: string; level: number; subclass?: string }
 export interface HitDice { sides: number; total: number; used: number }
-export interface InventoryItem { name: string; qty: number; equipped: boolean; note: string }
+export interface InventoryItem { name: string; qty: number; equipped: boolean; note: string; /** pounds, each */ weight?: number; attuned?: boolean }
 export interface Currency { cp: number; sp: number; ep: number; gp: number; pp: number }
 export type Proficiency = 'p' | 'e'
 

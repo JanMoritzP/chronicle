@@ -4,6 +4,8 @@ import {
   ABILITIES, SKILLS, abilityMod, characterLevel, initiativeBonus, longRestPatch, passivePerception, proficiency, saveBonus, signed, skillBonus, spellAttack, spellDC,
   type Ability, type Feature, type InventoryItem, type Proficiency, type Sheet,
 } from '../lib/sheet'
+import { attunedCount, capacityOf, carriedWeight, loadOf, MAX_ATTUNED } from '../lib/levelup'
+import { LevelUpPanel } from './LevelUpPanel'
 import { FeatureEditor, type SheetPatch } from './SheetView'
 import { Select } from './Select'
 
@@ -50,6 +52,7 @@ export function CharacterSheet({ sheet, set, roll }: { sheet: Sheet; set?: (patc
   const cur = sheet.hp.current ?? sheet.hp.max
   const ratio = sheet.hp.max ? Math.max(0, Math.min(1, cur / sheet.hp.max)) : 0
   const [adding, setAdding] = useState('')
+  const [levelling, setLevelling] = useState(false)
   const act = (patch: SheetPatch) => set?.(patch)
   const bonus = (n: number) => `${n >= 0 ? '+' : '-'}${Math.abs(n)}`
   const check = (n: number, label: string) => roll?.(`1d20${bonus(n)}`, label)
@@ -89,9 +92,12 @@ export function CharacterSheet({ sheet, set, roll }: { sheet: Sheet; set?: (patc
           <span><b>Level</b> {level}</span><span><b>Proficiency</b> {signed(pb)}</span>
           <label className="sv-mini"><input type="checkbox" disabled={!edit} checked={!!sheet.inspiration} onChange={(e) => act({ inspiration: e.target.checked })} />{sheet.ruleset === '5e-2024' ? 'Heroic Inspiration' : 'Inspiration'}</label>
           <label className="sv-mini">XP<Num label="Experience points" value={sheet.xp} width={80} onChange={(n) => act({ xp: n })} /></label>
+          {edit && <button className="btn sm" onClick={() => setLevelling((v) => !v)}>Level up</button>}
           {edit && <button className="btn sm" title="Full hit points, every spell slot back, half the hit dice back" onClick={() => act(longRestPatch(sheet))}><Moon size={12} /> Long rest</button>}
         </div>
       </header>
+
+      {edit && levelling && <LevelUpPanel sheet={sheet} set={act} onClose={() => setLevelling(false)} />}
 
       <section className="cs-combat" aria-label="Combat">
         <div className="cs-box"><Shield size={14} /><b>Armor class</b>{edit ? <Num label="Armor class" value={sheet.ac.value} max={99} onChange={(n) => act({ 'ac.value': n })} /> : <span>{sheet.ac.value}</span>}</div>
@@ -200,12 +206,22 @@ export function CharacterSheet({ sheet, set, roll }: { sheet: Sheet; set?: (patc
                   <Num label={`Quantity of ${it.name || 'item'}`} value={it.qty} width={52} onChange={(n) => setItems(items.map((x, j) => (j === i ? { ...x, qty: n } : x)))} />
                   <Txt value={it.name} label={`Item ${i + 1}`} placeholder="Item" onChange={(v) => setItems(items.map((x, j) => (j === i ? { ...x, name: v } : x)))} />
                   <Txt value={it.note} label={`Note on ${it.name || 'item'}`} placeholder="Note" onChange={(v) => setItems(items.map((x, j) => (j === i ? { ...x, note: v } : x)))} />
+                  <input type="number" className="sv-num" min={0} step="any" aria-label={`Weight of ${it.name || 'item'} in pounds`} title="Pounds, each" placeholder="lb" style={{ width: 56 }} value={it.weight ?? ''} onChange={(e) => setItems(items.map((x, j) => (j === i ? { ...x, weight: e.target.value === '' ? undefined : Math.max(0, Number(e.target.value)) } : x)))} />
+                  <label className="sv-mini" title="Attuned"><input type="checkbox" aria-label={`${it.name || 'Item'} attuned`} checked={!!it.attuned} onChange={(e) => setItems(items.map((x, j) => (j === i ? { ...x, attuned: e.target.checked } : x)))} />Attuned</label>
                   <button className="icon-btn" aria-label={`Remove ${it.name || 'item'}`} onClick={() => setItems(items.filter((_, j) => j !== i))}><Trash2 size={12} /></button>
                 </>
-              ) : <span>{it.qty > 1 ? `${it.qty} × ` : ''}{it.name}{it.equipped ? ' (equipped)' : ''}{it.note ? <small className="muted"> {it.note}</small> : null}</span>}
+              ) : <span>{it.qty > 1 ? `${it.qty} × ` : ''}{it.name}{it.equipped ? ' (equipped)' : ''}{it.attuned ? ' (attuned)' : ''}{it.weight ? <small className="muted"> {it.weight} lb</small> : null}{it.note ? <small className="muted"> {it.note}</small> : null}</span>}
             </li>
           ))}
         </ul>
+        {items.length > 0 && (() => {
+          const w = carriedWeight(items), load = loadOf(w, sheet.abilities.str), n = attunedCount(items)
+          return (
+            <p className={`cs-load${load === 'light' && n <= MAX_ATTUNED ? '' : ' warn'}`} aria-label="Load">
+              Carrying {w} of {capacityOf(sheet.abilities.str)} lb ({load}). Attuned to {n} of {MAX_ATTUNED}{n > MAX_ATTUNED ? ', more than a character can be' : ''}.
+            </p>
+          )
+        })()}
         {edit && (
           <div className="cs-line">
             <input className="sv-text" aria-label="New item" placeholder="Add an item" value={adding} onChange={(e) => setAdding(e.target.value)}
