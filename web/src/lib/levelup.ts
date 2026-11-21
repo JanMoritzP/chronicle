@@ -1,4 +1,4 @@
-import { abilityMod, type Sheet } from './sheet'
+import { abilityMod, ABILITIES, type Ability, type Sheet } from './sheet'
 
 // Levelling a 5e character up, the weight a character carries and the features a class page lists for a level.
 // Pure functions: they return the changes as a sheet patch (field path to value), never touch the sheet.
@@ -64,13 +64,42 @@ export function allSlots(classes: { name: string; level: number; subclass?: stri
 export const totalLevel = (classes: { level: number }[] | undefined) => (classes ?? []).reduce((n, c) => n + c.level, 0)
 export const ASI_LEVELS = [4, 8, 12, 16, 19]
 
+/** The class level at which a class chooses its subclass (5e 2014 rules; the 2024 paladin, ranger and bard are at 3 as well). */
+export const SUBCLASS_LEVEL: Record<string, number> = {
+  barbarian: 3, bard: 3, cleric: 1, druid: 2, fighter: 3, monk: 3, paladin: 3, ranger: 3, rogue: 3, sorcerer: 1, warlock: 1, wizard: 2, artificer: 3,
+}
+/** Subclasses of the basic rules, offered as suggestions; any name can be typed. */
+export const SUBCLASSES: Record<string, string[]> = {
+  barbarian: ['Path of the Berserker'], bard: ['College of Lore'], cleric: ['Life Domain'], druid: ['Circle of the Land'], fighter: ['Champion'],
+  monk: ['Way of the Open Hand'], paladin: ['Oath of Devotion'], ranger: ['Hunter'], rogue: ['Thief'], sorcerer: ['Draconic Bloodline'], warlock: ['The Fiend'], wizard: ['School of Evocation'],
+}
+/** True when levelling this class to `level` is where its subclass is chosen and the character has none yet. */
+export const needsSubclass = (className: string, level: number, current?: string) => !current?.trim() && SUBCLASS_LEVEL[className.trim().toLowerCase()] === level
+/** True when this class level gives an ability score improvement or a feat (fighters and rogues get more). */
+export function givesAsi(className: string, level: number): boolean {
+  const n = className.trim().toLowerCase()
+  if (ASI_LEVELS.includes(level)) return true
+  if (n === 'fighter') return level === 6 || level === 14
+  if (n === 'rogue') return level === 10
+  return false
+}
+
+export interface Choices {
+  /** the subclass chosen at this level */
+  subclass?: string
+  /** ability score points to spend, at most 2 in all and 2 on one score */
+  asi?: Partial<Record<Ability, number>>
+  /** or a feat instead */
+  feat?: { name: string; text?: string }
+}
+
 export interface LevelUp { patch: Record<string, unknown>; lines: string[]; newLevel: number }
 
 /**
  * One more level in a class (a new class when the character has none of that name yet). Hit points go up by the average of the hit die
  * (or the rolled number) plus the Constitution modifier, at least 1; a hit die is added, spell slots are recalculated and kept spent counts stay.
  */
-export function levelUp(sheet: Sheet, className: string, opts: { hit?: number; die?: number } = {}): LevelUp | { error: string } {
+export function levelUp(sheet: Sheet, className: string, opts: { hit?: number; die?: number } & Choices = {}): LevelUp | { error: string } {
   const name = className.trim()
   if (!name) return { error: 'Choose a class first.' }
   const classes = (sheet.classes ?? []).map((c) => ({ ...c }))
@@ -95,7 +124,30 @@ export function levelUp(sheet: Sheet, className: string, opts: { hit?: number; d
   const lines = [`Level ${newLevel}: ${name} ${at >= 0 ? classes[at].level : 1}`, `${gain} more hit points (${opts.hit != null ? `rolled ${opts.hit}` : `average ${roll}`}${con ? `, ${con > 0 ? '+' : ''}${con} Constitution` : ''})`, `One more d${die} hit die`]
   const prof = (l: number) => 2 + Math.floor((l - 1) / 4)
   if (prof(newLevel) !== prof(newLevel - 1)) lines.push(`Proficiency bonus is now +${prof(newLevel)}`)
-  if (ASI_LEVELS.includes(classes[at >= 0 ? at : classes.length - 1].level)) lines.push('An ability score improvement or a feat')
+  const here = classes[at >= 0 ? at : classes.length - 1]
+  if (opts.subclass?.trim()) {
+    if (!needsSubclass(here.name, here.level, here.subclass)) return { error: `${here.name} does not choose a subclass at level ${here.level}.` }
+    here.subclass = opts.subclass.trim().slice(0, 60)
+    lines.push(`Subclass: ${here.subclass}`)
+  }
+  if (givesAsi(here.name, here.level)) {
+    const points = Object.entries(opts.asi ?? {}).filter(([, n]) => n)
+    if (opts.feat?.name.trim() && points.length) return { error: 'Take either the ability score points or a feat, not both.' }
+    if (opts.feat?.name.trim()) {
+      patch['features.traits'] = [...sheet.features.traits, { name: opts.feat.name.trim().slice(0, 200), text: (opts.feat.text ?? '').slice(0, 1800) }]
+      lines.push(`Feat: ${opts.feat.name.trim()}`)
+    } else if (points.length) {
+      if (points.some(([k, n]) => !ABILITIES.includes(k as Ability) || !Number.isInteger(n) || (n as number) < 1 || (n as number) > 2) || points.reduce((t, [, n]) => t + (n as number), 0) > 2) return { error: 'Spend at most 2 points, and at most 2 on one ability.' }
+      let hpMore = 0
+      for (const [k, n] of points) {
+        const old = sheet.abilities[k as Ability], now = Math.min(20, old + (n as number))
+        patch[`abilities.${k}`] = now
+        lines.push(`${k.toUpperCase()} ${old} to ${now}`)
+        if (k === 'con') hpMore = (abilityMod(now) - abilityMod(old)) * newLevel
+      }
+      if (hpMore) { patch['hp.max'] = (patch['hp.max'] as number) + hpMore; patch['hp.current'] = (patch['hp.current'] as number) + hpMore; lines.push(`${hpMore > 0 ? '+' : ''}${hpMore} hit points from Constitution`) }
+    } else lines.push('An ability score improvement or a feat')
+  }
   const slots = allSlots(classes)
   if (slots) {
     const old = sheet.spellcasting?.slots ?? []

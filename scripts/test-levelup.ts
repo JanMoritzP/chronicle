@@ -1,4 +1,4 @@
-import { allSlots, pactSlots, attunedCount, capacityOf, carriedWeight, classFeaturesAt, hitDieOf, levelUp, loadOf, slotsFor } from '../web/src/lib/levelup'
+import { givesAsi, needsSubclass, allSlots, pactSlots, attunedCount, capacityOf, carriedWeight, classFeaturesAt, hitDieOf, levelUp, loadOf, slotsFor } from '../web/src/lib/levelup'
 import { emptyCharacter } from '../web/src/lib/sheet'
 
 let failed = 0
@@ -50,5 +50,21 @@ const doc = { type: 'doc', content: [
 check('a class page gives the features of a level', classFeaturesAt(doc, 5).map((f) => f.name).join() === 'Extra Attack' && classFeaturesAt(doc, 5)[0].text === 'Attack twice.' && classFeaturesAt(doc, 11).length === 1)
 check('and none for a level without any', classFeaturesAt(doc, 3).length === 0 && classFeaturesAt(null, 1).length === 0)
 
+const f2 = ch({ classes: [{ name: 'Fighter', level: 2 }], hp: { max: 20, formula: '', current: 20, temp: 0 } })
+check('a fighter chooses a subclass at 3', needsSubclass('Fighter', 3) && !needsSubclass('Fighter', 3, 'Champion') && needsSubclass('Cleric', 1) && !needsSubclass('Fighter', 4))
+const sc = levelUp(f2 as any, 'Fighter', { subclass: 'Eldritch Knight' }) as any
+check('the subclass is kept on the class', sc.patch.classes[0].subclass === 'Eldritch Knight' && sc.lines.includes('Subclass: Eldritch Knight'))
+check('and an Eldritch Knight gets spell slots at 3', sc.patch['spellcasting.slots']?.[0]?.total === 2)
+check('a subclass at the wrong level is refused', 'error' in (levelUp(ch({ classes: [{ name: 'Fighter', level: 4 }] }) as any, 'Fighter', { subclass: 'Champion' }) as any))
+check('fighters get more improvements', givesAsi('Fighter', 6) && givesAsi('Fighter', 14) && givesAsi('Rogue', 10) && !givesAsi('Wizard', 6) && givesAsi('Wizard', 4))
+const f3 = ch({ classes: [{ name: 'Fighter', level: 3 }], abilities: { str: 15, dex: 10, con: 13, int: 10, wis: 10, cha: 10 }, hp: { max: 28, formula: '', current: 28, temp: 0 } })
+const a1 = levelUp(f3 as any, 'Fighter', { asi: { str: 1, con: 1 } }) as any
+check('points go on the scores', a1.patch['abilities.str'] === 16 && a1.patch['abilities.con'] === 14)
+check('a higher Constitution modifier adds hit points for every level', a1.patch['hp.max'] === 28 + (6 + 1) + 4 && a1.lines.some((l: string) => l.includes('from Constitution')))
+check('no score goes past 20', (levelUp(ch({ classes: [{ name: 'Fighter', level: 3 }], abilities: { str: 19, dex: 10, con: 10, int: 10, wis: 10, cha: 10 } }) as any, 'Fighter', { asi: { str: 2 } }) as any).patch['abilities.str'] === 20)
+check('three points are refused', 'error' in (levelUp(f3 as any, 'Fighter', { asi: { str: 2, dex: 1 } }) as any))
+const ft = levelUp(f3 as any, 'Fighter', { feat: { name: 'Alert', text: '+5 to initiative' } }) as any
+check('a feat is added as a trait', ft.patch['features.traits'].some((x: any) => x.name === 'Alert' && x.text.includes('initiative')) && ft.lines.includes('Feat: Alert'))
+check('points and a feat together are refused', 'error' in (levelUp(f3 as any, 'Fighter', { asi: { str: 1 }, feat: { name: 'Alert' } }) as any))
 console.log(failed ? `\n${failed} failed` : '\nall passed')
 process.exit(failed ? 1 : 0)

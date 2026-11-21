@@ -269,9 +269,15 @@ test('a character levels up, and what they carry and are attuned to is counted',
   await expect(panel).toContainText('Level 4: Fighter 4')
   await expect(panel).toContainText('8 more hit points')
   await expect(panel).toContainText('ability score improvement')
+  const str = Number(await app.getByLabel('Strength', { exact: true }).inputValue())
+  await panel.getByRole('button', { name: 'Add a point to STR' }).click()
+  await panel.getByRole('button', { name: 'Add a point to STR' }).click()
+  await expect(panel.getByRole('button', { name: 'Add a point to STR' })).toBeDisabled()
+  await expect(panel).toContainText(`STR ${str} to ${str + 2}`)
   await panel.getByRole('button', { name: /^Level up to 4$/ }).click()
   await expect(panel).toHaveCount(0)
   await expect(app.getByLabel('Level of Fighter')).toHaveValue('4')
+  await expect(app.getByLabel('Strength', { exact: true })).toHaveValue(String(str + 2))
   await expect(app.getByLabel('Maximum hit points', { exact: true })).toHaveValue('36')
 
   // what is carried and attuned to

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api'
-import { classFeaturesAt, hitDieOf, levelUp, totalLevel } from '../lib/levelup'
-import type { Feature, Sheet } from '../lib/sheet'
+import { classFeaturesAt, givesAsi, hitDieOf, levelUp, needsSubclass, SUBCLASSES, totalLevel } from '../lib/levelup'
+import { ABILITIES, type Ability, type Feature, type Sheet } from '../lib/sheet'
 import { useStore } from '../store'
 import { Select } from './Select'
 import type { SheetPatch } from './SheetView'
@@ -15,13 +15,26 @@ export function LevelUpPanel({ sheet, set, onClose }: { sheet: Sheet; set: (patc
   const [other, setOther] = useState('')
   const [dieText, setDieText] = useState('')
   const [rolled, setRolled] = useState<number | null>(null)
+  const [subclass, setSubclass] = useState('')
+  const [asi, setAsi] = useState<Partial<Record<Ability, number>>>({})
+  const [feat, setFeat] = useState('')
+  const [featNote, setFeatNote] = useState('')
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [offered, setOffered] = useState<{ name: string; text: string }[]>([])
   const pages = useStore((s) => s.data.pages)
   const name = (cls === '*' ? other : cls).trim()
   const die = hitDieOf(name) ?? (Number(dieText) || null)
-  const result = useMemo(() => levelUp(sheet, name, { ...(rolled != null ? { hit: rolled } : {}), ...(die && !hitDieOf(name) ? { die } : {}) }), [sheet, name, rolled, die])
-  const newLevel = 'error' in result ? 0 : (classes.find((c) => c.name.trim().toLowerCase() === name.toLowerCase())?.level ?? 0) + 1
+  const mine = classes.find((c) => c.name.trim().toLowerCase() === name.toLowerCase())
+  const classLevel = (mine?.level ?? 0) + 1
+  const askSubclass = !!name && needsSubclass(name, classLevel, mine?.subclass)
+  const askAsi = !!name && givesAsi(name, classLevel)
+  const spent = Object.values(asi).reduce((n, v) => n + (v ?? 0), 0)
+  const result = useMemo(() => levelUp(sheet, name, {
+    ...(rolled != null ? { hit: rolled } : {}), ...(die && !hitDieOf(name) ? { die } : {}),
+    ...(askSubclass && subclass.trim() ? { subclass } : {}),
+    ...(askAsi && feat.trim() ? { feat: { name: feat, text: featNote } } : askAsi && spent ? { asi } : {}),
+  }), [sheet, name, rolled, die, askSubclass, subclass, askAsi, feat, featNote, asi, spent])
+  const newLevel = 'error' in result ? 0 : classLevel
   const classPage = useMemo(() => pages.find((p) => p.title.trim().toLowerCase() === name.toLowerCase()), [pages, name])
 
   useEffect(() => {
@@ -39,8 +52,9 @@ export function LevelUpPanel({ sheet, set, onClose }: { sheet: Sheet; set: (patc
   const apply = () => {
     if ('error' in result) return
     const have = new Set(sheet.features.traits.map((f) => f.name.toLowerCase()))
+    const base = (result.patch['features.traits'] as Feature[] | undefined) ?? sheet.features.traits
     const added: Feature[] = offered.filter((f) => picked.has(f.name) && !have.has(f.name.toLowerCase())).map((f) => ({ name: f.name, text: f.text }))
-    set({ ...result.patch, ...(added.length ? { 'features.traits': [...sheet.features.traits, ...added] } : {}) })
+    set({ ...result.patch, ...(added.length ? { 'features.traits': [...base, ...added] } : {}) })
     onClose()
   }
 
@@ -61,6 +75,30 @@ export function LevelUpPanel({ sheet, set, onClose }: { sheet: Sheet; set: (patc
       </div>
       {'error' in result ? <p className="muted">{result.error}</p> : (
         <ul aria-label="What changes">{result.lines.map((l) => <li key={l}>{l}</li>)}</ul>
+      )}
+      {askSubclass && (
+        <label className="sv-mini">Subclass
+          <input className="sv-text" list="cs-subclasses" aria-label="Subclass" placeholder="Choose one" value={subclass} onChange={(e) => setSubclass(e.target.value)} />
+          <datalist id="cs-subclasses">{(SUBCLASSES[name.toLowerCase()] ?? []).map((n) => <option key={n} value={n} />)}</datalist>
+        </label>
+      )}
+      {askAsi && (
+        <div role="group" aria-label="Ability score improvement">
+          <span className="muted">Spend 2 points ({2 - spent} left), or take a feat</span>
+          <div className="cs-line">
+            {ABILITIES.map((a) => (
+              <span key={a} className="sv-mini">
+                {a.toUpperCase()} {sheet.abilities[a]}{asi[a] ? ` +${asi[a]}` : ''}
+                <button className="btn sm" aria-label={`Add a point to ${a.toUpperCase()}`} disabled={!!feat.trim() || spent >= 2 || (asi[a] ?? 0) >= 2 || sheet.abilities[a] + (asi[a] ?? 0) >= 20} onClick={() => setAsi((x) => ({ ...x, [a]: (x[a] ?? 0) + 1 }))}>+</button>
+                <button className="btn sm" aria-label={`Take a point from ${a.toUpperCase()}`} disabled={!asi[a]} onClick={() => setAsi((x) => ({ ...x, [a]: (x[a] ?? 1) - 1 }))}>-</button>
+              </span>
+            ))}
+          </div>
+          <div className="cs-line">
+            <input className="sv-text" aria-label="Feat taken instead" placeholder="A feat instead" disabled={spent > 0} value={feat} onChange={(e) => setFeat(e.target.value)} />
+            {feat.trim() && <input className="sv-text" aria-label="What the feat does" placeholder="What it does (optional)" value={featNote} onChange={(e) => setFeatNote(e.target.value)} />}
+          </div>
+        </div>
       )}
       {offered.length > 0 && (
         <div role="group" aria-label="Class features gained">
