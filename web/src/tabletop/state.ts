@@ -28,7 +28,7 @@ export interface Handout { id: string; title: string; text: string; image: strin
 export interface RollTable { id: string; name: string; secret: boolean; size: number; /** only the GM is sent the entries */ entries?: string }
 export interface DeckCard { id: number; name: string; text: string }
 export interface Deck { id: string; name: string; size: number; remaining: number; discard: DeckCard[]; hand: DeckCard[]; held: Record<string, number>; cardsText?: string }
-export interface Combatant { id: string; tokenId: string | null; name: string; init: number | null; hidden: boolean; done: boolean; reaction?: boolean }
+export interface Combatant { id: string; tokenId: string | null; name: string; init: number | null; hidden: boolean; done: boolean; reaction?: boolean; actions?: number }
 export interface Combat { active: boolean; round: number; turn: string | null; list: Combatant[] }
 export const NO_COMBAT: Combat = { active: false, round: 0, turn: null, list: [] }
 export interface Die { v: number; dropped?: boolean; extra?: boolean }

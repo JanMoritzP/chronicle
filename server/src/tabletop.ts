@@ -173,6 +173,7 @@ export const clientMessage = z.discriminatedUnion('t', [
   z.object({ t: z.literal('combat.roll'), ids: z.array(id).max(100).optional() }),
   z.object({ t: z.literal('combat.flag'), id, hidden: z.boolean().optional(), done: z.boolean().optional() }),
   z.object({ t: z.literal('combat.reaction'), id, used: z.boolean() }),
+  z.object({ t: z.literal('combat.actions'), id, left: z.number().int().min(0).max(3) }),
   z.object({ t: z.literal('handout.save'), id: id.optional(), title: z.string().trim().min(1).max(120), text: z.string().max(20000), image: imageUrl }),
   z.object({ t: z.literal('handout.delete'), id }),
   /** who may read it: everyone, nobody, or the people with these accounts */

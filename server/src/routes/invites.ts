@@ -15,7 +15,7 @@ const sha = (s: string) => crypto.createHash('sha256').update(s).digest('hex')
 
 interface InviteRow {
   id: string; workspace_id: string; role: 'editor' | 'viewer'; created_at: number; expires_at: number | null
-  max_uses: number | null; uses: number; revoked: number; last_used_at: number | null
+  max_uses: number | null; uses: number; revoked: number; last_used_at: number | null; label: string
 }
 
 const statusOf = (r: InviteRow, t = now()) => r.revoked ? 'revoked' : r.expires_at != null && r.expires_at <= t ? 'expired' : r.max_uses != null && r.uses >= r.max_uses ? 'used up' : 'open'
@@ -35,7 +35,7 @@ export async function inviteRoutes(app: FastifyInstance) {
   app.get('/api/workspaces/:ws/invites', { preHandler: requireOwner }, async (req) => {
     const { ws } = req.params as { ws: string }
     return (db.prepare('SELECT * FROM invites WHERE workspace_id = ? ORDER BY created_at DESC').all(ws) as InviteRow[]).map((r) => ({
-      id: r.id, role: r.role, createdAt: r.created_at, expiresAt: r.expires_at, maxUses: r.max_uses, uses: r.uses, lastUsedAt: r.last_used_at, status: statusOf(r),
+      id: r.id, role: r.role, createdAt: r.created_at, expiresAt: r.expires_at, maxUses: r.max_uses, uses: r.uses, lastUsedAt: r.last_used_at, status: statusOf(r), label: r.label,
     }))
   })
 
@@ -47,6 +47,8 @@ export async function inviteRoutes(app: FastifyInstance) {
       days: z.number().int().min(1).max(365).nullable(),
       /** how many people may join with it, null for any number */
       maxUses: z.number().int().min(1).max(500).nullable(),
+      /** a name for the owner's own use, shown in the list */
+      label: z.string().trim().max(40).default(''),
     }).safeParse(req.body)
     if (!b.success) return reply.code(400).send({ error: 'bad request' })
     const w = db.prepare('SELECT settings FROM workspaces WHERE id = ? AND deleted_at IS NULL').get(ws) as { settings: string } | undefined
@@ -54,8 +56,8 @@ export async function inviteRoutes(app: FastifyInstance) {
     if (!worldSettings(w.settings).invites) return reply.code(409).send({ error: 'Turn invite links on for this world first.' })
     const token = crypto.randomBytes(32).toString('base64url')
     const id = uid(), t = now()
-    db.prepare('INSERT INTO invites(id,workspace_id,token_hash,role,created_by,created_at,expires_at,max_uses) VALUES(?,?,?,?,?,?,?,?)')
-      .run(id, ws, sha(token), b.data.role, req.user!.id, t, b.data.days == null ? null : t + b.data.days * 86400_000, b.data.maxUses)
+    db.prepare('INSERT INTO invites(id,workspace_id,token_hash,role,created_by,created_at,expires_at,max_uses,label) VALUES(?,?,?,?,?,?,?,?,?)')
+      .run(id, ws, sha(token), b.data.role, req.user!.id, t, b.data.days == null ? null : t + b.data.days * 86400_000, b.data.maxUses, b.data.label)
     return { id, token, path: `/join/${token}` }
   })
 

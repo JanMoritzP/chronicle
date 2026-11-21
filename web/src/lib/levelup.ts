@@ -42,6 +42,25 @@ export function slotsFor(classes: { name: string; level: number; subclass?: stri
   return level > 0 ? FULL[Math.min(20, level) - 1] : null
 }
 
+/** Warlock Pact Magic: how many slots and of what level, by warlock level. */
+export function pactSlots(level: number): { count: number; slotLevel: number } | null {
+  if (level < 1) return null
+  const count = level >= 17 ? 4 : level >= 11 ? 3 : level >= 2 ? 2 : 1
+  const slotLevel = level >= 9 ? 5 : level >= 7 ? 4 : level >= 5 ? 3 : level >= 3 ? 2 : 1
+  return { count, slotLevel }
+}
+
+/** The slots of a character: the spellcasting classes' slots and, for a warlock, the Pact Magic slots added to the level they are. */
+export function allSlots(classes: { name: string; level: number; subclass?: string }[]): number[] | null {
+  const base = slotsFor(classes)
+  const pact = pactSlots(classes.filter((c) => casterOf(c.name, c.subclass) === 'pact').reduce((n, c) => n + c.level, 0))
+  if (!pact) return base
+  const out = [...(base ?? [])]
+  while (out.length < pact.slotLevel) out.push(0)
+  out[pact.slotLevel - 1] += pact.count
+  return out
+}
+
 export const totalLevel = (classes: { level: number }[] | undefined) => (classes ?? []).reduce((n, c) => n + c.level, 0)
 export const ASI_LEVELS = [4, 8, 12, 16, 19]
 
@@ -77,12 +96,14 @@ export function levelUp(sheet: Sheet, className: string, opts: { hit?: number; d
   const prof = (l: number) => 2 + Math.floor((l - 1) / 4)
   if (prof(newLevel) !== prof(newLevel - 1)) lines.push(`Proficiency bonus is now +${prof(newLevel)}`)
   if (ASI_LEVELS.includes(classes[at >= 0 ? at : classes.length - 1].level)) lines.push('An ability score improvement or a feat')
-  const slots = slotsFor(classes)
+  const slots = allSlots(classes)
   if (slots) {
     const old = sheet.spellcasting?.slots ?? []
     patch['spellcasting.slots'] = slots.map((total, i) => ({ total, used: Math.min(old[i]?.used ?? 0, total) }))
     if (JSON.stringify(slots) !== JSON.stringify(old.map((s) => s.total))) lines.push(`Spell slots: ${slots.join(' / ')}`)
-  } else if (classes.some((c) => casterOf(c.name, c.subclass) === 'pact')) lines.push('Pact magic slots are set by hand')
+  }
+  const pact = pactSlots(classes.filter((c) => casterOf(c.name, c.subclass) === 'pact').reduce((n, c) => n + c.level, 0))
+  if (pact) lines.push(`Pact Magic: ${pact.count} ${pact.count === 1 ? 'slot' : 'slots'} of level ${pact.slotLevel}, which come back on a short rest`)
   return { patch, lines, newLevel }
 }
 

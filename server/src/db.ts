@@ -509,6 +509,8 @@ const migrations: (string | ((d: Database.Database) => void))[] = [
   );
   CREATE INDEX decks_ws ON decks(workspace_id);
   `,
+  // invite links can be given a name, so the owner can tell them apart
+  `ALTER TABLE invites ADD COLUMN label TEXT NOT NULL DEFAULT ''`,
 ]
 
 export const SCHEMA_VERSION = migrations.length

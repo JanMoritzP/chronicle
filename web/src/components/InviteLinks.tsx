@@ -14,6 +14,7 @@ export function InviteLinks({ id, name, on }: { id: string; name: string; on: bo
   const [role, setRole] = useState<'editor' | 'viewer'>('editor')
   const [days, setDays] = useState('7')
   const [people, setPeople] = useState('5')
+  const [label, setLabel] = useState('')
   const [fresh, setFresh] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const load = () => api.listInvites(id).then(setList).catch(() => setList([]))
@@ -21,9 +22,10 @@ export function InviteLinks({ id, name, on }: { id: string; name: string; on: bo
 
   const make = async () => {
     try {
-      const r = await api.createInvite(id, { role, days: days === 'never' ? null : Number(days), maxUses: people === 'any' ? null : Number(people) })
+      const r = await api.createInvite(id, { role, days: days === 'never' ? null : Number(days), maxUses: people === 'any' ? null : Number(people), label: label.trim() })
       setFresh(`${location.origin}${r.path}`)
       setCopied(false)
+      setLabel('')
       void load()
     } catch (e: any) { alertDialog(e.message) }
   }
@@ -50,6 +52,9 @@ export function InviteLinks({ id, name, on }: { id: string; name: string; on: bo
             <label className="field"><span>It lets in</span>
               <Select className="input" value={people} onChange={setPeople}><option value="1">1 person</option><option value="5">5 people</option><option value="20">20 people</option><option value="any">Any number</option></Select>
             </label>
+            <label className="field"><span>Name (only you see it)</span>
+              <input className="input" maxLength={40} placeholder="Tuesday group" value={label} onChange={(e) => setLabel(e.target.value)} />
+            </label>
             <button className="btn primary" onClick={make}>Create link</button>
           </div>
           {fresh && (
@@ -62,7 +67,7 @@ export function InviteLinks({ id, name, on }: { id: string; name: string; on: bo
           <ul className="invites-list" aria-label="Invite links">
             {list.map((i) => (
               <li key={i.id}>
-                <span className="grow">{i.role === 'editor' ? 'Player' : 'Spectator'} link · {i.uses}{i.maxUses != null ? ` of ${i.maxUses}` : ''} joined · ends {when(i.expiresAt)} · <b>{i.status}</b></span>
+                <span className="grow">{i.label ? <b>{i.label} · </b> : null}{i.role === 'editor' ? 'Player' : 'Spectator'} link · {i.uses}{i.maxUses != null ? ` of ${i.maxUses}` : ''} joined · ends {when(i.expiresAt)} · <b>{i.status}</b></span>
                 {i.status === 'open' && <button className="btn sm danger" onClick={async () => { if (await confirmDialog('Nobody can join with this link any more. People who already joined stay.', { title: 'Close this link', okLabel: 'Close link', danger: true })) { await api.revokeInvite(i.id).catch((e) => alertDialog(e.message)); void load() } }}>Close</button>}
               </li>
             ))}

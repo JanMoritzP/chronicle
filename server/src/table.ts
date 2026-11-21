@@ -400,6 +400,12 @@ function applyStat(ws: string, userId: string, before: TokenRow, stat: Record<st
   const hpNow = (data.hp as { value?: number } | undefined)?.value ?? 0
   let conditions = (data.conditions as string[] | undefined) ?? []
   let resetSaves = false
+  // damage to someone who is already down is a failed death save; as much as their maximum kills outright
+  let failsToAdd = 0
+  if (dmg > 0 && auto.deathSaves && isChar && wasHp === 0) {
+    failsToAdd = dmg >= (pg?.sheet.hp.max ?? Infinity) ? 3 : 1
+    notes.push(failsToAdd >= 3 ? 'is struck down and dies' : 'is hurt while down and fails a death save')
+  }
   if (dmg > 0 && auto.deathSaves && isChar && wasHp > 0 && hpNow === 0) { conditions = [...new Set([...conditions, 'Unconscious'])]; resetSaves = true; notes.push('falls unconscious') }
   if (dmg < 0 && auto.deathSaves && isChar && wasHp === 0 && hpNow > 0) { conditions = conditions.filter((x) => x !== 'Unconscious'); resetSaves = true; notes.push('is back on their feet') }
   if (dmg > 0 && auto.concentration && conditions.includes('Concentrating')) {
@@ -419,6 +425,10 @@ function applyStat(ws: string, userId: string, before: TokenRow, stat: Record<st
   if (JSON.stringify(data).length > 8000) return { error: 'too much data' }
   db.prepare('UPDATE tokens SET data = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(data), now(), before.id)
   if (st.hp || dmg) followHp(ws, before.pageId, data.hp)
+  if (failsToAdd && before.pageId) {
+    const again = readSheet(ws, before.pageId)
+    if (again) { const ds = again.sheet.deathSaves ?? { ok: 0, fail: 0 }; writeSheet(ws, before.pageId, again.props, { ...again.sheet, deathSaves: { ...ds, fail: Math.min(3, ds.fail + failsToAdd) } }) }
+  }
   if (resetSaves && before.pageId) { const again = readSheet(ws, before.pageId); if (again?.sheet.deathSaves) writeSheet(ws, before.pageId, again.props, { ...again.sheet, deathSaves: { ok: 0, fail: 0 } }) }
   // what happened is said at the table, but quietly (to the GM) when the token itself is a secret
   const quiet = before.hidden || !!before.data.hpPrivate
@@ -1035,6 +1045,14 @@ async function handle(c: Conn, m: ClientMessage) {
       const h = db.prepare('SELECT id, title, text, image, revealed, updated_at FROM handouts WHERE id = ? AND workspace_id = ?').get(m.id, ws) as HandoutDb | undefined
       if (!h) return nack(c, m, 'no such handout')
       return showHandout(ws, h)
+    }
+    case 'combat.actions': {
+      const combat = combatOf(ws)
+      const who = combat.list.find((x) => x.id === m.id)
+      if (!who) return nack(c, m, 'no such combatant')
+      const tok = who.tokenId ? tokenRow(who.tokenId, ws) : undefined
+      if (!gm && !(c.role === 'player' && !!tok && tok.owners.includes(c.user.id))) return nack(c, m, 'not allowed')
+      return saveCombat(ws, withList(combat, combat.list.map((x) => (x.id === m.id ? { ...x, actions: m.left } : x))))
     }
     case 'combat.reaction': {
       const combat = combatOf(ws)

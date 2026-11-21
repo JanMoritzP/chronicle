@@ -110,5 +110,15 @@ const all = await call('GET', '/api/users', null, gm)
 for (const u of all.data.filter((x) => new RegExp(`${suffix}$`).test(x.username))) await call('DELETE', `/api/users/${u.id}`, null, gm)
 await call('DELETE', `/api/workspaces/${ws}`, null, gm)
 await call('DELETE', `/api/workspaces/${other}`, null, gm)
+const named = (await call('POST', '/api/workspaces', { name: `invite-named-${suffix}` }, gm)).data.id
+await call('PATCH', `/api/workspaces/${named}`, { settings: { invites: true } }, gm)
+r = await call('POST', `/api/workspaces/${named}/invites`, { role: 'viewer', days: 1, maxUses: 1, label: 'Tuesday group' }, gm)
+const labelled = r.data.id
+await call('POST', `/api/workspaces/${named}/invites`, { role: 'viewer', days: 1, maxUses: 1 }, gm)
+r = await call('GET', `/api/workspaces/${named}/invites`, null, gm)
+check('a link can be given a name, and the list shows it', r.data.find((i) => i.id === labelled)?.label === 'Tuesday group' && r.data.some((i) => i.label === ''))
+r = await call('POST', `/api/workspaces/${named}/invites`, { role: 'viewer', days: 1, maxUses: 1, label: 'x'.repeat(41) }, gm)
+check('a name has a limit', r.status === 400)
+
 console.log(failed ? `\n${failed} failed` : '\nall passed')
 process.exit(failed ? 1 : 0)

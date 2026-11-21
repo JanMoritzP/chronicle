@@ -326,6 +326,7 @@ export function CombatPanel() {
   const tokens = useTable((s) => s.tokens)
   const selected = useTable((s) => s.selected)
   const gm = role === 'gm'
+  const system = useStore((st) => st.workspaces.find((w) => w.id === st.wsId)?.settings?.system ?? '5e')
   const tokenOf = (id: string | null) => tokens.find((t) => t.id === id)
   const turnToken = tokenOf(combat.list.find((x) => x.id === combat.turn)?.tokenId ?? null)
   const myTurn = !!turnToken && !!you && turnToken.owners.includes(you.id)
@@ -365,6 +366,14 @@ export function CombatPanel() {
                     onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />
                 : <span className="tt-init">{x.init ?? '–'}</span>}
               <span className="grow ellipsis">{x.name}{x.hidden ? ' (hidden)' : ''}{hp && hp.max ? <small className="muted"> {hp.value}/{hp.max}</small> : null}</span>
+              {(gm || mine) && combat.active && !x.done && system === 'pf2e' && (
+                <span className="tt-actions" role="group" aria-label={`Actions of ${x.name}`}>
+                  {[1, 2, 3].map((n) => {
+                    const left = x.actions ?? 3
+                    return <button key={n} className={`tt-pip${n <= left ? ' on' : ''}`} aria-label={`Action ${n} of ${x.name}, ${n <= left ? 'ready' : 'spent'}`} title="Three actions a turn" onClick={() => sendTable({ t: 'combat.actions', id: x.id, left: n <= left ? n - 1 : n })} />
+                  })}
+                </span>
+              )}
               {(gm || mine) && combat.active && !x.done && (
                 <button className={`tt-chip${x.reaction ? '' : ' on'}`} aria-pressed={!x.reaction} aria-label={`Reaction of ${x.name}, ${x.reaction ? 'spent' : 'ready'}`} title={x.reaction ? 'Reaction spent. Click when it is ready again.' : 'Reaction ready. Click when it is spent.'}
                   onClick={() => sendTable({ t: 'combat.reaction', id: x.id, used: !x.reaction })}>R</button>

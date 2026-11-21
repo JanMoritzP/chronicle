@@ -152,10 +152,12 @@ test('the owner makes an invite link and a new person joins the world with it', 
   await openSettings(app, 'Worlds')
   await app.getByLabel(/Let people join/).click()
   await expect(app.getByLabel(/Let people join/)).toBeChecked()
+  await app.getByLabel('Name (only you see it)').fill('Tuesday group')
   await app.getByRole('button', { name: 'Create link' }).click()
   const link = await app.getByLabel('Invite link', { exact: true }).inputValue()
   expect(link).toMatch(/\/join\/[\w-]{30,}$/)
   await expect(app.getByRole('list', { name: 'Invite links' })).toContainText('Player link')
+  await expect(app.getByRole('list', { name: 'Invite links' })).toContainText('Tuesday group')
   await expect(app.getByRole('list', { name: 'Invite links' })).toContainText('open')
 
   // a stranger opens it: no sign in, one form

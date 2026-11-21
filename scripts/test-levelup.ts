@@ -1,4 +1,4 @@
-import { attunedCount, capacityOf, carriedWeight, classFeaturesAt, hitDieOf, levelUp, loadOf, slotsFor } from '../web/src/lib/levelup'
+import { allSlots, pactSlots, attunedCount, capacityOf, carriedWeight, classFeaturesAt, hitDieOf, levelUp, loadOf, slotsFor } from '../web/src/lib/levelup'
 import { emptyCharacter } from '../web/src/lib/sheet'
 
 let failed = 0
@@ -11,7 +11,10 @@ check('a full caster of level 5 has 4/3/2', slotsFor([{ name: 'Wizard', level: 5
 check('a paladin has its own table', slotsFor([{ name: 'Paladin', level: 1 }]) === null && slotsFor([{ name: 'Paladin', level: 5 }])!.join() === '4,2')
 check('a fighter without magic has no slots', slotsFor([{ name: 'Fighter', level: 8 }]) === null && slotsFor([{ name: 'Fighter', level: 7, subclass: 'Eldritch Knight' }])!.join() === '4,2')
 check('multiclass slots add up the caster levels', slotsFor([{ name: 'Wizard', level: 3 }, { name: 'Cleric', level: 2 }])!.join() === '4,3,2')
-check('warlock pact magic is not counted as slots', slotsFor([{ name: 'Warlock', level: 5 }]) === null)
+check('warlock pact magic is not counted as ordinary slots', slotsFor([{ name: 'Warlock', level: 5 }]) === null)
+check('pact magic by warlock level', JSON.stringify(pactSlots(1)) === '{"count":1,"slotLevel":1}' && pactSlots(5)!.slotLevel === 3 && pactSlots(11)!.count === 3 && pactSlots(17)!.count === 4 && pactSlots(9)!.slotLevel === 5 && pactSlots(0) === null)
+check('a warlock has its pact slots as slots', allSlots([{ name: 'Warlock', level: 5 }])!.join() === '0,0,2')
+check('a warlock and a wizard add up', allSlots([{ name: 'Wizard', level: 3 }, { name: 'Warlock', level: 3 }])!.join() === '4,4' && allSlots([{ name: 'Fighter', level: 3 }]) === null)
 
 const hero = ch({ classes: [{ name: 'Fighter', level: 3 }], hp: { max: 28, formula: '', current: 20, temp: 0 }, hitDice: [{ sides: 10, total: 3, used: 1 }] })
 const up = levelUp(hero as any, 'Fighter') as any
