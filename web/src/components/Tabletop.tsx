@@ -16,6 +16,7 @@ import { AudioPlayer } from './TableAudio'
 import { TriggersSection } from './TableTriggers'
 import { MapEditor } from './MapEditor'
 import { AssetLibrary } from './AssetLibrary'
+import { bind, DEFAULT_KEYS, KEY_ACTIONS, loadKeys, pressed, saveKeys, type KeyAction } from '../lib/tablekeys'
 import { PinDialog } from './PinDialog'
 import { ReadyBanner } from './ReadyBanner'
 import { ThreatBanner } from './ThreatBanner'
@@ -207,6 +208,8 @@ export function TableView() {
   const selectedTile = useTable((s) => s.selectedTile)
   const one = selected.length === 1 ? tokens.find((t) => t.id === selected[0]) ?? null : null
 
+  const [keys, setKeys] = useState(loadKeys)
+  useEffect(() => { const on = () => setKeys(loadKeys()); window.addEventListener('tt-keys', on); return () => window.removeEventListener('tt-keys', on) }, [])
   // keys act on the selection
   const onKey = (e: React.KeyboardEvent) => {
     if ((e.target as HTMLElement).closest('input, textarea, [role=listbox]')) return
@@ -221,12 +224,12 @@ export function TableView() {
       e.preventDefault()
       for (const t of clipboard) sendTable({ t: 'token.add', sceneId: scene.id, token: { name: t.name, x: t.x + scene.gridSize, y: t.y + scene.gridSize, size: t.size, rotation: t.rotation, image: t.image, color: t.color, hidden: t.hidden, owners: gm ? t.owners : [], data: t.data, ...(t.pageId ? { pageId: t.pageId } : {}) } })
     }
-    else if (e.key === 'f' || e.key === 'F') engine.current?.fit()
-    else if (e.key === 'r' && !e.ctrlKey && sel.length) for (const t of sel) sendTable({ t: 'token.update', id: t.id, patch: { rotation: (t.rotation + 45) % 360 } })
+    else if (pressed(e, keys, 'fit')) engine.current?.fit()
+    else if (pressed(e, keys, 'rotate') && sel.length) for (const t of sel) sendTable({ t: 'token.update', id: t.id, patch: { rotation: (t.rotation + 45) % 360 } })
     else if (gm && (e.key === 'Delete' || e.key === 'Backspace') && st.selectedTile && !sel.length) { e.preventDefault(); sendTable({ t: 'tile.delete', ids: [st.selectedTile] }) }
     else if (gm && (e.key === 'Delete' || e.key === 'Backspace') && sel.length) { e.preventDefault(); sendTable({ t: 'token.delete', ids: sel.map((t) => t.id) }) }
-    else if (gm && e.key === 'h' && sel.length) for (const t of sel) sendTable({ t: 'token.update', id: t.id, patch: { hidden: !t.hidden } })
-    else if (gm && e.key === 'l' && sel.length) for (const t of sel) sendTable({ t: 'token.update', id: t.id, patch: { locked: !t.locked } })
+    else if (gm && pressed(e, keys, 'hide') && sel.length) for (const t of sel) sendTable({ t: 'token.update', id: t.id, patch: { hidden: !t.hidden } })
+    else if (gm && pressed(e, keys, 'lock') && sel.length) for (const t of sel) sendTable({ t: 'token.update', id: t.id, patch: { locked: !t.locked } })
     else if ((e.ctrlKey || e.metaKey) && e.key === 'a') { e.preventDefault(); useTable.setState({ selected: st.tokens.map((t) => t.id) }) }
     else if (e.key.startsWith('Arrow') && sel.length && scene) {
       e.preventDefault()
@@ -625,6 +628,10 @@ function TablePanel() {
         </ul>
       )}
       <label className="tt-check"><input type="checkbox" checked={lefty} onChange={(e) => { setLefty(e.target.checked); try { localStorage.setItem('tt-left', e.target.checked ? '1' : '') } catch { /* private window */ } }} />Panel on the left (for left-handed use)</label>
+      <div className="tt-form" role="group" aria-label="Keys">
+        <b>Keys</b>
+        {KEY_ACTIONS.filter((a) => !a.gm || gm).map((a) => <KeyField key={a.id} action={a.id} label={a.label} />)}
+      </div>
       {gm && <button className="btn sm" title="Watch the last session again: tokens moving over the map, and what was said" onClick={() => setReplaying(true)}>Replay the last session</button>}
       {replaying && <Replay wsId={wsId} onClose={() => setReplaying(false)} />}
       {gm && <button className="btn sm" title="Ask everyone whether they are ready" onClick={() => sendTable({ t: 'ready.start' })}>Ready check</button>}
@@ -643,6 +650,27 @@ function TablePanel() {
           ))}
         </>
       )}
+    </div>
+  )
+}
+
+/** One shortcut: click the box and press the letter or number it should have from now on (kept in this browser). */
+function KeyField({ action, label }: { action: KeyAction; label: string }) {
+  const [keys, setKeys] = useState(loadKeys)
+  const [error, setError] = useState('')
+  return (
+    <div className="tt-row">
+      <span className="grow">{label}</span>
+      <input className="input tt-num" aria-label={label} value={keys[action].toUpperCase()} readOnly maxLength={1} title="Click, then press the key"
+        onKeyDown={(e) => {
+          if (e.key === 'Tab') return
+          e.preventDefault(); e.stopPropagation()
+          const r = bind(keys, action, e.key)
+          if ('error' in r) { setError(r.error); return }
+          setError(''); setKeys(r.keys); saveKeys(r.keys); window.dispatchEvent(new Event('tt-keys'))
+        }} />
+      <button className="btn ghost sm" aria-label={`Reset to ${DEFAULT_KEYS[action].toUpperCase()} (${action})`} disabled={keys[action] === DEFAULT_KEYS[action]} onClick={() => { const next = { ...keys, [action]: DEFAULT_KEYS[action] }; setKeys(next); saveKeys(next); setError(''); window.dispatchEvent(new Event('tt-keys')) }}>Reset</button>
+      {error && <small role="alert" className="muted">{error}</small>}
     </div>
   )
 }

@@ -451,6 +451,12 @@ areas:
       - id: sheet.import-pathbuilder
         name: "A Pathfinder 2e character imported from Pathbuilder"
         files: [web/src/lib/importers.ts, web/src/components/PageView.tsx]
+      - id: table.sharedsight
+        name: "A token that shares its sight with the whole party"
+        files: [web/src/tabletop/engine.ts, server/src/sight.ts, web/src/components/TableParts.tsx]
+      - id: table.keys
+        name: "Rebindable shortcut keys of the table"
+        files: [web/src/lib/tablekeys.ts, web/src/components/Tabletop.tsx]
       - id: table.stats
         name: "Hit points, damage, healing and conditions on a token, with a linked page's sheet"
         files: [web/src/components/TableParts.tsx, web/src/components/TableSheet.tsx]

@@ -66,5 +66,9 @@ check('a cone of light reaches ahead but not behind', coneSeen.includes('ahead')
 const hills = [{ x1: 400, y1: 0, x2: 400, y2: 600, limited: true }, { x1: 600, y1: 0, x2: 600, y2: 600, limited: true }]
 const hero2 = tok('hero', 200, 300, ['p1'])
 check('one terrain wall is seen past, a second one is not', names(visibleTokens(scene(), hills, [hero2, tok('past1', 500, 300), tok('past2', 800, 300)], 'p1')) === 'hero,past1')
+// a token the whole party sees through
+const lookout = tok('lookout', 700, 300, [], { sharedSight: true })
+check('a token that shares its sight shows the party what it sees', names(visibleTokens(scene(), [], [tok('hero', 200, 300, ['p1']), lookout, tok('farther', 800, 300)], 'p1')) === 'farther,hero,lookout' && names(visibleTokens(scene(), [wall(500, 0, 500, 600)], [tok('hero', 200, 300, ['p1']), lookout, tok('farther', 800, 300)], 'p1')) === 'farther,hero,lookout')
+check('without it the same token is just another creature behind a wall', names(visibleTokens(scene(), [wall(500, 0, 500, 600)], [tok('hero', 200, 300, ['p1']), tok('lookout', 700, 300), tok('farther', 800, 300)], 'p1')) === 'hero')
 console.log(failed ? `\n${failed} failed` : '\nall passed')
 process.exit(failed ? 1 : 0)

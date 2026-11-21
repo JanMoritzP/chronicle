@@ -357,6 +357,7 @@ export function SightLight({ token }: { token: Token }) {
         {field('Blindsight', (vision as { blind?: number }).blind ?? 0, (n) => save('vision', { ...vision, blind: n ?? 0 }))}
         {field('Truesight', (vision as { true?: number }).true ?? 0, (n) => save('vision', { ...vision, true: n ?? 0 }))}
       </div>
+      <label className="tt-check"><input type="checkbox" checked={token.data.sharedSight === true} onChange={(e) => { const data = { ...token.data }; if (e.target.checked) data.sharedSight = true; else delete data.sharedSight; sendTable({ t: 'token.update', id: token.id, patch: { data } }) }} />The whole party sees through this token</label>
       <div className="tt-row">
         {field('Bright light', light.bright ?? 0, (n) => save('light', { ...light, bright: n ?? 0 }))}
         {field('Dim light', light.dim ?? 0, (n) => save('light', { ...light, dim: n ?? 0 }))}

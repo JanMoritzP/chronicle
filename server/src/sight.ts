@@ -9,7 +9,7 @@ export interface SightScene { width: number; height: number; gridSize: number; d
 export type SightWall = Seg & { oneway?: boolean }
 export interface SightToken {
   id: string; x: number; y: number; owners: string[]
-  data: { vision?: { sight?: number | null; dark?: number }; light?: { bright?: number; dim?: number; angle?: number; dir?: number } }
+  data: { /** the whole party sees through this token */ sharedSight?: boolean; vision?: { sight?: number | null; dark?: number }; light?: { bright?: number; dim?: number; angle?: number; dir?: number } }
 }
 
 /** What one player's tokens see right now: the outlines of the areas in view and in light. Cheap to ask about any point. */
@@ -25,7 +25,7 @@ export function buildSight(scene: SightScene, walls: SightWall[], tokens: SightT
   const px = (units: number) => (units / scene.dist) * scene.gridSize
   const bounds = { x: 0, y: 0, w: scene.width, h: scene.height }
   // with shared vision the party sees through every token that belongs to a player
-  const mine = tokens.filter((t) => (shared ? t.owners.length > 0 : t.owners.includes(userId)))
+  const mine = tokens.filter((t) => t.data.sharedSight === true || (shared ? t.owners.length > 0 : t.owners.includes(userId)))
   // a one-way wall can be seen through from one side: the side its direction points away from
   const seeThrough = (w: SightWall, p: Pt) => w.oneway === true && (w.x2 - w.x1) * (p.y - w.y1) - (w.y2 - w.y1) * (p.x - w.x1) < 0
   const sightFor = (p: Pt) => walls.filter((w) => !seeThrough(w, p))

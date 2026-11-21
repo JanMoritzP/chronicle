@@ -119,7 +119,7 @@ export class TableEngine {
   /** Does this person see everything? False for players, and for a GM who is previewing. */
   private get gmView() { return this.me.gm && !this.preview }
   private shared = false
-  private isViewer(t: Token) { const p = this.preview; return p ? p.tokens.includes(t.id) || t.owners.some((o) => p.users.includes(o)) : this.shared ? t.owners.length > 0 : t.owners.includes(this.me.id) }
+  private isViewer(t: Token) { const p = this.preview; return t.data?.sharedSight === true || (p ? p.tokens.includes(t.id) || t.owners.some((o) => p.users.includes(o)) : this.shared ? t.owners.length > 0 : t.owners.includes(this.me.id)) }
   private drag: null | { kind: 'pan' | 'tokens' | 'ruler' | 'marquee' | 'draw' | 'tile' | 'wallend' | 'wallrect' | 'revealrect' | 'drawmove'; /** the drawing being moved */ drawing?: Drawing; start: Pt; screen: Pt; origins?: Map<string, Pt>; lead?: string; moved: boolean; sent: number; /** wall ends that move together, and where they went */ ends?: { id: string; end: 1 | 2 }[]; to?: Pt } = null
   private pointers = new Map<number, Pt>()
   private pinch: null | { dist: number; scale: number } = null
