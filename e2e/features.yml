@@ -27,6 +27,9 @@ areas:
       - id: auth.password-success
         name: "Change my password successfully and sign in with it"
         status: planned
+      - id: invites
+        name: "The owner makes an invite link and a new person joins the world with it"
+        files: [web/src/components/InviteLinks.tsx, web/src/components/JoinPage.tsx]
       - id: settings.accounts
         name: "Add, set a password for and remove accounts"
         files: [web/src/components/Views.tsx]

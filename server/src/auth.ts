@@ -76,6 +76,18 @@ export const requireOwner = async (req: FastifyRequest, reply: FastifyReply) => 
   if (req.user.role !== 'owner') return reply.code(403).send({ error: 'owner only' })
 }
 
+/** Signs a person in: a new session and its cookie. */
+export function startSession(req: FastifyRequest, reply: FastifyReply, userId: string) {
+  const token = crypto.randomBytes(32).toString('base64url')
+  const ttl = config.sessionDays * 86400_000
+  db.prepare('INSERT INTO sessions(token_hash,user_id,created_at,expires_at) VALUES(?,?,?,?)').run(sha(token), userId, now(), now() + ttl)
+  db.prepare('DELETE FROM sessions WHERE expires_at < ?').run(now())
+  reply.setCookie(COOKIE, token, {
+    // Secure only when the request really came in over HTTPS (cloudflared sets X-Forwarded-Proto), so LAN access over plain http still logs in.
+    httpOnly: true, sameSite: 'lax', secure: req.protocol === 'https', path: '/', maxAge: ttl / 1000,
+  })
+}
+
 export async function authRoutes(app: FastifyInstance) {
   app.post('/api/auth/login', { config: { rateLimit: { max: 8, timeWindow: '1 minute' } } }, async (req, reply) => {
     const body = z.object({ username: z.string().max(100), password: z.string().max(500) }).safeParse(req.body)
@@ -85,14 +97,7 @@ export async function authRoutes(app: FastifyInstance) {
     // Always run a hash so response time doesn't reveal whether the user exists.
     const ok = verifyPassword(body.data.password, u?.pass_hash ?? hashPassword('x'))
     if (!u || !ok) return reply.code(401).send({ error: 'Invalid username or password' })
-    const token = crypto.randomBytes(32).toString('base64url')
-    const ttl = config.sessionDays * 86400_000
-    db.prepare('INSERT INTO sessions(token_hash,user_id,created_at,expires_at) VALUES(?,?,?,?)').run(sha(token), u.id, now(), now() + ttl)
-    db.prepare('DELETE FROM sessions WHERE expires_at < ?').run(now())
-    reply.setCookie(COOKIE, token, {
-      // Secure only when the request really came in over HTTPS (cloudflared sets X-Forwarded-Proto), so LAN access over plain http still logs in.
-      httpOnly: true, sameSite: 'lax', secure: req.protocol === 'https', path: '/', maxAge: ttl / 1000,
-    })
+    startSession(req, reply, u.id)
     return { id: u.id, username: u.username, role: u.role }
   })
 

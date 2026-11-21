@@ -41,7 +41,7 @@ Never test against the owner's real data directory.
 5. Stop it afterwards (`Get-Process node | Stop-Process`) and delete the temp data dir.
 
 ### Tests (all plain Node scripts; each prints PASS/FAIL and exits non-zero on failure)
-- API smoke tests against a running throwaway server: `node scripts/smoke-<area>.mjs http://localhost:3222 gm testpass123`. Areas: `auth`, `blocks`, `copy`, `export`, `library` (downloads the real Open5e data, needs internet), `maps`, `multiuser` (needs the admin URL and account too), `pagetypes`, `relations`, `sessions`, `sheet`, `share`, `stattemplates`, `table`, `templates`, `todos`, `worlds`, plus `smoke.mjs` (core).
+- API smoke tests against a running throwaway server: `node scripts/smoke-<area>.mjs http://localhost:3222 gm testpass123`. Areas: `auth`, `blocks`, `copy`, `export`, `library` (downloads the real Open5e data, needs internet), `maps`, `multiuser` (needs the admin URL and account too), `pagetypes`, `relations`, `invites`, `sessions`, `sheet`, `share`, `stattemplates`, `table`, `templates`, `todos`, `worlds`, plus `smoke.mjs` (core).
 - Pure logic: `scripts/test-ydoc.ts`, `scripts/test-family.ts`, `scripts/test-time.ts`, `scripts/test-autolink.ts`, `scripts/test-chain.ts`, `scripts/test-sheet.ts`, `scripts/test-grid.ts`, `scripts/test-dice.ts`, `scripts/test-chat.ts`, `scripts/test-visibility.ts`, `scripts/test-migrate.mjs` (needs a build; rolls the database back to earlier releases), `scripts/test-combat.ts`, `scripts/test-encounter.ts` (bundle with esbuild, run with node).
 - Updater: `node scripts/test-update-logic.mjs` (no Electron), `node scripts/test-update-flow.mjs` (real Electron, fake GitHub; **unset `ELECTRON_RUN_AS_NODE` first**).
 - Desktop app: `node scripts/test-electron.mjs <server-url>`; the update button in real Electron against a fake server and GitHub: `node scripts/test-update-button.mjs` (**unset `ELECTRON_RUN_AS_NODE` first**).
@@ -67,7 +67,7 @@ Never test against the owner's real data directory.
 - **Page text is a shared Yjs document** while anyone has the page open (`server/src/collab.ts`, `ydoc.ts`); the database JSON follows it within 1.5 seconds. Code that rewrites `pages.content` outside an editor session must call `replaceContent` (drops the live room so editors reload), not `applyContent`; to change a todo use `editTodoLive` first. Page fields that two people may edit at once go through `propsPatch`, not a whole `props` object.
 - Error shape is `{ error: string }`. The client `api.ts` turns non-2xx into `ApiError(status, message)`.
 - Writes touching several tables go in `db.transaction(...)`.
-- Public (unauthenticated) surface is only `/api/public/*` and the `/s/:token` page. Anything leaving through it must pass `publicDoc` so nothing private leaks. `smoke-share.mjs` tests this; do not widen it casually.
+- Public (unauthenticated) surface is only `/api/public/*`, the `/s/:token` page and the `/join/:token` page (invite links, `server/src/routes/invites.ts`: they reveal only a world's name and the role offered, are rate limited, and give one answer for every reason a link is invalid). Anything leaving through it must pass `publicDoc` so nothing private leaks. `smoke-share.mjs` tests this; do not widen it casually.
 - Security: sessions are HttpOnly cookies, `Secure` follows `req.protocol`; login is rate limited. Do not weaken auth, CSP/security headers, or the upload type allow-list (raster images only).
 - Server runtime deps are `packages: 'external'`; adding one means it must be in `server/package.json` (Docker uses `npm ci`).
 

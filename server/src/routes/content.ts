@@ -35,9 +35,11 @@ const settingsSchema = z.object({
   newPageTodo: z.string().max(200),
   /** The rules the world plays by: the 2014 or the 2024 edition of 5e. */
   system: z.enum(['5e', '5e-2024', 'pf2e']),
+  /** People can join this world with an invite link. */
+  invites: z.boolean(),
 }).partial()
 
-export const DEFAULT_WORLD_SETTINGS = { newPageTodo: 'Fill me', system: '5e' as '5e' | '5e-2024' | 'pf2e' }
+export const DEFAULT_WORLD_SETTINGS = { newPageTodo: 'Fill me', system: '5e' as '5e' | '5e-2024' | 'pf2e', invites: false }
 
 export function worldSettings(raw: string | null | undefined) {
   let saved: any = {}
@@ -45,6 +47,7 @@ export function worldSettings(raw: string | null | undefined) {
   return {
     ...DEFAULT_WORLD_SETTINGS,
     ...(typeof saved.newPageTodo === 'string' ? { newPageTodo: saved.newPageTodo } : {}),
+    ...(typeof saved.invites === 'boolean' ? { invites: saved.invites } : {}),
     ...(saved.system === '5e' || saved.system === '5e-2024' || saved.system === 'pf2e' ? { system: saved.system as '5e' | '5e-2024' | 'pf2e' } : {}),
   }
 }

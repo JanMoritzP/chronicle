@@ -1,6 +1,6 @@
 import { get, set } from 'idb-keyval'
 import type { Calendar } from './lib/calendar'
-import type { CommentItem, Encounter, EncounterBody, Person, LibraryEntry, LibraryIndex, LibraryStatus, BackupInfo, Bootstrap, EventRow, FullPage, MapFull, MapItem, MapLayer, CopyPreview, CopyResult, GameSession, MapMeta, PageType, PageVersion, Relation, StatsResult, StatTemplateRow, Template, TodoItem, User, Workspace, WorldSettings } from './types'
+import type { CommentItem, Encounter, EncounterBody, Invite, Person, LibraryEntry, LibraryIndex, LibraryStatus, BackupInfo, Bootstrap, EventRow, FullPage, MapFull, MapItem, MapLayer, CopyPreview, CopyResult, GameSession, MapMeta, PageType, PageVersion, Relation, StatsResult, StatTemplateRow, Template, TodoItem, User, Workspace, WorldSettings } from './types'
 
 export interface StatTemplateBody { name: string; sections: any[]; look?: Record<string, any> }
 export interface PageTypeBody { name: string; icon: string; tag: string; source: string; definition: Record<string, any> }
@@ -104,6 +104,9 @@ export const api = {
   createEncounter: (ws: string, b: EncounterBody) => req<Encounter>('POST', `/api/workspaces/${ws}/encounters`, b),
   patchEncounter: (id: string, b: EncounterBody) => req<Encounter>('PATCH', `/api/encounters/${id}`, b),
   deleteEncounter: (id: string) => req('DELETE', `/api/encounters/${id}`),
+  listInvites: (ws: string) => req<Invite[]>('GET', `/api/workspaces/${ws}/invites`),
+  createInvite: (ws: string, b: { role: 'editor' | 'viewer'; days: number | null; maxUses: number | null }) => req<{ id: string; token: string; path: string }>('POST', `/api/workspaces/${ws}/invites`, b),
+  revokeInvite: (id: string) => req('DELETE', `/api/invites/${id}`),
   users: () => req<any[]>('GET', '/api/users'),
   createUser: (b: any) => req('POST', '/api/users', b),
   changePassword: (current: string, next: string) => req('POST', '/api/auth/password', { current, next }),

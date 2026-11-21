@@ -445,6 +445,22 @@ const migrations: (string | ((d: Database.Database) => void))[] = [
   CREATE INDEX IF NOT EXISTS tiles_scene ON scene_tiles(scene_id);
   `)
   },
+  `
+  CREATE TABLE invites (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    token_hash TEXT NOT NULL UNIQUE,
+    role TEXT NOT NULL,
+    created_by TEXT,
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER,
+    max_uses INTEGER,
+    uses INTEGER NOT NULL DEFAULT 0,
+    revoked INTEGER NOT NULL DEFAULT 0,
+    last_used_at INTEGER
+  );
+  CREATE INDEX invites_ws ON invites(workspace_id);
+  `,
 ]
 
 export const SCHEMA_VERSION = migrations.length

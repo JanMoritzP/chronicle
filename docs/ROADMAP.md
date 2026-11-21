@@ -305,6 +305,17 @@ What it does: the GM and the players share a battle scene. The GM makes scenes a
 - **Tests.** `scripts/smoke-table.mjs` (who sees and may do what), `scripts/test-grid.ts` (snapping and distances), `e2e/tests/tabletop.spec.ts`.
 - **Not done yet.** Occlusion of a token that walks under an overhead tile, covered-cell highlighting for spell areas, user-defined layers, live strokes while someone is still drawing, undo, conditions that end on their own at the turn, 2024 XP budgets, loot and XP summary after a fight.
 
+## Invite links (built)
+
+What it does: the owner makes a link for a world and sends it to the players. Whoever opens it can make an account (or sign in with one they have) and is let into that one world as a player or a spectator. Accounts made by the admin dashboard and the owner's Accounts list keep working as before.
+
+- **Where.** Settings, Worlds, owner only: "Let people join this world with an invite link" (per world, off by default; `workspaces.settings.invites`), then a role (player who can write, or spectator who can only read), how long the link works (1, 7, 30 days or no end) and how many people it lets in (1, 5, 20 or any number). "Create link" shows the link once with a Copy button. The list shows each link's role, how many joined, when it ends and its state (open, used up, expired, revoked) with a Close button. Switching the world's setting off closes every link at once.
+- **The page.** `/join/<token>` needs no sign in. It says which world and role the link is for and offers "Make an account" (a name of at least 2 characters, a password of at least 8, entered twice) or "I have an account". After joining, the person is signed in and the app opens on the world. A new account gets the invite's role as its account type and is a member of that world only. Someone who is a member already is simply signed in and does not use the link up. The owner account cannot use a link (it already reaches every world).
+- **Security.** The token is 32 random bytes; only its SHA-256 is stored, so a link cannot be shown again (make another). All the reasons a link can be invalid (unknown, closed, expired, used up, invites switched off, world deleted) give the same answer, so the page does not tell a guesser which. The public routes (`GET /api/public/invite/:token`, `POST /api/public/invite/:token/join`) reveal only the world's name and the role; they are rate limited (20 and 8 a minute per address). Joining with an existing account checks the password with the same hash and does the work even for unknown names, like login. Only the owner account can make, list or close links.
+- **Data and API.** Table `invites`; `GET|POST /api/workspaces/:ws/invites` and `DELETE /api/invites/:id` (owner only, the delete closes the link and keeps its history). Backup restore resets links to the backup's.
+- **Not done yet.** Showing who joined with which link, a link per person with a name on it, an e-mail invitation, links in the admin dashboard.
+- **Tests.** `node scripts/smoke-invites.mjs <url> gm <pass>` and `e2e/tests/settings.spec.ts` (invites).
+
 ## Page history (built)
 
 What it does: every edit to a page is recorded with who made it and when, and any earlier version can be restored in full. The clock button on a page opens the history.

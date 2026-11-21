@@ -30,6 +30,7 @@ import { statTemplateRoutes } from './routes/stattemplates.js'
 import { uploadRoutes } from './routes/uploads.js'
 import { libraryRoutes } from './routes/library.js'
 import { encounterRoutes } from './routes/encounters.js'
+import { inviteRoutes } from './routes/invites.js'
 import { closeLibrary } from './library.js'
 
 migrate()
@@ -83,6 +84,7 @@ await app.register(statTemplateRoutes)
 await app.register(exportRoutes)
 await app.register(libraryRoutes)
 await app.register(encounterRoutes)
+await app.register(inviteRoutes)
 await app.register(backupRoutes)
 
 app.get('/robots.txt', async (_req, reply) => reply.type('text/plain').send('User-agent: *\nDisallow: /\n'))

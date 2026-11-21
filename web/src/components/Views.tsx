@@ -9,6 +9,7 @@ import { FONTS, loadFonts, saveFonts, type FontPrefs } from '../fonts'
 import { useStore } from '../store'
 import { THEMES, applyTheme } from '../themes'
 import { PageIcon } from './TypeIcon'
+import { InviteLinks } from './InviteLinks'
 import { Select } from './Select'
 import type { PageMeta, Zettel } from '../types'
 
@@ -338,6 +339,7 @@ function WorldOptions({ id }: { id: string }) {
         </Select>
       </label>
       <p className="muted" style={{ fontSize: 13, margin: '4px 0 0' }}>Decides how the tabletop rates a fight (XP thresholds and a multiplier in 5e 2014, an XP budget in 5e 2024, threat levels by creature level in Pathfinder 2e), how a roll against a difficulty class is read (success and failure, or four degrees), and which creature sheets and conditions are offered.</p>
+      {owner && <div style={{ marginTop: 18 }}><InviteLinks id={id} name={world.name} on={!!world.settings?.invites} /></div>}
       {owner && (
         <p style={{ marginTop: 14 }}>
           <button className="btn sm danger" onClick={async () => {

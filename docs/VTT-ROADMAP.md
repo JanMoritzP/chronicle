@@ -6,6 +6,7 @@ Goal: run a complete D&D 5e game inside Chronicle (maps, tokens, vision, combat,
 
 ## Progress
 
+- **Invite links: done.** Per-world switch, links with a role, a time limit and a limit on people, a join page that makes an account or signs in, and closing links. Named links and e-mail are not built.
 - **Mobile player view: first version done** (bottom bar, sheets, a hit point strip, bigger buttons). A dedicated phone sheet for characters, haptics, offline caching of the table and installable icons are not.
 - **Phase 8, Pathfinder 2e (first step): done.** Per-world setting, creature sheet with action costs, threat rating by level, initiative from Perception, multiple attack penalty buttons, Pathfinder conditions with values and degrees of success. Player characters (ranks, derived numbers, strikes, spell slots) are done too. The three-action tracker, spell lists, importing and the pack format are not built.
 - **Phase 8, D&D 2024 (first step): done.** A per-world rules setting that switches encounter rating to the 2024 XP budget and the ruleset of new character sheets. The pack format itself, species and background rules and the other systems are not built.
@@ -265,7 +266,7 @@ Rules that apply: migrations append only; backup restore, export and copy get up
 | Topic | Decision |
 |---|---|
 | Sheets | A **dedicated sheet view** with its own layout, used by the page, hover preview, token HUD and table. Notes stay in the editor below it. Phase 2a builds it. |
-| Joining | **Both**: admin-created accounts stay, plus optional invite links a GM can switch on per world. Needs a signup path and an auth review before it ships (AGENTS: ask before changing auth). |
+| Joining | **Both** (invite links are built, see ROADMAP.md "Invite links"): admin-created accounts stay, plus optional invite links a GM can switch on per world. Needs a signup path and an auth review before it ships (AGENTS: ask before changing auth). |
 | Dice | Animated numbers first. 3D dice may follow as an option. |
 | Fog | Memory is **per player** by default, switchable per scene. |
 | Grid | Diagonals default to **5-10-5**, switchable per scene. |
