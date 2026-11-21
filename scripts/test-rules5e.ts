@@ -1,4 +1,4 @@
-import { adjustDamage, concentrationDc, deathSave, longRest, proficiencyOf, saveBonusOf, shortRest, typesIn } from '../server/src/rules5e'
+import { firstAttack, leftReach, adjustDamage, concentrationDc, deathSave, longRest, proficiencyOf, saveBonusOf, shortRest, typesIn } from '../server/src/rules5e'
 import type { Sheet } from '../server/src/sheet'
 
 let failed = 0
@@ -49,6 +49,15 @@ check('a short rest never heals beyond the maximum', shortRest(base, 3, () => 10
 check('proficiency follows total level', proficiencyOf({ classes: [{ name: 'Fighter', level: 1 }] }) === 2 && proficiencyOf({ classes: [{ name: 'Fighter', level: 5 }] }) === 3 && proficiencyOf({ classes: [{ name: 'A', level: 10 }, { name: 'B', level: 7 }] }) === 6)
 check('a creature saves with its own number or its modifier', saveBonusOf({ ...base, saves: { dex: 5 } } as Sheet, 'dex') === 5 && saveBonusOf({ ...base, saves: {} } as Sheet, 'con') === 2 && saveBonusOf(undefined, 'con') === 0)
 check('a character adds proficiency to saves they are proficient in', saveBonusOf({ ...base, classes: [{ name: 'Cleric', level: 5 }], profs: { saves: ['wis'], skills: {} }, saves: {} } as Sheet, 'wis') === 3 && saveBonusOf({ ...base, classes: [{ name: 'Cleric', level: 5 }], profs: { saves: ['wis'], skills: {} }, saves: {} } as Sheet, 'con') === 2)
+
+const o = [{ id: 'orc', x: 100, y: 100 }, { id: 'far', x: 500, y: 500 }, { id: 'diag', x: 170, y: 170 }]
+check('stepping away from someone next to you leaves their reach', leftReach({ id: 'me', x: 170, y: 100 }, { id: 'me', x: 380, y: 100 }, o, 70).join() === 'orc,diag')
+check('moving along beside them does not', leftReach({ id: 'me', x: 170, y: 100 }, { id: 'me', x: 170, y: 170 }, [o[0]], 70).length === 0)
+check('someone who was never close is not asked', !leftReach({ id: 'me', x: 170, y: 100 }, { id: 'me', x: 400, y: 100 }, o, 70).includes('far'))
+const orc = { features: { traits: [], bonus: [], reactions: [], legendary: [], actions: [{ name: 'Javelin', text: 'Ranged Weapon Attack: +5 to hit, range 30/120 ft. Hit: 6 (1d6 + 3) piercing damage.' }, { name: 'Greataxe', text: 'Melee Weapon Attack: +5 to hit, reach 5 ft. Hit: 9 (1d12 + 3) slashing damage.' }] } } as unknown as Sheet
+const fa = firstAttack(orc)!
+check('the first melee attack of a creature is read from its text', fa.label === 'Greataxe' && fa.bonus === 5 && fa.damage[0].expr === '1d12+3' && fa.damage[0].type === 'slashing')
+check('with no melee attack the first of any kind, and none when there is none', firstAttack({ features: { ...orc.features, actions: [orc.features.actions[0]] } } as unknown as Sheet)!.label === 'Javelin' && firstAttack({ features: { ...orc.features, actions: [{ name: 'Roar', text: 'It roars.' }] } } as unknown as Sheet) === null)
 
 console.log(failed ? `\n${failed} failed` : '\nall passed')
 process.exit(failed ? 1 : 0)

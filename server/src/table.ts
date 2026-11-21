@@ -15,7 +15,7 @@ import { parseChat, readable, withInline, type Kind, type Part } from './chat.js
 import { buildSight, canSee, type Sight, type SightToken } from './sight.js'
 import { advance, delay as delayTurn, marker as lairMarker, emptyCombat, end as endCombat, start as startCombat, visible as visibleCombat, withList, type Combat } from './combat.js'
 import { cryptoRng, parseRoll } from './dice.js'
-import { DAMAGE_TYPES_PF2E, adjustDamage, concentrationDc, deathSave, longRest, modOf, saveBonusOf, shortRest, type Effect } from './rules5e.js'
+import { DAMAGE_TYPES_PF2E, firstAttack, leftReach, adjustDamage, concentrationDc, deathSave, longRest, modOf, saveBonusOf, shortRest, type Effect } from './rules5e.js'
 import { parseSheet, type Sheet } from './sheet.js'
 import { cardsText, discardFromHand, drawCards, entriesText, freshDeck, handOf, parseCards, parseEntries, pick, toDiscard, toHand, type DeckState } from './tables.js'
 import { activePack } from './routes/packs.js'
@@ -174,6 +174,16 @@ function trackMove(ws: string, before: TokenRow, after: TokenRow) {
   const cells = Math.max(Math.abs(after.x - before.x), Math.abs(after.y - before.y)) / sc.grid_size
   const moved = Math.round(((who.moved ?? 0) + cells * sc.dist) * 10) / 10
   saveCombat(ws, withList(combat, combat.list.map((x) => (x.id === who.id ? { ...x, moved } : x))))
+  // stepping away from someone who could hit back: whoever has their reaction ready may make an opportunity attack
+  if (after.hidden || ((after.data.conditions as string[] | undefined) ?? []).includes('Disengaged')) return
+  const mine = after.owners.length > 0
+  const foes = combat.list.filter((x) => x.tokenId && x.tokenId !== after.id && !x.done && !x.reaction && x.id !== who.id)
+    .map((x) => ({ x, t: tokenRow(x.tokenId!, ws) })).filter((p): p is { x: typeof p.x; t: TokenRow } => !!p.t && p.t.sceneId === after.sceneId && !p.t.hidden && (p.t.owners.length > 0) !== mine)
+  for (const id of leftReach({ id: after.id, x: before.x, y: before.y }, after, foes.map((p) => ({ id: p.t.id, x: p.t.x, y: p.t.y })), sc.grid_size)) {
+    const foe = foes.find((p) => p.t.id === id)!.t
+    postChat(ws, '', foe.name, 'emote', [], [{ t: 'text', text: `can make an opportunity attack against ${after.name}` }])
+    for (const c of inWorld(ws)) if (c.role === 'gm' || foe.owners.includes(c.user.id)) send(c, { t: 'threat', from: foe.id, fromName: foe.name, target: after.id, targetName: after.name })
+  }
 }
 
 function initiativeBonus(ws: string, pageId: string | null) {
@@ -1410,6 +1420,20 @@ async function handle(c: Conn, m: ClientMessage) {
       const h = db.prepare('SELECT id, title, text, image, revealed, updated_at FROM handouts WHERE id = ? AND workspace_id = ?').get(m.id, ws) as HandoutDb | undefined
       if (!h) return nack(c, m, 'no such handout')
       return showHandout(ws, h)
+    }
+    case 'reaction.attack': {
+      if (!settings.automation.attacks) return nack(c, m, 'Attacks are not automated at this table. The GM can switch that on.')
+      const foe = tokenRow(m.from, ws), target = tokenRow(m.target, ws)
+      if (!foe || !target) return nack(c, m, 'no such token')
+      if (!canEditStats(c.role, c.user.id, foe, settings)) return nack(c, m, 'not allowed')
+      const combat = combatOf(ws)
+      const entry = combat.list.find((x) => x.tokenId === foe.id)
+      if (!combat.active || !entry || entry.reaction) return nack(c, m, 'Their reaction is not ready.')
+      const sheet = readSheet(ws, foe.pageId)?.sheet
+      const atk = sheet ? firstAttack(sheet) : null
+      if (!atk) return nack(c, m, 'That creature has no attack written on its sheet to make.')
+      saveCombat(ws, withList(combat, combat.list.map((x) => (x.id === entry.id ? { ...x, reaction: true } : x))))
+      return handle(c, { t: 'attack', from: foe.id, targets: [target.id], label: `${atk.label} (opportunity attack)`, attack: { bonus: atk.bonus }, damage: atk.damage } as ClientMessage)
     }
     case 'combat.delay': {
       const combat = combatOf(ws)

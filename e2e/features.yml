@@ -514,6 +514,9 @@ areas:
       - id: table.people
         name: "Ready check, muting, sending away and banning players"
         files: [web/src/components/ReadyBanner.tsx, web/src/components/Tabletop.tsx, server/src/table.ts]
+      - id: table.opportunity
+        name: "Opportunity attacks when someone walks away in combat"
+        files: [web/src/components/ThreatBanner.tsx, server/src/table.ts, server/src/rules5e.ts]
       - id: table.assets
         name: "Asset library: every file of the world, search by name and tag, several at once, delete, and a storage limit"
         files: [web/src/components/AssetLibrary.tsx, server/src/routes/uploads.ts]

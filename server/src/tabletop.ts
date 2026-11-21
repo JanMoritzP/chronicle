@@ -218,6 +218,8 @@ export const clientMessage = z.discriminatedUnion('t', [
   z.object({ t: z.literal('combat.flag'), id, hidden: z.boolean().optional(), done: z.boolean().optional() }),
   z.object({ t: z.literal('combat.reaction'), id, used: z.boolean() }),
   z.object({ t: z.literal('combat.delay'), id }),
+  /** a creature uses its reaction to hit someone who walked away from it */
+  z.object({ t: z.literal('reaction.attack'), from: id, target: id }),
   z.object({ t: z.literal('combat.marker'), name: z.string().trim().min(1).max(60), init: z.number().int().min(-99).max(999) }),
   z.object({ t: z.literal('combat.legendary'), id, used: z.number().int().min(0).max(5).nullable() }),
   z.object({ t: z.literal('combat.reminder'), id, text: z.string().max(300) }),

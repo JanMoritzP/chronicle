@@ -1252,6 +1252,52 @@ check('a prop can be turned over', gm.msgs.filter((m) => m.t === 'tiles').at(-1)
 gm.send({ t: 'tile.delete', ids: [flipTile.id] })
 await sleep(150)
 
+// opportunity attacks: walking away from a creature that could hit back
+const ogreSheet = { v: 1, ruleset: '5e', name: 'Ogre', size: 'Large', type: 'giant', alignment: '', abilities: { str: 19, dex: 8, con: 16, int: 5, wis: 7, cha: 7 }, ac: { value: 11, note: '' }, hp: { max: 59, formula: '' }, speed: { walk: 40 }, saves: {}, skills: {}, senses: {}, vulnerabilities: '', resistances: '', immunities: '', conditionImmunities: '', languages: '', features: { traits: [], actions: [{ name: 'Greatclub', text: 'Melee Weapon Attack: +6 to hit, reach 5 ft., one target. Hit: 13 (2d8 + 4) bludgeoning damage.' }], bonus: [], reactions: [], legendary: [] } }
+const ogrePage = (await call('POST', `/api/workspaces/${ws}/pages`, { title: 'Ogre', props: { type: 'monster', sheet: ogreSheet } }, gmCookie)).data
+gm.send({ t: 'token.add', sceneId: crypt, token: { name: 'Runner', x: 500, y: 500, owners: [alice.id] } })
+gm.send({ t: 'token.add', sceneId: crypt, token: { name: 'Ogre', x: 570, y: 500 } })
+const runner = (await gm.until((m) => m.t === 'token' && m.token.name === 'Runner')).token
+const ogre = (await gm.until((m) => m.t === 'token' && m.token.name === 'Ogre')).token
+gm.send({ t: 'token.update', id: ogre.id, patch: { pageId: ogrePage.id } })
+gm.send({ t: 'combat.add', tokenIds: [runner.id, ogre.id] })
+await sleep(200)
+const oaList = gm.msgs.filter((m) => m.t === 'combat').at(-1).combat.list
+const oaRunner = oaList.find((x) => x.tokenId === runner.id)
+const oaOgre = oaList.find((x) => x.tokenId === ogre.id)
+gm.send({ t: 'combat.init', id: oaRunner.id, value: 20 })
+gm.send({ t: 'combat.init', id: oaOgre.id, value: 5 })
+await sleep(150)
+gm.send({ t: 'combat.control', action: 'start' })
+await sleep(200)
+n = pa.mark()
+let nGm = gm.mark()
+pa.send({ t: 'token.move', moves: [{ id: runner.id, x: 500, y: 780 }] })
+await sleep(400)
+const threat = gm.since(nGm, (m) => m.t === 'threat')[0]
+check('walking away from a creature that is next to you is noted for the GM', threat?.from === ogre.id && threat?.target === runner.id)
+check('and said at the table', gm.since(nGm, (m) => m.t === 'chat.msg' && JSON.stringify(m.msg.parts).includes('opportunity attack')).length === 1)
+check('the mover is not told, they are the target', pa.since(n, (m) => m.t === 'threat').length === 0)
+pb.send({ t: 'reaction.attack', from: ogre.id, target: runner.id, op: 'oanope' })
+check("a player cannot make another side's opportunity attack", !!(await pb.until((m) => m.t === 'nack' && m.op === 'oanope')))
+gm.send({ t: 'settings.set', patch: { automation: { damage: false, concentration: false, deathSaves: false, attacks: false } } })
+await sleep(150)
+gm.send({ t: 'reaction.attack', from: ogre.id, target: runner.id, op: 'oaoff' })
+check('it is refused while attacks are not automated', !!(await gm.until((m) => m.t === 'nack' && m.op === 'oaoff')))
+gm.send({ t: 'settings.set', patch: { automation: { damage: false, concentration: false, deathSaves: false, attacks: true } } })
+await sleep(150)
+nGm = gm.mark()
+gm.send({ t: 'reaction.attack', from: ogre.id, target: runner.id })
+await sleep(500)
+check('the attack is rolled with the creature\'s own attack', gm.since(nGm, (m) => m.t === 'chat.msg' && JSON.stringify(m.msg.parts).includes('opportunity attack')).length >= 1)
+check('and it spends the reaction', gm.msgs.filter((m) => m.t === 'combat').at(-1).combat.list.find((x) => x.id === oaOgre.id).reaction === true)
+gm.send({ t: 'reaction.attack', from: ogre.id, target: runner.id, op: 'oatwice' })
+check('with the reaction spent there is no second one', !!(await gm.until((m) => m.t === 'nack' && m.op === 'oatwice')))
+gm.send({ t: 'combat.control', action: 'end' })
+gm.send({ t: 'token.delete', ids: [runner.id, ogre.id] })
+gm.send({ t: 'settings.set', patch: { automation: { damage: false, concentration: false, deathSaves: false, attacks: false } } })
+await sleep(200)
+
 // bad input
 gm.send({ t: 'token.update', id: aria.id, patch: { size: 9999 }, op: 'big' })
 check('out of range values are refused', !!(await gm.until((m) => m.t === 'nack' && m.op === 'big')))

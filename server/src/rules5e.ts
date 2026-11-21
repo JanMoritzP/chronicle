@@ -110,3 +110,24 @@ export function saveBonusOf(sheet: Sheet | undefined, ability: 'str' | 'dex' | '
   if (own != null) return own
   return modOf(sheet.abilities[ability]) + (sheet.kind === 'character' && sheet.profs?.saves.includes(ability) ? proficiencyOf(sheet) : 0)
 }
+
+// ---------- opportunity attacks ----------
+
+export interface Placed { id: string; x: number; y: number }
+
+/** The ones among `others` that stood next to a creature before it moved and no longer do after (next to: within a cell, corners count). */
+export function leftReach(before: Placed, after: Placed, others: Placed[], gridSize: number): string[] {
+  const near = (a: Placed, b: Placed) => Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y)) / gridSize <= 1.05
+  return others.filter((o) => o.id !== before.id && near(before, o) && !near(after, o)).map((o) => o.id)
+}
+
+export interface ParsedAttack { label: string; bonus: number; damage: { expr: string; type?: string }[] }
+
+/** The first melee attack written in a creature's actions ("+5 to hit ... 8 (1d8 + 4) slashing damage"), or the first attack of any kind. */
+export function firstAttack(sheet: Pick<Sheet, 'features'>): ParsedAttack | null {
+  const tries = sheet.features.actions.map((f) => ({ f, hit: /([+\-−]\d+)\s+to hit/i.exec(f.text) })).filter((x) => x.hit)
+  const pick = tries.find((x) => /melee/i.test(x.f.text)) ?? tries[0]
+  if (!pick) return null
+  const damage = [...pick.f.text.matchAll(/\((\d+d\d+(?:\s*[+\-−]\s*\d+)?)\)\s*([a-z]+)?\s*damage/gi)].map((m) => ({ expr: m[1].replace(/\s+/g, '').replace('−', '-'), ...(m[2] ? { type: m[2].toLowerCase() } : {}) }))
+  return { label: pick.f.name, bonus: Number(pick.hit![1].replace('−', '-')), damage }
+}

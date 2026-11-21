@@ -1501,3 +1501,41 @@ test('macro folders group macros by a name with a slash, and the panel can go on
   const panel = (await app.locator('.tt-panel').boundingBox())!, map = (await app.locator('.tt-canvas').boundingBox())!
   expect(panel.x).toBeLessThan(map.x)
 })
+
+test('walking away from a creature offers it an opportunity attack', { tag: '@feature:table.opportunity' }, async ({ app, world }) => {
+  await openTable(app)
+  await makeScene(app, 'Bridge')
+  // the table is driven over its own socket, as the GM, so the test needs no dragging
+  const result = await app.evaluate(async (worldId) => {
+    const sheet = { v: 1, ruleset: '5e', name: 'Troll', size: 'Large', type: 'giant', alignment: '', abilities: { str: 18, dex: 13, con: 20, int: 7, wis: 9, cha: 7 }, ac: { value: 15, note: '' }, hp: { max: 84, formula: '' }, speed: { walk: 30 }, saves: {}, skills: {}, senses: {}, vulnerabilities: '', resistances: '', immunities: '', conditionImmunities: '', languages: '', features: { traits: [], actions: [{ name: 'Claw', text: 'Melee Weapon Attack: +7 to hit, reach 5 ft., one target. Hit: 11 (2d6 + 4) slashing damage.' }], bonus: [], reactions: [], legendary: [] } }
+    const page = await (await fetch(`/api/workspaces/${worldId}/pages`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: 'Troll', props: { type: 'monster', sheet } }) })).json()
+    const sock = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/table/${worldId}`)
+    const msgs: any[] = []
+    sock.onmessage = (e) => msgs.push(JSON.parse(e.data))
+    await new Promise((r) => (sock.onopen = r))
+    const send = (m: unknown) => sock.send(JSON.stringify(m))
+    const wait = async (f: (m: any) => boolean) => { for (let i = 0; i < 100; i++) { const m = msgs.find(f); if (m) return m; await new Promise((r) => setTimeout(r, 30)) } return null }
+    const snap = await wait((m) => m.t === 'snapshot')
+    const sceneId = snap.sceneId
+    send({ t: 'token.add', sceneId, token: { name: 'Scout', x: 500, y: 500, owners: [snap.you.id] } })
+    send({ t: 'token.add', sceneId, token: { name: 'Troll', x: 570, y: 500 } })
+    const scout = (await wait((m) => m.t === 'token' && m.token.name === 'Scout')).token
+    const troll = (await wait((m) => m.t === 'token' && m.token.name === 'Troll')).token
+    send({ t: 'token.update', id: troll.id, patch: { pageId: page.id } })
+    send({ t: 'combat.add', tokenIds: [scout.id, troll.id] })
+    await new Promise((r) => setTimeout(r, 300))
+    const list = [...msgs].reverse().find((m) => m.t === 'combat').combat.list
+    send({ t: 'combat.init', id: list.find((x: any) => x.tokenId === scout.id).id, value: 20 })
+    send({ t: 'combat.init', id: list.find((x: any) => x.tokenId === troll.id).id, value: 5 })
+    send({ t: 'combat.control', action: 'start' })
+    await new Promise((r) => setTimeout(r, 300))
+    send({ t: 'token.move', moves: [{ id: scout.id, x: 500, y: 780 }] })
+    ;(window as any).__oa = sock
+    return { ok: true }
+  }, world.id)
+  expect(result.ok).toBe(true)
+  const banner = app.getByRole('alert', { name: 'Opportunity attacks' })
+  await expect(banner).toContainText('Troll can attack Scout')
+  await banner.getByRole('button', { name: 'Let it go' }).click()
+  await expect(banner).toHaveCount(0)
+})

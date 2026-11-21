@@ -122,7 +122,7 @@ Everything on this list must exist before we say "Roll20 replacement". Foundry f
 | **Handouts and journal** | Handouts (text and image) reveal to selected players, in-world notes visible to some, **linked to Chronicle pages** (a page can be pushed to the table as a handout, using the existing page view) | 7 |
 | | Roll tables (random encounters, loot, names), draw with or without replacement, results to chat, nested tables | 7 |
 | | Card decks (Deck of Many Things, initiative cards, tarot), hands, draw, discard, reshuffle | 7 |
-| **Audio** | Jukebox: playlists, loops, volume, per-scene ambient sound sources with radius (F), sound triggered at a spot, audio streams from a URL, player volume control, GM broadcast to all | 7 |
+| **Audio** | Jukebox: playlists, loops, volume, per-scene tracks, sound triggered at a spot, audio streams from a URL, player volume control, GM broadcast to all | 7 |
 | **Table and session** | Lobby, join with a link, ready check, kick, ban, mute, player colours and names, avatars, voice and video (embed a call link first, built-in WebRTC later) | 1, 9 |
 | | Session recording: replay of token movement and rolls, chat archive, auto-generated recap draft in a session page | 7, 9 |
 | | Camera: shared view toggle, GM spotlight, "follow token", minimap | 1 |

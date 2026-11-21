@@ -18,6 +18,7 @@ import { MapEditor } from './MapEditor'
 import { AssetLibrary } from './AssetLibrary'
 import { PinDialog } from './PinDialog'
 import { ReadyBanner } from './ReadyBanner'
+import { ThreatBanner } from './ThreatBanner'
 import { Replay } from './Replay'
 import { TokenActions, TokenBars, TokenLook } from './TokenLook'
 import { TablesAndDecks } from './TableDecks'
@@ -357,6 +358,7 @@ export function TableView() {
       </div>
       <HandoutViewer />
       <ReadyBanner />
+      <ThreatBanner />
       {pinAt && <PinDialog at={pinAt} onClose={() => setPinAt(null)} />}
       <AudioPlayer />
       {narrow && <MyStrip />}

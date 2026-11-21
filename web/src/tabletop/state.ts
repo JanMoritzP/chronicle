@@ -69,6 +69,8 @@ interface TableState {
   pins: Pin[]
   /** a ready check in progress: who answered, and how */
   ready: { answers: Record<string, boolean> } | null
+  /** creatures that could hit someone who just walked away from them */
+  threats: { from: string; fromName: string; target: string; targetName: string }[]
   lights: Light[]
   /** The explored area of this scene for this person, as a PNG in base64 */
   fog: string | null
@@ -85,7 +87,7 @@ interface TableState {
 
 export const useTable = create<TableState>(() => ({
   conn: 'closed', you: null, role: 'spectator', settings: DEFAULT_SETTINGS, scenes: [], active: null, sceneId: null, tokens: [], online: [], members: [],
-  selected: [], cursors: {}, rulers: {}, chat: [], unread: 0, combat: NO_COMBAT, drawings: [], tiles: [], selectedTile: null, walls: [], reveals: [], pins: [], ready: null, lights: [], fog: null, handouts: [], rolltables: [], decks: [], jukebox: { tracks: [], playing: [] }, triggers: [], shown: null, error: '',
+  selected: [], cursors: {}, rulers: {}, chat: [], unread: 0, combat: NO_COMBAT, drawings: [], tiles: [], selectedTile: null, walls: [], reveals: [], pins: [], ready: null, threats: [], lights: [], fog: null, handouts: [], rolltables: [], decks: [], jukebox: { tracks: [], playing: [] }, triggers: [], shown: null, error: '',
 }))
 
 type Listener = (m: any) => void
@@ -114,6 +116,7 @@ export function applyMessage(m: any) {
     case 'draw.cleared': set((s) => (m.sceneId === s.sceneId ? { drawings: [] } : {})); break
     case 'combat': set({ combat: m.combat }); break
     case 'ready': set({ ready: m.check }); break
+    case 'threat': set((s) => ({ threats: [...s.threats.filter((t) => !(t.from === m.from && t.target === m.target)), { from: m.from, fromName: m.fromName, target: m.target, targetName: m.targetName }].slice(-6) })); break
     case 'pins': set((s) => (m.sceneId === s.sceneId ? { pins: m.pins } : {})); break
     case 'reveals': set((s) => (m.sceneId === s.sceneId ? { reveals: m.reveals } : {})); break
     case 'walls': set((s) => (m.sceneId === s.sceneId ? { walls: m.walls } : {})); break
