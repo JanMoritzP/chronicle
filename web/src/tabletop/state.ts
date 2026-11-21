@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { GridSpec } from './grid'
-import type { Light, Wall } from './fog'
+import type { Light, Rect, Wall } from './fog'
 
 // What the browser knows about the table. The server is the only writer: this store only ever holds what it was told.
 
@@ -62,6 +62,8 @@ interface TableState {
   tiles: Tile[]
   selectedTile: string | null
   walls: Wall[]
+  /** areas the GM showed the players */
+  reveals: Rect[]
   lights: Light[]
   /** The explored area of this scene for this person, as a PNG in base64 */
   fog: string | null
@@ -78,7 +80,7 @@ interface TableState {
 
 export const useTable = create<TableState>(() => ({
   conn: 'closed', you: null, role: 'spectator', settings: DEFAULT_SETTINGS, scenes: [], active: null, sceneId: null, tokens: [], online: [], members: [],
-  selected: [], cursors: {}, rulers: {}, chat: [], unread: 0, combat: NO_COMBAT, drawings: [], tiles: [], selectedTile: null, walls: [], lights: [], fog: null, handouts: [], rolltables: [], decks: [], jukebox: { tracks: [], playing: [] }, triggers: [], shown: null, error: '',
+  selected: [], cursors: {}, rulers: {}, chat: [], unread: 0, combat: NO_COMBAT, drawings: [], tiles: [], selectedTile: null, walls: [], reveals: [], lights: [], fog: null, handouts: [], rolltables: [], decks: [], jukebox: { tracks: [], playing: [] }, triggers: [], shown: null, error: '',
 }))
 
 type Listener = (m: any) => void
@@ -100,12 +102,13 @@ export function applyMessage(m: any) {
         selected: m.sceneId === s.sceneId ? s.selected.filter((id) => m.tokens.some((t: Token) => t.id === id)) : [], cursors: {}, rulers: {},
       }))
       break
-    case 'view': set({ sceneId: m.sceneId, tokens: m.tokens, walls: m.walls ?? [], lights: m.lights ?? [], drawings: m.drawings ?? [], tiles: m.tiles ?? [], selectedTile: null, fog: m.fog ?? null, selected: [], cursors: {}, rulers: {} }); break
+    case 'view': set({ sceneId: m.sceneId, tokens: m.tokens, walls: m.walls ?? [], reveals: m.reveals ?? [], lights: m.lights ?? [], drawings: m.drawings ?? [], tiles: m.tiles ?? [], selectedTile: null, fog: m.fog ?? null, selected: [], cursors: {}, rulers: {} }); break
     case 'tiles': set((s) => (m.sceneId === s.sceneId ? { tiles: m.tiles, selectedTile: m.tiles.some((t: Tile) => t.id === s.selectedTile) ? s.selectedTile : null } : {})); break
     case 'draw': set((s) => (m.drawing.sceneId === s.sceneId ? { drawings: upsert(s.drawings, m.drawing) } : {})); break
     case 'draw.remove': set((s) => ({ drawings: s.drawings.filter((d) => !m.ids.includes(d.id)) })); break
     case 'draw.cleared': set((s) => (m.sceneId === s.sceneId ? { drawings: [] } : {})); break
     case 'combat': set({ combat: m.combat }); break
+    case 'reveals': set((s) => (m.sceneId === s.sceneId ? { reveals: m.reveals } : {})); break
     case 'walls': set((s) => (m.sceneId === s.sceneId ? { walls: m.walls } : {})); break
     case 'lights': set((s) => (m.sceneId === s.sceneId ? { lights: m.lights } : {})); break
     case 'fog.reset': set((s) => (m.sceneId === s.sceneId ? { fog: null } : {})); break
@@ -175,7 +178,7 @@ export function leaveTable() {
   const s = socket
   socket = null
   s?.close()
-  set({ conn: 'closed', you: null, role: 'spectator', scenes: [], tokens: [], sceneId: null, active: null, selected: [], cursors: {}, rulers: {}, online: [], members: [], chat: [], unread: 0, combat: NO_COMBAT, drawings: [], tiles: [], selectedTile: null, walls: [], lights: [], fog: null, handouts: [], rolltables: [], decks: [], jukebox: { tracks: [], playing: [] }, triggers: [], shown: null, error: '' })
+  set({ conn: 'closed', you: null, role: 'spectator', scenes: [], tokens: [], sceneId: null, active: null, selected: [], cursors: {}, rulers: {}, online: [], members: [], chat: [], unread: 0, combat: NO_COMBAT, drawings: [], tiles: [], selectedTile: null, walls: [], reveals: [], lights: [], fog: null, handouts: [], rolltables: [], decks: [], jukebox: { tracks: [], playing: [] }, triggers: [], shown: null, error: '' })
 }
 
 /** Sends a message; an operation id comes back with a refusal so the cause can be shown. */

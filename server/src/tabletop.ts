@@ -152,13 +152,13 @@ export const scenePatch = z.object({
 }).partial().strict()
 
 const point = z.object({ x: coord, y: coord })
-const wall = z.object({ x1: coord, y1: coord, x2: coord, y2: coord, kind: z.enum(['wall', 'door', 'secret', 'window']).default('wall') })
+const wall = z.object({ x1: coord, y1: coord, x2: coord, y2: coord, kind: z.enum(['wall', 'door', 'secret', 'window', 'oneway']).default('wall') })
 const tileImage = imageUrl.refine((v) => v.length > 0, 'a tile needs an image')
 export const tilePatch = z.object({
   x: coord, y: coord, w: z.number().min(8).max(20000), h: z.number().min(8).max(20000), rotation: z.number().finite().min(-3600).max(3600),
   layer: z.enum(['bg', 'overhead', 'gm']), locked: z.boolean(), hidden: z.boolean(), z: z.number().int().min(-1000).max(1000),
 }).partial().strict()
-export const wallPatch = z.object({ x1: coord, y1: coord, x2: coord, y2: coord, kind: z.enum(['wall', 'door', 'secret', 'window']), open: z.boolean() }).partial().strict()
+export const wallPatch = z.object({ x1: coord, y1: coord, x2: coord, y2: coord, kind: z.enum(['wall', 'door', 'secret', 'window', 'oneway']), open: z.boolean() }).partial().strict()
 const hpValue = z.number().int().min(-9999).max(99999)
 export const statPatch = z.object({
   hp: z.object({ value: hpValue, max: z.number().int().min(0).max(99999), temp: z.number().int().min(0).max(99999) }).partial().strict(),
@@ -199,6 +199,11 @@ export const clientMessage = z.discriminatedUnion('t', [
   z.object({ t: z.literal('wall.update'), id, patch: wallPatch }),
   z.object({ t: z.literal('wall.delete'), ids: z.array(id).min(1).max(200) }),
   z.object({ t: z.literal('door.toggle'), id }),
+  /** a locked door stays shut for the players until the GM unlocks it */
+  z.object({ t: z.literal('door.lock'), id, locked: z.boolean() }),
+  /** the GM shows the players an area, as if their tokens had seen it */
+  z.object({ t: z.literal('fog.reveal'), sceneId: id, x: coord, y: coord, w: z.number().min(5).max(40000), h: z.number().min(5).max(40000) }),
+  z.object({ t: z.literal('fog.unreveal'), id }),
   z.object({ t: z.literal('fog.save'), sceneId: id, mask: z.string().max(400_000) }),
   z.object({ t: z.literal('fog.reset'), sceneId: id }),
   z.object({ t: z.literal('combat.add'), tokenIds: z.array(id).min(1).max(100) }),

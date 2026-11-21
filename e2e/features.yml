@@ -493,6 +493,9 @@ areas:
       - id: table.token-look
         name: "Token shape, border, tint, flip, elevation, aura, extra bars, markers of your own and action buttons"
         files: [web/src/components/TokenLook.tsx, web/src/tabletop/engine.ts]
+      - id: table.walls-more
+        name: "Rectangle walls, one-way walls, locked doors, areas shown to the players, blindsight and truesight, moving lights"
+        files: [web/src/tabletop/engine.ts, web/src/tabletop/fog.ts, server/src/sight.ts]
       - id: table.fog
         name: "Fog of war and darkness are switched on per scene and kept"
         files: [web/src/components/Tabletop.tsx]

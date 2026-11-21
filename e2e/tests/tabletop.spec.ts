@@ -1206,3 +1206,54 @@ test('tokens: a look of their own, extra bars, markers, and buttons that run a m
   await expect(app.getByRole('group', { name: 'More bars' }).getByLabel('Mana value')).toHaveValue('4')
   await expect(app.getByRole('group', { name: 'Token look' }).getByLabel('Elevation')).toHaveValue('30')
 })
+
+test('walls: a rectangle in one drag, one-way walls, shown areas, and light that moves', { tag: '@feature:table.walls-more' }, async ({ app }) => {
+  await openTable(app)
+  await makeScene(app, 'Fort')
+  const canvas = app.locator('.tt-canvas canvas')
+  const box = (await canvas.boundingBox())!
+  const cx = box.x + box.width / 2, cy = box.y + box.height / 2
+  await app.getByRole('button', { name: 'Draw walls' }).click()
+  const kinds = app.getByRole('group', { name: 'Kind of wall' })
+  await expect(kinds).toContainText('One-way')
+  await app.getByRole('group', { name: 'Shape of wall drawing' }).getByRole('button', { name: 'Rectangle' }).click()
+  await app.mouse.move(cx - 120, cy - 80)
+  await app.mouse.down()
+  await app.mouse.move(cx + 120, cy + 80, { steps: 6 })
+  await app.mouse.up()
+  await app.getByRole('button', { name: 'Draw walls' }).click()
+  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Scene', exact: true }).click()
+  const chooser = app.waitForEvent('filechooser')
+  await app.getByRole('button', { name: 'Set map image' }).click()
+  await (await chooser).setFiles({ name: 'fort.png', mimeType: 'image/png', buffer: makePng(300, 150) })
+  await expect(async () => {
+    const download = app.waitForEvent('download', { timeout: 3000 })
+    await app.getByRole('button', { name: 'Export as Universal VTT' }).click()
+    const path = await (await download).path()
+    expect(JSON.parse((await import('node:fs')).readFileSync(path, 'utf8')).line_of_sight).toHaveLength(4)
+  }).toPass()
+
+  // areas shown to the players
+  const show = app.getByRole('button', { name: 'Show an area' })
+  await show.click()
+  await expect(show).toHaveClass(/on/)
+  await app.mouse.move(cx - 50, cy - 50)
+  await app.mouse.down()
+  await app.mouse.move(cx + 50, cy + 50, { steps: 4 })
+  await app.mouse.up()
+  await show.click()
+  await expect(app.getByRole('button', { name: 'Hide a shown area' })).toBeVisible()
+
+  // a token that sees in other ways, and a light that flickers
+  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Token', exact: true }).click()
+  await makeToken(app, 'Lantern bearer')
+  await expect(app.getByLabel('Blindsight')).toBeVisible()
+  await expect(app.getByLabel('Truesight')).toBeVisible()
+  await app.getByLabel('Bright light').fill('15')
+  await app.getByLabel('Bright light').press('Enter')
+  await expect(async () => {
+    await app.getByTitle('How the light moves').click()
+    await app.getByRole('option', { name: /Flickers/ }).click({ timeout: 1500 })
+    await expect(app.getByTitle('How the light moves')).toContainText('Flickers', { timeout: 1500 })
+  }).toPass()
+})

@@ -314,6 +314,8 @@ export function SightLight({ token }: { token: Token }) {
       <div className="tt-row">
         {field('Sees up to', vision.sight, (n) => save('vision', { ...vision, sight: n }), true)}
         {field('Darkvision', vision.dark ?? 0, (n) => save('vision', { ...vision, dark: n ?? 0 }))}
+        {field('Blindsight', (vision as { blind?: number }).blind ?? 0, (n) => save('vision', { ...vision, blind: n ?? 0 }))}
+        {field('Truesight', (vision as { true?: number }).true ?? 0, (n) => save('vision', { ...vision, true: n ?? 0 }))}
       </div>
       <div className="tt-row">
         {field('Bright light', light.bright ?? 0, (n) => save('light', { ...light, bright: n ?? 0 }))}
@@ -322,6 +324,11 @@ export function SightLight({ token }: { token: Token }) {
           <input className="tt-color" type="color" aria-label="Light colour" value={/^#[0-9a-fA-F]{6}$/.test(light.color ?? '') ? light.color : '#ffd9a0'} onChange={(e) => save('light', { ...light, color: e.target.value })} />
         </label>
         {light.color && <button className="btn sm" onClick={() => { const { color: _c, ...rest } = light; save('light', rest) }}>No colour</button>}
+        <label>Moves
+          <Select className="input" value={(light as { animation?: string }).animation ?? ''} onChange={(v) => save('light', { ...light, ...(v ? { animation: v } : { animation: undefined }) })} title="How the light moves">
+            <option value="">Steady</option><option value="flicker">Flickers like a torch</option><option value="pulse">Pulses</option>
+          </Select>
+        </label>
       </div>
     </div>
   )

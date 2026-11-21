@@ -573,6 +573,17 @@ const migrations: (string | ((d: Database.Database) => void))[] = [
   ALTER TABLE scenes ADD COLUMN grid_opacity REAL NOT NULL DEFAULT 0.28;
   ALTER TABLE scenes ADD COLUMN ambient TEXT NOT NULL DEFAULT '';
   `,
+  // locked doors, and areas the GM has shown to the players
+  `
+  ALTER TABLE scene_walls ADD COLUMN locked INTEGER NOT NULL DEFAULT 0;
+  CREATE TABLE scene_reveals (
+    id TEXT PRIMARY KEY,
+    scene_id TEXT NOT NULL REFERENCES scenes(id) ON DELETE CASCADE,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    x REAL NOT NULL, y REAL NOT NULL, w REAL NOT NULL, h REAL NOT NULL
+  );
+  CREATE INDEX reveals_scene ON scene_reveals(scene_id);
+  `,
 ]
 
 export const SCHEMA_VERSION = migrations.length

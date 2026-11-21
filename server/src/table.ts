@@ -110,10 +110,12 @@ function sightFor(c: Conn, sceneId: string | null): Sight | null {
   const sc = sceneRow(sceneId, c.ws)
   if (!sc || !(sc.fog || sc.darkness > 0)) return null
   const walls = (db.prepare('SELECT x1, y1, x2, y2, kind, open FROM scene_walls WHERE scene_id = ?').all(sceneId) as WallDb[])
-    .filter((w) => w.kind === 'wall' || w.kind === 'secret' || (w.kind === 'door' && !w.open))
+    .filter((w) => w.kind === 'wall' || w.kind === 'secret' || w.kind === 'oneway' || (w.kind === 'door' && !w.open))
+    .map((w) => ({ x1: w.x1, y1: w.y1, x2: w.x2, y2: w.y2, ...(w.kind === 'oneway' ? { oneway: true } : {}) }))
+  const reveals = revealsOf(c.ws, sceneId)
   const tokens = (db.prepare('SELECT id, x, y, owners, data FROM tokens WHERE scene_id = ?').all(sceneId) as { id: string; x: number; y: number; owners: string; data: string }[])
     .map((t): SightToken => ({ id: t.id, x: t.x, y: t.y, owners: parse<string[]>(t.owners, []), data: parse<SightToken['data']>(t.data, {}) }))
-  return buildSight({ width: sc.width, height: sc.height, gridSize: sc.grid_size, dist: sc.dist, fog: !!sc.fog, darkness: sc.darkness }, walls, tokens, c.user.id, stateOf(c.ws).settings.sharedVision)
+  return buildSight({ width: sc.width, height: sc.height, gridSize: sc.grid_size, dist: sc.dist, fog: !!sc.fog, darkness: sc.darkness }, walls, tokens, c.user.id, stateOf(c.ws).settings.sharedVision, reveals)
 }
 
 /** May this connection be told about the token: allowed to see it at all (hidden ones), and in sight where there is fog. */
@@ -127,12 +129,15 @@ function tokensFor(c: Conn, scene: string | null) {
   return list.map((t) => redact(c.role, c.user.id, t))
 }
 
-interface WallDb { id: string; x1: number; y1: number; x2: number; y2: number; kind: string; open: number }
+interface WallDb { id: string; x1: number; y1: number; x2: number; y2: number; kind: string; open: number; locked?: number }
+/** Areas of a scene the GM has shown to the players. */
+const revealsOf = (ws: string, scene: string | null) => (scene ? (db.prepare('SELECT id, x, y, w, h FROM scene_reveals WHERE scene_id = ? AND workspace_id = ?').all(scene, ws) as { id: string; x: number; y: number; w: number; h: number }[]) : [])
+const sendReveals = (ws: string, sceneId: string) => { const reveals = revealsOf(ws, sceneId); for (const c of inWorld(ws)) if (c.scene === sceneId) send(c, { t: 'reveals', sceneId, reveals }); scheduleSight(ws, sceneId) }
 /** Everyone gets the walls (their screen needs them to work out what is hidden); a secret door looks like any other wall until the GM changes it. */
 function wallsFor(c: Conn, scene: string | null) {
   if (!scene) return []
-  return (db.prepare('SELECT id, x1, y1, x2, y2, kind, open FROM scene_walls WHERE scene_id = ? AND workspace_id = ?').all(scene, c.ws) as WallDb[])
-    .map((w) => ({ id: w.id, x1: w.x1, y1: w.y1, x2: w.x2, y2: w.y2, kind: w.kind === 'secret' && c.role !== 'gm' ? 'wall' : w.kind, open: !!w.open && !(w.kind === 'secret' && c.role !== 'gm') }))
+  return (db.prepare('SELECT id, x1, y1, x2, y2, kind, open, locked FROM scene_walls WHERE scene_id = ? AND workspace_id = ?').all(scene, c.ws) as WallDb[])
+    .map((w) => ({ id: w.id, locked: !!w.locked, x1: w.x1, y1: w.y1, x2: w.x2, y2: w.y2, kind: w.kind === 'secret' && c.role !== 'gm' ? 'wall' : w.kind, open: !!w.open && !(w.kind === 'secret' && c.role !== 'gm') }))
 }
 /** Light given off by tokens, hidden ones too: a torch in the dark is seen whoever carries it. */
 function lightsOf(ws: string, scene: string | null) {
@@ -239,7 +244,7 @@ function tilesFor(c: Conn, scene: string | null) {
 }
 const sendTiles = (ws: string, sceneId: string) => { for (const c of inWorld(ws)) if (c.scene === sceneId) send(c, { t: 'tiles', sceneId, tiles: tilesFor(c, sceneId) }) }
 
-const sceneState = (c: Conn) => ({ walls: wallsFor(c, c.scene), lights: lightsOf(c.ws, c.scene), fog: fogOf(c, c.scene), drawings: drawingsFor(c, c.scene), tiles: tilesFor(c, c.scene) })
+const sceneState = (c: Conn) => ({ walls: wallsFor(c, c.scene), reveals: revealsOf(c.ws, c.scene), lights: lightsOf(c.ws, c.scene), fog: fogOf(c, c.scene), drawings: drawingsFor(c, c.scene), tiles: tilesFor(c, c.scene) })
 
 function sendView(c: Conn) {
   send(c, { t: 'view', sceneId: c.scene, tokens: tokensFor(c, c.scene), ...sceneState(c) })
@@ -599,8 +604,8 @@ async function handle(c: Conn, m: ClientMessage) {
       db.transaction(() => {
         db.prepare(`INSERT INTO scenes(id,workspace_id,name,sort,bg,width,height,grid,grid_size,unit,dist,diagonal,fog,darkness,weather,folder,notes,grid_color,grid_opacity,ambient,created_at,updated_at)
           SELECT ?,workspace_id,?,?,bg,width,height,grid,grid_size,unit,dist,diagonal,fog,darkness,weather,folder,notes,grid_color,grid_opacity,ambient,?,? FROM scenes WHERE id = ?`).run(id, `${src.name} copy`.slice(0, 120), sort, t, t, src.id)
-        for (const w of db.prepare('SELECT x1,y1,x2,y2,kind,open FROM scene_walls WHERE scene_id = ?').all(src.id) as { x1: number; y1: number; x2: number; y2: number; kind: string; open: number }[])
-          db.prepare('INSERT INTO scene_walls(id,scene_id,workspace_id,x1,y1,x2,y2,kind,open) VALUES(?,?,?,?,?,?,?,?,?)').run(uid(), id, ws, w.x1, w.y1, w.x2, w.y2, w.kind, w.open)
+        for (const w of db.prepare('SELECT x1,y1,x2,y2,kind,open,locked FROM scene_walls WHERE scene_id = ?').all(src.id) as { x1: number; y1: number; x2: number; y2: number; kind: string; open: number; locked: number }[])
+          db.prepare('INSERT INTO scene_walls(id,scene_id,workspace_id,x1,y1,x2,y2,kind,open,locked) VALUES(?,?,?,?,?,?,?,?,?,?)').run(uid(), id, ws, w.x1, w.y1, w.x2, w.y2, w.kind, w.open, w.locked)
         for (const tl of db.prepare('SELECT image,x,y,w,h,rotation,layer,locked,hidden,z FROM scene_tiles WHERE scene_id = ?').all(src.id) as Record<string, any>[])
           db.prepare('INSERT INTO scene_tiles(id,scene_id,workspace_id,image,x,y,w,h,rotation,layer,locked,hidden,z) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)').run(uid(), id, ws, tl.image, tl.x, tl.y, tl.w, tl.h, tl.rotation, tl.layer, tl.locked, tl.hidden, tl.z)
         for (const tk of db.prepare('SELECT name,x,y,size,rotation,image,color,page_id,hidden,locked,owners,z,data FROM tokens WHERE scene_id = ?').all(src.id) as Record<string, any>[])
@@ -1037,8 +1042,30 @@ async function handle(c: Conn, m: ClientMessage) {
       const w = db.prepare('SELECT scene_id AS s, kind, open FROM scene_walls WHERE id = ? AND workspace_id = ?').get(m.id, ws) as { s: string; kind: string; open: number } | undefined
       if (!w || (w.kind !== 'door' && w.kind !== 'secret')) return nack(c, m, 'that is not a door')
       if (w.kind === 'secret' && !gm) return nack(c, m, 'not allowed')
+      if (!gm && db.prepare('SELECT locked FROM scene_walls WHERE id = ?').get(m.id) && (db.prepare('SELECT locked FROM scene_walls WHERE id = ?').get(m.id) as { locked: number }).locked) return nack(c, m, 'The door is locked.')
       db.prepare('UPDATE scene_walls SET open = ? WHERE id = ?').run(w.open ? 0 : 1, m.id)
       return sendWalls(ws, w.s)
+    }
+    case 'door.lock': {
+      if (!gm) return nack(c, m, 'only the GM can do that')
+      const w = db.prepare('SELECT scene_id AS s, kind FROM scene_walls WHERE id = ? AND workspace_id = ?').get(m.id, ws) as { s: string; kind: string } | undefined
+      if (!w || (w.kind !== 'door' && w.kind !== 'secret')) return nack(c, m, 'that is not a door')
+      db.prepare('UPDATE scene_walls SET locked = ?' + (m.locked ? ', open = 0' : '') + ' WHERE id = ?').run(m.locked ? 1 : 0, m.id)
+      return sendWalls(ws, w.s)
+    }
+    case 'fog.reveal': {
+      if (!gm) return nack(c, m, 'only the GM can do that')
+      if (!sceneRow(m.sceneId, ws)) return nack(c, m, 'no such scene')
+      if (revealsOf(ws, m.sceneId).length >= 200) return nack(c, m, 'That is as many shown areas as a scene can keep.')
+      db.prepare('INSERT INTO scene_reveals(id,scene_id,workspace_id,x,y,w,h) VALUES(?,?,?,?,?,?,?)').run(uid(), m.sceneId, ws, m.x, m.y, m.w, m.h)
+      return sendReveals(ws, m.sceneId)
+    }
+    case 'fog.unreveal': {
+      if (!gm) return nack(c, m, 'only the GM can do that')
+      const r = db.prepare('SELECT scene_id AS s FROM scene_reveals WHERE id = ? AND workspace_id = ?').get(m.id, ws) as { s: string } | undefined
+      if (!r) return nack(c, m, 'no such area')
+      db.prepare('DELETE FROM scene_reveals WHERE id = ?').run(m.id)
+      return sendReveals(ws, r.s)
     }
     case 'fog.save': {
       if (c.role === 'spectator' || c.scene !== m.sceneId) return

@@ -81,6 +81,9 @@ export function TableView() {
       onRuler: (points) => { sendTable({ t: 'ruler', points }) },
       onWallAdd: (walls) => { const id = useTable.getState().sceneId; if (id) sendTable({ t: 'wall.add', sceneId: id, walls }) },
       onWallErase: (id) => { sendTable({ t: 'wall.delete', ids: [id] }) },
+      onDoorLock: (id, locked) => { sendTable({ t: 'door.lock', id, locked }) },
+      onReveal: (r) => { const id = useTable.getState().sceneId; if (id) sendTable({ t: 'fog.reveal', sceneId: id, x: r.x, y: r.y, w: r.w, h: r.h }) },
+      onUnreveal: (id) => { sendTable({ t: 'fog.unreveal', id }) },
       onWallMove: (updates) => { for (const u of updates) sendTable({ t: 'wall.update', id: u.id, patch: u.patch }) },
       onDoor: (id) => { sendTable({ t: 'door.toggle', id }) },
       onDraw: (d) => { const id = useTable.getState().sceneId; if (id && d.points.length) sendTable({ t: 'draw.add', sceneId: id, kind: d.kind, points: d.points, color: d.color, width: d.width, ...(d.fill ? { fill: d.fill } : {}), gmOnly: gmOnlyRef.current && useTable.getState().role === 'gm' }) },
@@ -109,6 +112,7 @@ export function TableView() {
       viewer()
       push()
       e.setWalls(useTable.getState().walls)
+      e.setReveals(useTable.getState().reveals)
       e.setTriggers(useTable.getState().triggers.filter((t) => !t.scene || t.scene === useTable.getState().sceneId).filter((t) => t.event === 'enter'))
       e.setLights(useTable.getState().lights)
       e.setTokens(useTable.getState().tokens)
@@ -128,6 +132,7 @@ export function TableView() {
         if (s.tiles !== prev.tiles) e.setTiles(s.tiles)
         if (s.selectedTile !== prev.selectedTile) e.setSelectedTile(s.selectedTile)
         if (s.walls !== prev.walls) e.setWalls(s.walls)
+        if (s.reveals !== prev.reveals) e.setReveals(s.reveals)
         if (s.triggers !== prev.triggers || s.sceneId !== prev.sceneId) e.setTriggers(s.triggers.filter((t) => !t.scene || t.scene === s.sceneId).filter((t) => t.event === 'enter'))
         if (s.lights !== prev.lights) e.setLights(s.lights)
         if (s.sceneId !== prev.sceneId || s.fog !== prev.fog) e.setExplored(s.fog)
@@ -149,7 +154,8 @@ export function TableView() {
     gmOnlyRef.current = gmOnly
     engine.current?.setDrawStyle({ kind: draw.kind, color: draw.color, width: draw.width, fill: draw.fill ? draw.color : '' })
   }, [draw, gmOnly])
-  const [wallKind, setWallKind] = useState<'wall' | 'door' | 'secret' | 'window'>('wall')
+  const [wallKind, setWallKind] = useState<'wall' | 'door' | 'secret' | 'window' | 'oneway'>('wall')
+  const [wallShape, setWallShape] = useState<'line' | 'rect'>('line')
   // the GM can look at the scene as a player (or one token) sees it: fog, darkness, secret doors and hidden tokens, without a decoy account
   const [previewKey, setPreviewKey] = useState('')
   // views the GM wants to come back to (a room, the stairs): kept in this browser, per scene
@@ -171,6 +177,7 @@ export function TableView() {
   useEffect(() => { engine.current?.setPreview(previewing ? { users: previewing.users, tokens: previewing.tokens } : null) }, [previewing?.key, previewing?.users.join(), previewing?.tokens.join(), sceneId])
   useEffect(() => { engine.current?.setTool(tool) }, [tool])
   useEffect(() => { engine.current?.setWallKind(wallKind) }, [wallKind])
+  useEffect(() => { engine.current?.setWallShape(wallShape) }, [wallShape])
 
   const tokens = useTable((s) => s.tokens)
   const selected = useTable((s) => s.selected)
@@ -248,9 +255,21 @@ export function TableView() {
         {canDraw && <button className={`btn sm square${tool === 'erase' ? ' on' : ''}`} title="Remove a drawing (or a wall) by clicking it" aria-label="Erase" onClick={() => setTool(tool === 'erase' ? 'select' : 'erase')}><Eraser size={14} /></button>}
         {gm && scene && <button className="btn sm" title="Remove every drawing on this scene" onClick={async () => { if (await confirmDialog('Every drawing on this scene is removed for everyone.', { title: 'Clear drawings', okLabel: 'Clear', danger: true })) sendTable({ t: 'draw.clear', sceneId: scene.id }) }}>Clear drawings</button>}
         {gm && <button className={`btn sm square${tool === 'wall' ? ' on' : ''}`} title="Draw walls, doors and windows. Click to place points, double-click or Enter to finish." aria-label="Draw walls" onClick={() => setTool(tool === 'wall' ? 'select' : 'wall')}><BrickWall size={14} /></button>}
+        {gm && scene && (
+          <>
+            <button className={`btn sm${tool === 'reveal' ? ' on' : ''}`} title="Drag a rectangle to show that part of the map to the players" aria-label="Show an area" onClick={() => setTool(tool === 'reveal' ? 'select' : 'reveal')}>Show area</button>
+            <button className={`btn sm${tool === 'conceal' ? ' on' : ''}`} title="Click an area you showed to take it back" aria-label="Hide a shown area" onClick={() => setTool(tool === 'conceal' ? 'select' : 'conceal')}>Hide area</button>
+          </>
+        )}
         {gm && tool === 'wall' && (
           <span className="seg tt-kinds" role="group" aria-label="Kind of wall">
-            {(['wall', 'door', 'secret', 'window'] as const).map((k) => <button key={k} className={wallKind === k ? 'on' : ''} onClick={() => setWallKind(k)}>{k === 'wall' ? 'Wall' : k === 'door' ? 'Door' : k === 'secret' ? 'Secret door' : 'Window'}</button>)}
+            {(['wall', 'door', 'secret', 'window', 'oneway'] as const).map((k) => <button key={k} className={wallKind === k ? 'on' : ''} onClick={() => setWallKind(k)}>{k === 'wall' ? 'Wall' : k === 'door' ? 'Door' : k === 'secret' ? 'Secret door' : k === 'window' ? 'Window' : 'One-way'}</button>)}
+          </span>
+        )}
+        {gm && tool === 'wall' && (
+          <span className="seg tt-kinds" role="group" aria-label="Shape of wall drawing">
+            <button className={wallShape === 'line' ? 'on' : ''} onClick={() => setWallShape('line')}>Lines</button>
+            <button className={wallShape === 'rect' ? 'on' : ''} onClick={() => setWallShape('rect')}>Rectangle</button>
           </span>
         )}
         <button className="btn sm square" title="Zoom in" aria-label="Zoom in" onClick={() => engine.current?.zoomBy(1.25)}><Plus size={14} /></button>

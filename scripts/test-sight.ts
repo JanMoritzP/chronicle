@@ -41,6 +41,17 @@ check('without shared vision a player only sees through their own tokens', names
 check('with it they also see what a friend sees', names(visibleTokens(scene(), wallMid, party, 'p1', true)) === 'a,b,foe,near')
 check('a person with no token sees through the tokens of the party', names(visibleTokens(scene(), wallMid, party, 'nobody', true)) === 'a,b,foe,near')
 
+// one-way walls, areas the GM showed, and the other ways of seeing in the dark
+const oneWay = [{ x1: 500, y1: 0, x2: 500, y2: 600, oneway: true }]
+const pair = [tok('a', 200, 300, ['p1']), tok('beyond', 800, 300), tok('b', 800, 100, ['p2'])]
+check('a one-way wall blocks the view from one side', names(visibleTokens(scene(), oneWay, pair, 'p1')) === 'a')
+check('and not from the other', names(visibleTokens(scene(), oneWay, pair, 'p2')).includes('a'))
+check('an area the GM showed is seen whatever the walls', names(visibleTokens(scene(), wallBetween, [tok('hero', 200, 300, ['p1']), tok('far', 800, 300)], 'p1', false, [{ x: 700, y: 200, w: 200, h: 200 }])) === 'far,hero')
+check('but not a token outside it', !names(visibleTokens(scene(), wallBetween, [tok('hero', 200, 300, ['p1']), tok('far', 800, 300)], 'p1', false, [{ x: 0, y: 0, w: 100, h: 100 }])).includes('far'))
+const sensed = [tok('hero', 200, 300, ['p1'], { vision: { blind: 30 } }), tok('near', 300, 300), tok('far', 900, 300)]
+check('blindsight sees in the dark within its reach', names(visibleTokens(dim, [], sensed, 'p1')) === 'hero,near')
+check('so does truesight', names(visibleTokens(dim, [], [tok('hero', 200, 300, ['p1'], { vision: { true: 30 } }), tok('near', 300, 300)], 'p1')) === 'hero,near')
+
 // the server copy of the maths matches the one the screen uses
 const walls = [wall(100, 100, 400, 120), wall(400, 120, 420, 400), wall(50, 300, 300, 350)]
 const a = serverVisibility({ x: 250, y: 220 }, walls, { x: 0, y: 0, w: 600, h: 500 }, 180)

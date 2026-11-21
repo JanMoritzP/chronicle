@@ -1,5 +1,5 @@
 import { Application, Color, Container, Graphics, Sprite, Text, Texture } from 'pixi.js'
-import { FogLayer, type Light, type Wall } from './fog'
+import { FogLayer, type Light, type Rect, type Wall } from './fog'
 import type { DrawKind, Drawing, Tile } from './state'
 import { formatDistance, hexCentres, hexCorners, measure, snap, tokenPixels, type Pt } from './grid'
 import type { Cursor, Ruler, Scene, Token } from './state'
@@ -19,6 +19,10 @@ export interface Hooks {
   /** wall ends were dragged somewhere else */
   onWallMove(updates: { id: string; patch: Partial<Pick<Wall, 'x1' | 'y1' | 'x2' | 'y2'>> }[]): void
   onDoor(id: string): void
+  onDoorLock(id: string, locked: boolean): void
+  /** the GM showed an area to the players, or took one back */
+  onReveal(r: { x: number; y: number; w: number; h: number }): void
+  onUnreveal(id: string): void
   onExplored(png: string): void
   onDraw(d: { kind: DrawKind; points: Pt[]; color: string; width: number; fill: string }): void
   onText(p: Pt, done: (text: string | null) => void): void
@@ -27,7 +31,7 @@ export interface Hooks {
   onTileMove(id: string, x: number, y: number): void
   colorOf(userId: string): number
 }
-export type Tool = 'select' | 'ruler' | 'wall' | 'erase' | 'draw'
+export type Tool = 'select' | 'ruler' | 'wall' | 'erase' | 'draw' | 'reveal' | 'conceal'
 
 const textures = new Map<string, Promise<Texture | null>>()
 /** Images come from our own server behind the login cookie, so they are fetched rather than handed to the loader by address. */
@@ -88,6 +92,9 @@ export class TableEngine {
   private wallPreview = new Graphics()
   private walls: Wall[] = []
   private wallKind: Wall['kind'] = 'wall'
+  private wallShape: 'line' | 'rect' = 'line'
+  private reveals: Rect[] = []
+  private revealG = new Graphics()
   private wallPoly: Pt[] = []
   private lastClick = { t: 0, x: 0, y: 0 }
   private fog!: FogLayer
@@ -100,7 +107,7 @@ export class TableEngine {
   private get gmView() { return this.me.gm && !this.preview }
   private shared = false
   private isViewer(t: Token) { const p = this.preview; return p ? p.tokens.includes(t.id) || t.owners.some((o) => p.users.includes(o)) : this.shared ? t.owners.length > 0 : t.owners.includes(this.me.id) }
-  private drag: null | { kind: 'pan' | 'tokens' | 'ruler' | 'marquee' | 'draw' | 'tile' | 'wallend'; start: Pt; screen: Pt; origins?: Map<string, Pt>; lead?: string; moved: boolean; sent: number; /** wall ends that move together, and where they went */ ends?: { id: string; end: 1 | 2 }[]; to?: Pt } = null
+  private drag: null | { kind: 'pan' | 'tokens' | 'ruler' | 'marquee' | 'draw' | 'tile' | 'wallend' | 'wallrect' | 'revealrect'; start: Pt; screen: Pt; origins?: Map<string, Pt>; lead?: string; moved: boolean; sent: number; /** wall ends that move together, and where they went */ ends?: { id: string; end: 1 | 2 }[]; to?: Pt } = null
   private pointers = new Map<number, Pt>()
   private pinch: null | { dist: number; scale: number } = null
   private longPress: number | undefined
@@ -121,7 +128,7 @@ export class TableEngine {
     this.fog = new FogLayer(this.app)
     this.fog.onExplored = (png) => { if (!this.preview) this.hooks.onExplored(png) }
     this.fog.onDrawn = () => this.poke()
-    this.world.addChild(this.bg, this.gridG, this.tileBg, this.drawLayer, this.tokenLayer, this.tileOver, this.tileGm, this.ambientG, this.fog.view, this.wallG, this.triggerG, this.others, this.ruleG, this.ruleLabel, this.overlay, this.wallPreview, this.strokeG, this.tileSel, this.marquee)
+    this.world.addChild(this.bg, this.gridG, this.tileBg, this.drawLayer, this.tokenLayer, this.tileOver, this.tileGm, this.ambientG, this.fog.view, this.revealG, this.wallG, this.triggerG, this.others, this.ruleG, this.ruleLabel, this.overlay, this.wallPreview, this.strokeG, this.tileSel, this.marquee)
     this.ruleLabel.visible = false
     this.app.stage.addChild(this.world, this.weatherG)
     this.weatherG.eventMode = 'none'
@@ -457,6 +464,17 @@ export class TableEngine {
   setLights(lights: Light[]) { this.poke(); if (this.ready) this.fog.setLights(lights) }
   setExplored(png: string | null) { this.poke(); this.explored = png; if (this.ready && !this.preview) void this.fog.loadExplored(png) }
   setWallKind(kind: Wall['kind']) { this.wallKind = kind }
+  /** Walls drawn as lines one after another, or as a rectangle in one drag. */
+  setWallShape(shape: 'line' | 'rect') { this.wallShape = shape }
+  /** Areas the GM showed the players, drawn for the GM as green outlines. */
+  setReveals(list: Rect[]) { this.poke(); this.reveals = list; this.fog.setReveals(list); this.drawReveals() }
+  private drawReveals() {
+    const g = this.revealG
+    g.clear()
+    if (!this.ready || !this.me.gm || this.preview) return
+    const k = 1 / this.world.scale.x
+    for (const r of this.reveals) g.rect(r.x, r.y, r.w, r.h).fill({ color: 0x4caf50, alpha: 0.08 }).stroke({ width: 2 * k, color: 0x4caf50, alpha: 0.7 })
+  }
   setTiles(list: Tile[]) {
     this.poke()
     this.tiles = list
@@ -618,7 +636,7 @@ export class TableEngine {
     const mine = [...this.tokens.values()].filter((t) => this.isViewer(t))
     this.fog.setViewers(mine.map((t) => {
       const vis = (t.data.vision ?? {}) as { sight?: number | null; dark?: number }
-      return { id: t.id, x: t.x, y: t.y, sight: vis.sight ?? null, dark: vis.dark ?? 0 }
+      return { id: t.id, x: t.x, y: t.y, sight: vis.sight ?? null, dark: Math.max(vis.dark ?? 0, (vis as { blind?: number }).blind ?? 0, (vis as { true?: number }).true ?? 0) }
     }))
     window.setTimeout(() => this.applyTokenVisibility(), 40)
   }
@@ -679,8 +697,16 @@ export class TableEngine {
       const door = w.kind === 'door' || w.kind === 'secret'
       // players see doors (so they can use them) and nothing else
       if (!this.gmView && !door) continue
-      const color = w.kind === 'wall' ? 0xf5f0e6 : w.kind === 'door' ? 0xe08a2e : w.kind === 'secret' ? 0xb36bff : 0x6cc7ff
+      const color = w.kind === 'wall' ? 0xf5f0e6 : w.kind === 'door' ? (w.locked ? 0xc0392b : 0xe08a2e) : w.kind === 'secret' ? 0xb36bff : w.kind === 'oneway' ? 0x5dd39e : 0x6cc7ff
       g.moveTo(w.x1, w.y1).lineTo(w.x2, w.y2).stroke({ width: (door ? 5 : 3) * k, color, alpha: w.open ? 0.35 : 0.95 })
+      const mx = (w.x1 + w.x2) / 2, my = (w.y1 + w.y2) / 2
+      if (w.kind === 'oneway') {
+        // an arrow to the side that can see through
+        const len = Math.hypot(w.x2 - w.x1, w.y2 - w.y1) || 1, nx = (w.y2 - w.y1) / len, ny = -(w.x2 - w.x1) / len, s = 9 * k
+        g.moveTo(mx, my).lineTo(mx + nx * s * 1.6, my + ny * s * 1.6).stroke({ width: 2 * k, color })
+        g.poly([mx + nx * s * 2.2, my + ny * s * 2.2, mx + nx * s * 1.3 - ny * s * 0.6, my + ny * s * 1.3 + nx * s * 0.6, mx + nx * s * 1.3 + ny * s * 0.6, my + ny * s * 1.3 - nx * s * 0.6]).fill({ color })
+      }
+      if (door && w.locked) g.roundRect(mx - 4 * k, my - 4 * k, 8 * k, 8 * k, 2 * k).fill({ color: 0xffffff }).stroke({ width: 1.5 * k, color: 0x7a1f14 })
       if (editing && this.me.gm) { g.circle(w.x1, w.y1, 4 * k).fill({ color }); g.circle(w.x2, w.y2, 4 * k).fill({ color }) }
     }
   }
@@ -796,8 +822,24 @@ export class TableEngine {
       return
     }
     const world = this.toWorld(screen)
+    if ((e.ctrlKey || e.metaKey) && this.me.gm && !this.preview) {
+      // Ctrl-click on a door locks it or unlocks it
+      const door = this.nearWall(world, (w) => w.kind === 'door' || w.kind === 'secret')
+      if (door) { this.hooks.onDoorLock(door.id, !door.locked); return }
+    }
     if (e.altKey) return this.hooks.onPing(world)
     const pan = e.button === 1 || e.button === 2
+    if (!pan && this.me.gm && this.tool === 'wall' && this.wallShape === 'rect') {
+      const start = this.snapWall(world)
+      this.drag = { kind: 'wallrect', start, screen, moved: false, sent: 0 }
+      return
+    }
+    if (!pan && this.me.gm && this.tool === 'reveal') { this.drag = { kind: 'revealrect', start: world, screen, moved: false, sent: 0 }; return }
+    if (!pan && this.me.gm && this.tool === 'conceal') {
+      const r = [...this.reveals].reverse().find((x) => world.x >= x.x && world.x <= x.x + x.w && world.y >= x.y && world.y <= x.y + x.h)
+      if (r?.id) this.hooks.onUnreveal(r.id)
+      return
+    }
     if (!pan && this.me.gm && this.tool === 'wall' && !this.wallPoly.length) {
       // grabbing the end of a wall moves it, and every other wall that ends at the same point moves with it
       const reach = 10 / this.world.scale.x
@@ -927,6 +969,13 @@ export class TableEngine {
         if (now - d.sent > 70) { d.sent = now; this.hooks.onRuler(path) }
         break
       }
+      case 'wallrect':
+      case 'revealrect': {
+        const to = d.kind === 'wallrect' ? this.snapWall(world) : world
+        const k = 1 / this.world.scale.x
+        this.wallPreview.clear().rect(Math.min(d.start.x, to.x), Math.min(d.start.y, to.y), Math.abs(to.x - d.start.x), Math.abs(to.y - d.start.y)).stroke({ width: 3 * k, color: d.kind === 'wallrect' ? 0xffd23f : 0x4caf50, alpha: 0.9 })
+        break
+      }
       case 'wallend': {
         // snap to the grid or to another wall's end, but not to the ends being moved
         const moving = new Set(d.ends!.map((e) => e.id))
@@ -1004,6 +1053,16 @@ export class TableEngine {
       const end = this.scene ? snapPoint(this.toWorld(this.local(e)), this.scene) : this.toWorld(this.local(e))
       this.rulerBase = [...this.rulerBase, end]
     } else if (d.kind === 'tokens' || d.kind === 'ruler') { if (d.kind === 'ruler') this.rulerBase = []; this.ruleG.clear(); this.ruleLabel.visible = false; if (d.moved) this.hooks.onRuler(null) }
+    if ((d.kind === 'wallrect' || d.kind === 'revealrect')) {
+      this.wallPreview.clear()
+      const w = this.toWorld(this.local(e))
+      const to = d.kind === 'wallrect' ? this.snapWall(w) : w
+      const [x0, x1, y0, y1] = [Math.min(d.start.x, to.x), Math.max(d.start.x, to.x), Math.min(d.start.y, to.y), Math.max(d.start.y, to.y)]
+      if (d.moved && x1 - x0 > 4 && y1 - y0 > 4) {
+        if (d.kind === 'wallrect') this.hooks.onWallAdd([{ x1: x0, y1: y0, x2: x1, y2: y0, kind: this.wallKind }, { x1: x1, y1: y0, x2: x1, y2: y1, kind: this.wallKind }, { x1: x1, y1: y1, x2: x0, y2: y1, kind: this.wallKind }, { x1: x0, y1: y1, x2: x0, y2: y0, kind: this.wallKind }])
+        else this.hooks.onReveal({ x: x0, y: y0, w: x1 - x0, h: y1 - y0 })
+      }
+    }
     // a click on the end of a wall, without dragging, starts a new wall from that point as before
     if (d.kind === 'wallend' && !d.moved) this.wallPoly.push(d.start)
     if (d.kind === 'wallend' && d.moved && d.to) {
@@ -1062,6 +1121,7 @@ export class TableEngine {
     if (this.needFit && this.host.clientWidth) this.fit()
     if (this.pings.length) { this.tick(); this.poke() }
     if (this.weather !== 'none') { this.fall(); this.poke() }
+    if (this.fog.animated) { this.fog.animate(performance.now()); this.poke() }
     if (performance.now() > this.activeUntil) return
     this.app.render()
   }
