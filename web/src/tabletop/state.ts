@@ -5,7 +5,7 @@ import type { Light, Wall } from './fog'
 // What the browser knows about the table. The server is the only writer: this store only ever holds what it was told.
 
 export type TableRole = 'gm' | 'player' | 'spectator'
-export interface Scene extends GridSpec { id: string; name: string; sort: number; bg: string; width: number; height: number; fog: boolean; darkness: number; weather?: 'none' | 'rain' | 'snow' }
+export interface Scene extends GridSpec { id: string; name: string; sort: number; bg: string; width: number; height: number; fog: boolean; darkness: number; weather?: 'none' | 'rain' | 'snow'; folder?: string; /** only the GM is sent the notes */ notes?: string; gridColor?: string; gridOpacity?: number; ambient?: string }
 export interface Token {
   id: string; sceneId: string; name: string; x: number; y: number; size: number; rotation: number
   image: string; color: string; pageId: string | null; hidden: boolean; locked: boolean

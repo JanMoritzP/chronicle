@@ -45,12 +45,16 @@ const conns = new Set<Conn>()
 interface SceneRow {
   id: string; workspace_id: string; name: string; sort: number; bg: string; width: number; height: number
   grid: string; grid_size: number; unit: string; dist: number; diagonal: string; fog: number; darkness: number; weather: string
+  folder: string; notes: string; grid_color: string; grid_opacity: number; ambient: string
 }
 const sceneJson = (r: SceneRow) => ({
   id: r.id, name: r.name, sort: r.sort, bg: r.bg, width: r.width, height: r.height,
   grid: r.grid, gridSize: r.grid_size, unit: r.unit, dist: r.dist, diagonal: r.diagonal, fog: !!r.fog, darkness: r.darkness, weather: r.weather ?? 'none',
+  folder: r.folder ?? '', gridColor: r.grid_color ?? '#ffffff', gridOpacity: r.grid_opacity ?? 0.28, ambient: r.ambient ?? '',
 })
-const SCENE_COLUMNS: Record<string, string> = { name: 'name', bg: 'bg', width: 'width', height: 'height', grid: 'grid', gridSize: 'grid_size', unit: 'unit', dist: 'dist', diagonal: 'diagonal', fog: 'fog', darkness: 'darkness', weather: 'weather' }
+/** What one person is sent of a scene: the notes are the GM's. */
+const sceneFor = (c: Conn, r: SceneRow) => ({ ...sceneJson(r), ...(c.role === 'gm' ? { notes: r.notes ?? '' } : {}) })
+const SCENE_COLUMNS: Record<string, string> = { name: 'name', bg: 'bg', width: 'width', height: 'height', grid: 'grid', gridSize: 'grid_size', unit: 'unit', dist: 'dist', diagonal: 'diagonal', fog: 'fog', darkness: 'darkness', weather: 'weather', folder: 'folder', notes: 'notes', gridColor: 'grid_color', gridOpacity: 'grid_opacity', ambient: 'ambient' }
 
 interface TokenDb {
   id: string; scene_id: string; name: string; x: number; y: number; size: number; rotation: number; image: string; color: string
@@ -63,7 +67,7 @@ export const tokenJson = (r: TokenDb): TokenRow => ({
 })
 const TOKEN_COLUMNS: Record<string, string> = { name: 'name', x: 'x', y: 'y', size: 'size', rotation: 'rotation', image: 'image', color: 'color', pageId: 'page_id', hidden: 'hidden', locked: 'locked', owners: 'owners', z: 'z', data: 'data' }
 
-const scenesOf = (ws: string) => (db.prepare('SELECT * FROM scenes WHERE workspace_id = ? ORDER BY sort, created_at').all(ws) as SceneRow[]).map(sceneJson)
+const scenesOf = (ws: string, c?: Conn) => (db.prepare('SELECT * FROM scenes WHERE workspace_id = ? ORDER BY sort, created_at').all(ws) as SceneRow[]).map((r) => (c ? sceneFor(c, r) : sceneJson(r)))
 const sceneRow = (id: string, ws: string) => db.prepare('SELECT * FROM scenes WHERE id = ? AND workspace_id = ?').get(id, ws) as SceneRow | undefined
 const tokenRow = (id: string, ws: string) => { const r = db.prepare('SELECT * FROM tokens WHERE id = ? AND workspace_id = ?').get(id, ws) as TokenDb | undefined; return r ? tokenJson(r) : undefined }
 
@@ -372,7 +376,7 @@ function sendSnapshot(c: Conn) {
   const { active, settings } = stateOf(c.ws)
   viewFor(c, c.scene)
   send(c, {
-    t: 'snapshot', you: { id: c.user.id, username: c.user.username, role: c.role }, settings, scenes: scenesOf(c.ws), active,
+    t: 'snapshot', you: { id: c.user.id, username: c.user.username, role: c.role }, settings, scenes: scenesOf(c.ws, c), active,
     sceneId: c.scene, tokens: tokensFor(c, c.scene), online: onlineIn(c.ws), members: membersOf(c.ws), chat: historyFor(c), combat: visibleCombat(combatOf(c.ws), c.role === 'gm'), handouts: handoutsFor(c), rolltables: rollTablesFor(c), decks: decksFor(c), jukebox: jukeboxFor(c.ws), ...(c.role === 'gm' ? { triggers: triggerRows(c.ws).map(triggerJson) } : {}), ...sceneState(c),
   })
 }
@@ -560,7 +564,7 @@ async function handle(c: Conn, m: ClientMessage) {
       const st = stateOf(ws)
       if (!st.active) saveState(ws, id, st.settings)
       const row = sceneRow(id, ws)!
-      for (const x of inWorld(ws)) send(x, { t: 'scene', scene: sceneJson(row), ...(!st.active ? { active: id } : {}) })
+      for (const x of inWorld(ws)) send(x, { t: 'scene', scene: sceneFor(x, row), ...(!st.active ? { active: id } : {}) })
       for (const x of inWorld(ws)) if (!st.active && !x.scene) { x.scene = id; sendView(x) }
       return
     }
@@ -568,8 +572,38 @@ async function handle(c: Conn, m: ClientMessage) {
       if (!gm) return nack(c, m, 'only the GM can do that')
       if (!sceneRow(m.id, ws)) return nack(c, m, 'no such scene')
       if (!(await applyScenePatch(c, m, m.id, m.patch))) return
-      for (const x of inWorld(ws)) send(x, { t: 'scene', scene: sceneJson(sceneRow(m.id, ws)!) })
+      { const row = sceneRow(m.id, ws)!; for (const x of inWorld(ws)) send(x, { t: 'scene', scene: sceneFor(x, row) }) }
       scheduleSight(ws, m.id)
+      return
+    }
+    case 'scene.duplicate': {
+      if (!gm) return nack(c, m, 'only the GM can do that')
+      const src = sceneRow(m.id, ws)
+      if (!src) return nack(c, m, 'no such scene')
+      if (scenesOf(ws).length >= 200) return nack(c, m, 'That is as many scenes as a world can keep.')
+      const id = uid(), t = now()
+      const sort = ((db.prepare('SELECT MAX(sort) AS s FROM scenes WHERE workspace_id = ?').get(ws) as { s: number | null }).s ?? 0) + 1
+      db.transaction(() => {
+        db.prepare(`INSERT INTO scenes(id,workspace_id,name,sort,bg,width,height,grid,grid_size,unit,dist,diagonal,fog,darkness,weather,folder,notes,grid_color,grid_opacity,ambient,created_at,updated_at)
+          SELECT ?,workspace_id,?,?,bg,width,height,grid,grid_size,unit,dist,diagonal,fog,darkness,weather,folder,notes,grid_color,grid_opacity,ambient,?,? FROM scenes WHERE id = ?`).run(id, `${src.name} copy`.slice(0, 120), sort, t, t, src.id)
+        for (const w of db.prepare('SELECT x1,y1,x2,y2,kind,open FROM scene_walls WHERE scene_id = ?').all(src.id) as { x1: number; y1: number; x2: number; y2: number; kind: string; open: number }[])
+          db.prepare('INSERT INTO scene_walls(id,scene_id,workspace_id,x1,y1,x2,y2,kind,open) VALUES(?,?,?,?,?,?,?,?,?)').run(uid(), id, ws, w.x1, w.y1, w.x2, w.y2, w.kind, w.open)
+        for (const tl of db.prepare('SELECT image,x,y,w,h,rotation,layer,locked,hidden,z FROM scene_tiles WHERE scene_id = ?').all(src.id) as Record<string, any>[])
+          db.prepare('INSERT INTO scene_tiles(id,scene_id,workspace_id,image,x,y,w,h,rotation,layer,locked,hidden,z) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)').run(uid(), id, ws, tl.image, tl.x, tl.y, tl.w, tl.h, tl.rotation, tl.layer, tl.locked, tl.hidden, tl.z)
+        for (const tk of db.prepare('SELECT name,x,y,size,rotation,image,color,page_id,hidden,locked,owners,z,data FROM tokens WHERE scene_id = ?').all(src.id) as Record<string, any>[])
+          db.prepare('INSERT INTO tokens(id,scene_id,workspace_id,name,x,y,size,rotation,image,color,page_id,hidden,locked,owners,z,data,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(uid(), id, ws, tk.name, tk.x, tk.y, tk.size, tk.rotation, tk.image, tk.color, tk.page_id, tk.hidden, tk.locked, tk.owners, tk.z, tk.data, t, t)
+        const md = db.prepare('SELECT doc FROM map_docs WHERE scene_id = ?').get(src.id) as { doc: string } | undefined
+        if (md) db.prepare('INSERT INTO map_docs(scene_id,workspace_id,doc,updated_at) VALUES(?,?,?,?)').run(id, ws, md.doc, t)
+      })()
+      const row = sceneRow(id, ws)!
+      for (const x of inWorld(ws)) send(x, { t: 'scene', scene: sceneFor(x, row) })
+      return
+    }
+    case 'scene.send': {
+      if (!gm) return nack(c, m, 'only the GM can do that')
+      if (!sceneRow(m.id, ws)) return nack(c, m, 'no such scene')
+      // some of the players look at another scene for now (the party splits); they come back to the table's scene when they reconnect
+      for (const x of inWorld(ws)) if (x.role !== 'gm' && m.to.includes(x.user.id)) { x.scene = m.id; sendView(x) }
       return
     }
     case 'scene.delete': {

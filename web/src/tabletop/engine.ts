@@ -66,6 +66,8 @@ export class TableEngine {
   private marquee = new Graphics()
   private wallG = new Graphics()
   private triggerG = new Graphics()
+  /** A colour over the whole scene (candle light, dusk), under the fog. */
+  private ambientG = new Graphics()
   /** Rain or snow over the screen (not the map), drawn while the scene has any. */
   private weatherG = new Graphics()
   private weather: 'none' | 'rain' | 'snow' = 'none'
@@ -119,7 +121,7 @@ export class TableEngine {
     this.fog = new FogLayer(this.app)
     this.fog.onExplored = (png) => { if (!this.preview) this.hooks.onExplored(png) }
     this.fog.onDrawn = () => this.poke()
-    this.world.addChild(this.bg, this.gridG, this.tileBg, this.drawLayer, this.tokenLayer, this.tileOver, this.tileGm, this.fog.view, this.wallG, this.triggerG, this.others, this.ruleG, this.ruleLabel, this.overlay, this.wallPreview, this.strokeG, this.tileSel, this.marquee)
+    this.world.addChild(this.bg, this.gridG, this.tileBg, this.drawLayer, this.tokenLayer, this.tileOver, this.tileGm, this.ambientG, this.fog.view, this.wallG, this.triggerG, this.others, this.ruleG, this.ruleLabel, this.overlay, this.wallPreview, this.strokeG, this.tileSel, this.marquee)
     this.ruleLabel.visible = false
     this.app.stage.addChild(this.world, this.weatherG)
     this.weatherG.eventMode = 'none'
@@ -162,6 +164,8 @@ export class TableEngine {
     for (const v of this.views.values()) this.layout(v)
     this.fog.configure(scene, !this.gmView)
     this.setWeather(scene?.weather ?? 'none')
+    this.ambientG.clear()
+    if (scene?.ambient) this.ambientG.rect(0, 0, scene.width, scene.height).fill({ color: Number.parseInt(scene.ambient.slice(1), 16), alpha: 0.28 })
     this.refreshVision()
   }
 
@@ -187,6 +191,7 @@ export class TableEngine {
     const s = this.scene
     if (!s || s.grid === 'none') return
     const w = s.width, h = s.height
+    const gridColor = Number.parseInt((s.gridColor ?? '#ffffff').slice(1), 16) || 0xffffff, gridAlpha = s.gridOpacity ?? 0.28
     const paint = () => { g.stroke({ width: 1, color: 0x000000, alpha: 0.35, pixelLine: true }) }
     if (s.grid === 'square') {
       for (let x = 0; x <= w; x += s.gridSize) g.moveTo(x, 0).lineTo(x, h)
@@ -194,11 +199,11 @@ export class TableEngine {
       paint()
       for (let x = 0; x <= w; x += s.gridSize) g.moveTo(x, 0).lineTo(x, h)
       for (let y = 0; y <= h; y += s.gridSize) g.moveTo(0, y).lineTo(w, y)
-      g.stroke({ width: 1, color: 0xffffff, alpha: 0.28, pixelLine: true })
+      g.stroke({ width: 1, color: gridColor, alpha: gridAlpha, pixelLine: true })
       return
     }
     const centres = hexCentres(w, h, s)
-    for (const pass of [{ width: 1, color: 0x000000, alpha: 0.35, pixelLine: true }, { width: 1, color: 0xffffff, alpha: 0.28, pixelLine: true }]) {
+    for (const pass of [{ width: 1, color: 0x000000, alpha: 0.35, pixelLine: true }, { width: 1, color: gridColor, alpha: gridAlpha, pixelLine: true }]) {
       for (const c of centres) {
         const pts = hexCorners(c, s)
         g.moveTo(pts[0].x, pts[0].y)

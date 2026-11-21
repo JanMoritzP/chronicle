@@ -218,7 +218,7 @@ export function TableView() {
     <div className="tt" tabIndex={0} onKeyDown={onKey}>
       <div className="tt-bar">
         <Select className="input tt-scene" value={sceneId ?? ''} placeholder="No scenes yet" disabled={!gm} onChange={(id) => sendTable({ t: 'view', sceneId: id })}>
-          {scenes.map((s) => <option key={s.id} value={s.id}>{s.name}{s.id === active ? ' (table)' : ''}</option>)}
+          {[...scenes].sort((a, b) => (a.folder ?? '').localeCompare(b.folder ?? '') || a.sort - b.sort).map((s) => <option key={s.id} value={s.id}>{s.folder ? `${s.folder} › ` : ''}{s.name}{s.id === active ? ' (table)' : ''}</option>)}
         </Select>
         {gm && <button className="btn sm" onClick={addScene}><Plus size={13} /> Scene</button>}
         {gm && scene && scene.id !== active && <button className="btn sm" title="Bring every player to this scene" onClick={() => sendTable({ t: 'scene.activate', id: scene.id })}><Users size={13} /> Move players here</button>}
@@ -416,6 +416,22 @@ function TokenPanel({ token, count }: { token: Token | null; count: number }) {
   )
 }
 
+/** Sends chosen players to look at this scene while the rest of the table stays where it is (the party splits). */
+function SendPlayers({ scene }: { scene: Scene }) {
+  const online = useTable((st) => st.online)
+  const you = useTable((st) => st.you)
+  const [picked, setPicked] = useState<string[]>([])
+  const players = online.filter((o) => o.role === 'player' && o.id !== you?.id)
+  if (!players.length) return null
+  return (
+    <div className="tt-form" role="group" aria-label="Send players to this scene">
+      <b>Send players here</b>
+      {players.map((o) => <label key={o.id} className="tt-check"><input type="checkbox" checked={picked.includes(o.id)} onChange={(e) => setPicked(e.target.checked ? [...picked, o.id] : picked.filter((x) => x !== o.id))} />{o.username}</label>)}
+      <button className="btn sm" disabled={!picked.length} onClick={() => { sendTable({ t: 'scene.send', id: scene.id, to: picked }); setPicked([]) }}>Send them to “{scene.name}”</button>
+    </div>
+  )
+}
+
 function ScenePanel({ scene, active, wsId }: { scene: Scene; active: boolean; wsId: string }) {
   const [name, setName] = useState(scene.name)
   const [editing, setEditing] = useState(false)
@@ -448,6 +464,20 @@ function ScenePanel({ scene, active, wsId }: { scene: Scene; active: boolean; ws
         </Select>
       </label>
       <label>Cell size in pixels{num('gridSize', scene.gridSize, 10)}</label>
+      <div className="tt-row">
+        <label>Grid colour<input className="tt-color" type="color" aria-label="Grid colour" value={scene.gridColor ?? '#ffffff'} onChange={(e) => patch({ gridColor: e.target.value })} /></label>
+        <label>Grid strength<input type="range" min={0} max={100} aria-label="Grid strength" value={Math.round((scene.gridOpacity ?? 0.28) * 100)} onChange={(e) => patch({ gridOpacity: Number(e.target.value) / 100 })} /></label>
+      </div>
+      <div className="tt-row">
+        <label>Ambient colour<input className="tt-color" type="color" aria-label="Ambient colour" value={scene.ambient || '#ffd9a0'} onChange={(e) => patch({ ambient: e.target.value })} /></label>
+        {scene.ambient && <button className="btn sm" onClick={() => patch({ ambient: '' })}>No ambient colour</button>}
+      </div>
+      <label>Folder<input className="input" aria-label="Scene folder" maxLength={60} placeholder="Chapter 1" defaultValue={scene.folder ?? ''} key={scene.id + (scene.folder ?? '')} onBlur={(e) => e.target.value.trim() !== (scene.folder ?? '') && patch({ folder: e.target.value.trim() })} /></label>
+      <label>Notes for you<textarea className="input" aria-label="Scene notes" rows={3} maxLength={5000} placeholder="Read-aloud text, secrets, where the traps are" defaultValue={scene.notes ?? ''} key={scene.id + 'n'} onBlur={(e) => e.target.value !== (scene.notes ?? '') && patch({ notes: e.target.value })} /></label>
+      <div className="tt-row">
+        <button className="btn sm" onClick={() => sendTable({ t: 'scene.duplicate', id: scene.id })}>Duplicate this scene</button>
+      </div>
+      <SendPlayers scene={scene} />
       <div className="tt-row">
         <label>Cell is{num('dist', scene.dist, 0.1)}</label>
         <label>Unit<input className="input" defaultValue={scene.unit} key={scene.id + scene.unit} maxLength={8} onBlur={(e) => e.target.value.trim() && e.target.value !== scene.unit && patch({ unit: e.target.value.trim() })} /></label>

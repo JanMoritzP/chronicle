@@ -122,6 +122,13 @@ export const scenePatch = z.object({
   fog: z.boolean(),
   /** 0 is daylight, 1 is pitch dark; light sources push it back. */
   darkness: z.number().min(0).max(1),
+  /** Where the scene sits in the GM's list of scenes, and what the GM noted about it. */
+  folder: z.string().max(60),
+  notes: z.string().max(5000),
+  gridColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+  gridOpacity: z.number().min(0).max(1),
+  /** A colour laid over the whole scene (candle light, dusk), or none. */
+  ambient: z.string().regex(/^(#[0-9a-fA-F]{6})?$/),
   /** Rain or snow falling over the scene, for everyone. */
   weather: z.enum(['none', 'rain', 'snow']),
 }).partial().strict()
@@ -147,6 +154,9 @@ export const clientMessage = z.discriminatedUnion('t', [
   z.object({ t: z.literal('scene.create'), name: z.string().min(1).max(120).optional(), patch: scenePatch.optional() }),
   z.object({ t: z.literal('scene.update'), id, patch: scenePatch }),
   z.object({ t: z.literal('scene.delete'), id }),
+  z.object({ t: z.literal('scene.duplicate'), id }),
+  /** some players look at this scene while the rest stay at the table's */
+  z.object({ t: z.literal('scene.send'), id, to: z.array(id).max(50) }),
   z.object({ t: z.literal('scene.activate'), id }),
   z.object({ t: z.literal('token.add'), sceneId: id, token: tokenPatch }),
   z.object({ t: z.literal('token.update'), id, patch: tokenPatch }),

@@ -565,6 +565,14 @@ const migrations: (string | ((d: Database.Database) => void))[] = [
     updated_at INTEGER NOT NULL
   );
   `,
+  // scenes: a folder, notes for the GM, the colour of the grid, an ambient colour
+  `
+  ALTER TABLE scenes ADD COLUMN folder TEXT NOT NULL DEFAULT '';
+  ALTER TABLE scenes ADD COLUMN notes TEXT NOT NULL DEFAULT '';
+  ALTER TABLE scenes ADD COLUMN grid_color TEXT NOT NULL DEFAULT '#ffffff';
+  ALTER TABLE scenes ADD COLUMN grid_opacity REAL NOT NULL DEFAULT 0.28;
+  ALTER TABLE scenes ADD COLUMN ambient TEXT NOT NULL DEFAULT '';
+  `,
 ]
 
 export const SCHEMA_VERSION = migrations.length

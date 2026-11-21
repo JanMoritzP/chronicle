@@ -487,6 +487,9 @@ areas:
       - id: table.map-editor
         name: "The map editor: rooms, corridors, doors, props and lights, made into a scene with walls"
         files: [web/src/components/MapEditor.tsx, web/src/tabletop/mapdoc.ts, web/src/tabletop/mapRender.ts, server/src/routes/mapdocs.ts]
+      - id: table.scene-tools
+        name: "Scene folders, notes for the GM, copies, grid and ambient colour, and sending some players to another scene"
+        files: [web/src/components/Tabletop.tsx, server/src/table.ts]
       - id: table.fog
         name: "Fog of war and darkness are switched on per scene and kept"
         files: [web/src/components/Tabletop.tsx]
