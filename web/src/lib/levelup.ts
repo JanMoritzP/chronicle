@@ -161,10 +161,15 @@ export function levelUp(sheet: Sheet, className: string, opts: { hit?: number; d
 
 // ---------- carrying ----------
 
-export interface Carried { name: string; qty: number; equipped: boolean; weight?: number; attuned?: boolean }
+export interface Carried { name: string; qty: number; equipped: boolean; weight?: number; attuned?: boolean; /** the name of the bag or chest this is kept in */ in?: string; /** a container whose contents weigh nothing (a bag of holding) */ weightless?: boolean }
 
 /** Pounds carried: each item's weight times how many. */
-export const carriedWeight = (items: Carried[] | undefined) => Math.round((items ?? []).reduce((n, i) => n + (i.weight ?? 0) * i.qty, 0) * 100) / 100
+export const carriedWeight = (items: Carried[] | undefined) => {
+  const list = items ?? []
+  const held = new Set(list.filter((i) => i.weightless).map((i) => i.name.trim().toLowerCase()))
+  // what is kept in a container that holds weightlessly (a bag of holding) is not carried weight
+  return Math.round(list.filter((i) => !(i.in && held.has(i.in.trim().toLowerCase()))).reduce((n, i) => n + (i.weight ?? 0) * i.qty, 0) * 100) / 100
+}
 /** What a character can carry: 15 pounds for each point of Strength. */
 export const capacityOf = (str: number) => str * 15
 export const attunedCount = (items: Carried[] | undefined) => (items ?? []).filter((i) => i.attuned).length

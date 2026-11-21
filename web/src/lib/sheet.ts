@@ -71,7 +71,7 @@ export interface Feature {
 
 export interface ClassLevel { name: string; level: number; subclass?: string }
 export interface HitDice { sides: number; total: number; used: number }
-export interface InventoryItem { name: string; qty: number; equipped: boolean; note: string; /** pounds, each */ weight?: number; attuned?: boolean; /** uses of a wand or a staff spent, and how many it has */ charges?: { used: number; max: number }; /** added to armor class while the item is equipped */ acBonus?: number; /** added to every saving throw while equipped (a cloak of protection) */ saveBonus?: number; /** added to the spell attack and the spell save DC while equipped (a rod, a wand) */ spellBonus?: number }
+export interface InventoryItem { name: string; qty: number; equipped: boolean; note: string; /** pounds, each */ weight?: number; attuned?: boolean; /** uses of a wand or a staff spent, and how many it has */ charges?: { used: number; max: number }; /** added to armor class while the item is equipped */ acBonus?: number; /** the name of the bag or chest it is kept in */ in?: string; /** a container whose contents weigh nothing (a bag of holding) */ weightless?: boolean; /** added to every saving throw while equipped (a cloak of protection) */ saveBonus?: number; /** added to the spell attack and the spell save DC while equipped (a rod, a wand) */ spellBonus?: number }
 export interface Currency { cp: number; sp: number; ep: number; gp: number; pp: number }
 export type Proficiency = 'p' | 'e'
 

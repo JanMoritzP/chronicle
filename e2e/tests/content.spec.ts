@@ -291,6 +291,12 @@ test('a character levels up, and what they carry and are attuned to is counted',
   await app.getByLabel('Plate armor equipped').check()
   await app.getByLabel('Saving throw bonus of Plate armor').fill('2')
   await expect(app.getByRole('button', { name: /Strength saving throw \+3/ })).toBeVisible()
+  // a bag of holding makes what is in it weightless
+  await app.getByLabel('New item').fill('Bag of holding')
+  await app.getByLabel('New item').press('Enter')
+  await app.getByLabel('Bag of holding holds weightlessly').check()
+  await app.getByLabel('Kept in, for Plate armor').fill('Bag of holding')
+  await expect(app.getByLabel('Load')).toContainText('Carrying 0 of')
 })
 
 test('a character from Foundry, D&D Beyond or Roll20 can be imported, and a character exported', { tag: '@feature:sheet.import' }, async ({ app, makePage }) => {

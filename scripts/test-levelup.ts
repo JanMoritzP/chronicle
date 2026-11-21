@@ -71,5 +71,7 @@ check('a torch gives light', lightOf('Torch (lit at dusk)')?.light.bright === 20
 check('a bullseye lantern is a cone and a hooded one is not', lightOf('Bullseye lantern')?.light.angle === 60 && lightOf('Hooded lantern')?.light.angle === undefined)
 check('a rope gives none', lightOf('Hempen rope') === null)
 check('only carried items that glow are listed', lightItems([{ name: 'Torch', qty: 3 }, { name: 'Rope', qty: 1 }, { name: 'Candle', qty: 0 }]).map((x) => x.name).join() === 'Torch')
+check('what is in a bag of holding is not carried weight', carriedWeight([{ name: 'Bag of holding', qty: 1, equipped: false, weight: 15, weightless: true }, { name: 'Plate', qty: 1, equipped: false, weight: 65, in: 'bag of holding' }, { name: 'Rope', qty: 1, equipped: false, weight: 10 }]) === 25)
+check('a plain bag does not lighten what is in it', carriedWeight([{ name: 'Backpack', qty: 1, equipped: false, weight: 5 }, { name: 'Plate', qty: 1, equipped: false, weight: 65, in: 'Backpack' }]) === 70)
 console.log(failed ? `\n${failed} failed` : '\nall passed')
 process.exit(failed ? 1 : 0)
