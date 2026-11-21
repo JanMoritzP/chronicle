@@ -2,6 +2,14 @@
 
 Newest first. The version in `electron/package.json` is the app version; the release notes on GitHub are what the in-app update dialog shows, so keep each entry short and in plain words. Sections after 0.2.0 are written by `scripts/release.mjs` from the commit subjects, so the commit messages carry the release notes.
 
+## 0.43.0 (2026-11-21)
+
+### Features
+- a jukebox with sound files for everyone, handouts from pages and a recap draft from the table chat
+- import and export Universal VTT maps with walls, doors and lights
+- saved views, bringing players to a view, undo of a move, ruler around corners, coloured lights, fading roofs and shared vision
+- Pathfinder three actions, Pact Magic, death saves from damage at 0 and named invite links
+
 ## 0.42.0 (2026-11-21)
 
 ### Features
