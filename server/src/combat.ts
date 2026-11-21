@@ -16,6 +16,10 @@ export interface Combatant {
   actions?: number
   /** how far the combatant has moved this turn, in the scene's units */
   moved?: number
+  /** legendary actions used since the start of this combatant's turn (set once the tracker is switched on for it) */
+  legendary?: number
+  /** said at the table when this combatant's turn begins (a lair effect, a reminder) */
+  note?: string
 }
 export interface Combat { active: boolean; round: number; turn: string | null; list: Combatant[] }
 
@@ -49,7 +53,7 @@ export function advance(c: Combat, step: 1 | -1): Combat {
   let round = c.round
   if (i >= order.length) { i = 0; round++ } else if (i < 0) { if (round > 1) { i = order.length - 1; round-- } else i = 0 }
   // a combatant's reaction is ready again when their turn comes round (going back a turn leaves it as it was)
-  const list = step === 1 ? c.list.map((x) => (x.id === order[i].id && (x.reaction || x.actions !== undefined || x.moved) ? { ...x, reaction: false, actions: undefined, moved: undefined } : x)) : c.list
+  const list = step === 1 ? c.list.map((x) => (x.id === order[i].id && (x.reaction || x.actions !== undefined || x.moved || x.legendary) ? { ...x, reaction: false, actions: undefined, moved: undefined, ...(x.legendary !== undefined ? { legendary: 0 } : {}) } : x)) : c.list
   return { ...c, turn: order[i].id, round, list }
 }
 
@@ -60,4 +64,23 @@ export function visible(c: Combat, gm: boolean): Combat {
   if (gm) return c
   const list = c.list.filter((x) => !x.hidden)
   return { ...c, list, turn: c.turn && list.some((x) => x.id === c.turn) ? c.turn : null }
+}
+
+/** The combatant whose turn it is waits: they go after the next one in the order and the turn passes on. Null when they are the last or it is not their turn. */
+export function delay(c: Combat, id: string): Combat | null {
+  if (!c.active || c.turn !== id) return null
+  const order = inPlay(c)
+  const at = order.findIndex((x) => x.id === id)
+  if (at < 0 || at >= order.length - 1) return null
+  const next = order[at + 1]
+  const me = c.list.find((x) => x.id === id)!
+  // same initiative as the one they now follow, and a place behind them in the list, so the order keeps them there
+  const list = c.list.filter((x) => x.id !== id)
+  list.splice(list.findIndex((x) => x.id === next.id) + 1, 0, { ...me, init: next.init })
+  return { ...c, list, turn: next.id }
+}
+
+/** A line in the order that is not a creature: the lair acting at initiative 20, a countdown. */
+export function marker(c: Combat, id: string, name: string, init: number): Combat {
+  return withList(c, [...c.list, { id, tokenId: null, name, init, hidden: false, done: false }])
 }

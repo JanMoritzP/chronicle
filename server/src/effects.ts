@@ -17,6 +17,9 @@ export const effectSchema = z.object({
   /** the token whose spell it is; with `concentration` the effect ends when that token stops concentrating */
   from: z.string().max(64).optional(),
   concentration: z.boolean().optional(),
+  /** 'turn': ends when the token's next turn ends (it counts from the start of that turn: `armed`) */
+  until: z.enum(['turn']).optional(),
+  armed: z.boolean().optional(),
 })
 export type EffectInput = z.infer<typeof effectSchema>
 export type ActiveEffect = EffectInput & { id: string }

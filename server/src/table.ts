@@ -13,7 +13,7 @@ import { presenceChanged } from './presence.js'
 import { ALLOWED, AUDIO } from './routes/uploads.js'
 import { parseChat, readable, withInline, type Kind, type Part } from './chat.js'
 import { buildSight, canSee, type Sight, type SightToken } from './sight.js'
-import { advance, emptyCombat, end as endCombat, start as startCombat, visible as visibleCombat, withList, type Combat } from './combat.js'
+import { advance, delay as delayTurn, marker as lairMarker, emptyCombat, end as endCombat, start as startCombat, visible as visibleCombat, withList, type Combat } from './combat.js'
 import { cryptoRng, parseRoll } from './dice.js'
 import { DAMAGE_TYPES_PF2E, adjustDamage, concentrationDc, deathSave, longRest, modOf, saveBonusOf, shortRest, type Effect } from './rules5e.js'
 import { parseSheet, type Sheet } from './sheet.js'
@@ -561,6 +561,48 @@ function tickEffects(ws: string, userId: string) {
   }
 }
 
+/** The turn of this combatant just ended: effects that last until then are over. */
+function endTurnEffects(ws: string, userId: string, combat: Combat) {
+  const who = combat.list.find((x) => x.id === combat.turn)
+  const t = who?.tokenId ? tokenRow(who.tokenId, ws) : undefined
+  if (!t) return
+  const all = effectsOf(t.data)
+  const over = all.filter((e) => e.until === 'turn' && e.armed)
+  if (!over.length) return
+  db.prepare('UPDATE tokens SET data = ?, updated_at = ? WHERE id = ?').run(JSON.stringify({ ...t.data, effects: all.filter((e) => !over.includes(e)) }), now(), t.id)
+  postChat(ws, userId, t.name, t.hidden || t.data.hpPrivate ? 'gmroll' : 'emote', [], [{ t: 'text', text: `${over.map((e) => e.name).join(', ')} ${over.length === 1 ? 'ends' : 'end'}` }])
+  emitToken(ws, t, tokenRow(t.id, ws)!)
+}
+
+/** A turn begins: its effects that wait for it start counting, and its reminder is said. */
+function announceTurn(ws: string, userId: string, combat: Combat) {
+  const who = combat.list.find((x) => x.id === combat.turn)
+  if (!who || !combat.active) return
+  const t = who.tokenId ? tokenRow(who.tokenId, ws) : undefined
+  if (t) {
+    const all = effectsOf(t.data)
+    if (all.some((e) => e.until === 'turn' && !e.armed)) {
+      db.prepare('UPDATE tokens SET data = ?, updated_at = ? WHERE id = ?').run(JSON.stringify({ ...t.data, effects: all.map((e) => (e.until === 'turn' && !e.armed ? { ...e, armed: true } : e)) }), now(), t.id)
+      emitToken(ws, t, tokenRow(t.id, ws)!)
+    }
+  }
+  if (who.note) postChat(ws, userId, who.name, who.hidden || t?.hidden ? 'gmroll' : 'emote', [], [{ t: 'text', text: `${who.name}: ${who.note}` }])
+}
+
+/** When a fight ends: who was put out of it and what that is worth in experience, said to the GM. */
+function combatSummary(ws: string, userId: string, combat: Combat) {
+  if (!combat.active) return
+  const beaten: { name: string; xp: number }[] = []
+  for (const x of combat.list) {
+    if (!x.done || !x.tokenId) continue
+    const t = tokenRow(x.tokenId, ws)
+    const sheet = t ? readSheet(ws, t.pageId)?.sheet : undefined
+    if (sheet && sheet.kind !== 'character' && typeof sheet.xp === 'number') beaten.push({ name: x.name, xp: sheet.xp })
+  }
+  const total = beaten.reduce((n, b) => n + b.xp, 0)
+  postChat(ws, userId, 'Combat', 'gmroll', [], [{ t: 'text', text: `The fight ended in round ${combat.round}.${beaten.length ? ` Beaten: ${beaten.map((b) => `${b.name} (${b.xp} XP)`).join(', ')}. ${total} XP in all.` : ' Nothing with an experience value was beaten.'}` }])
+}
+
 async function handle(c: Conn, m: ClientMessage) {
   const ws = c.ws
   const { settings } = stateOf(ws)
@@ -1101,7 +1143,7 @@ async function handle(c: Conn, m: ClientMessage) {
         const sheet = props.sheet
         const size = SIZE[String(sheet?.size ?? '').toLowerCase()] ?? 1
         const image = typeof props.portrait === 'string' && /^\/api\/uploads\/[A-Za-z0-9-]+$/.test(props.portrait) ? props.portrait : ''
-        const data: Record<string, unknown> = { hpPrivate: true }
+        const data: Record<string, unknown> = { hpPrivate: true, group: page.title }
         if (sheet?.hp?.max) data.hp = { value: sheet.hp.max, max: sheet.hp.max }
         if (sheet?.ac?.value != null) data.ac = sheet.ac.value
         for (let i = 1; i <= mon.count; i++) {
@@ -1295,6 +1337,35 @@ async function handle(c: Conn, m: ClientMessage) {
       if (!h) return nack(c, m, 'no such handout')
       return showHandout(ws, h)
     }
+    case 'combat.delay': {
+      const combat = combatOf(ws)
+      const who = combat.list.find((x) => x.id === m.id)
+      if (!who) return nack(c, m, 'no such combatant')
+      const tok = who.tokenId ? tokenRow(who.tokenId, ws) : undefined
+      if (!gm && !(c.role === 'player' && !!tok && tok.owners.includes(c.user.id))) return nack(c, m, 'not allowed')
+      const next = delayTurn(combat, m.id)
+      if (!next) return nack(c, m, 'Only the one whose turn it is can wait, and not the last in the order.')
+      postChat(ws, c.user.id, who.name, who.hidden ? 'gmroll' : 'emote', [], [{ t: 'text', text: 'waits and acts later in the round' }])
+      saveCombat(ws, next)
+      announceTurn(ws, c.user.id, next)
+      return
+    }
+    case 'combat.marker': {
+      if (!gm) return nack(c, m, 'only the GM can do that')
+      return saveCombat(ws, lairMarker(combatOf(ws), uid(), m.name, m.init))
+    }
+    case 'combat.legendary': {
+      if (!gm) return nack(c, m, 'only the GM can do that')
+      const combat = combatOf(ws)
+      if (!combat.list.some((x) => x.id === m.id)) return nack(c, m, 'no such combatant')
+      return saveCombat(ws, withList(combat, combat.list.map((x) => { if (x.id !== m.id) return x; const { legendary: _l, ...rest } = x; return m.used === null ? rest : { ...rest, legendary: m.used } })))
+    }
+    case 'combat.reminder': {
+      if (!gm) return nack(c, m, 'only the GM can do that')
+      const combat = combatOf(ws)
+      if (!combat.list.some((x) => x.id === m.id)) return nack(c, m, 'no such combatant')
+      return saveCombat(ws, withList(combat, combat.list.map((x) => { if (x.id !== m.id) return x; const { note: _n, ...rest } = x; return m.text.trim() ? { ...rest, note: m.text.trim() } : rest })))
+    }
     case 'combat.actions': {
       const combat = combatOf(ws)
       const who = combat.list.find((x) => x.id === m.id)
@@ -1322,15 +1393,17 @@ async function handle(c: Conn, m: ClientMessage) {
       const turnToken = combat.turn ? tokenRow(combat.list.find((x) => x.id === combat.turn)?.tokenId ?? '', ws) : undefined
       const ownsTurn = c.role === 'player' && !!turnToken && turnToken.owners.includes(c.user.id)
       if (!gm && !(m.action === 'next' && ownsTurn)) return nack(c, m, 'only the GM can do that')
-      if (m.action === 'start') return saveCombat(ws, startCombat(combat))
+      if (m.action === 'start') { const started = startCombat(combat); saveCombat(ws, started); announceTurn(ws, c.user.id, started); return }
       if (m.action === 'next') {
+        endTurnEffects(ws, c.user.id, combat)
         const next = advance(combat, 1)
         saveCombat(ws, next)
         if (combat.active && next.round > combat.round) { tickEffects(ws, c.user.id); fireEvent(ws, c.user.id, 'round') }
+        announceTurn(ws, c.user.id, next)
         return
       }
       if (m.action === 'prev') return saveCombat(ws, advance(combat, -1))
-      if (m.action === 'end') return saveCombat(ws, endCombat(combat))
+      if (m.action === 'end') { combatSummary(ws, c.user.id, combat); return saveCombat(ws, endCombat(combat)) }
       return saveCombat(ws, emptyCombat())
     }
     case 'token.delete': {

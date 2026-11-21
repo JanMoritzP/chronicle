@@ -12,7 +12,7 @@ import { Select } from './Select'
 import { SheetCard, loadSheet, useSheet, type AttackKit } from './TableSheet'
 
 const VALUED = new Set(['Clumsy', 'Doomed', 'Drained', 'Dying', 'Enfeebled', 'Frightened', 'Sickened', 'Slowed', 'Stunned', 'Stupefied', 'Wounded'])
-interface Effect { id: string; name: string; rounds: number | null; ac?: number; attack?: string; save?: string; from?: string; concentration?: boolean }
+interface Effect { id: string; until?: 'turn'; name: string; rounds: number | null; ac?: number; attack?: string; save?: string; from?: string; concentration?: boolean }
 const PRESETS: Record<string, Omit<Effect, 'id'>> = {
   Bless: { name: 'Bless', rounds: 10, attack: '+1d4', save: '+1d4', concentration: true },
   Bane: { name: 'Bane', rounds: 10, attack: '-1d4', save: '-1d4', concentration: true },
@@ -28,6 +28,7 @@ function Effects({ token, can }: { token: Token; can: boolean }) {
   const [rounds, setRounds] = useState('')
   const [ac, setAc] = useState('')
   const [preset, setPreset] = useState('')
+  const [untilTurn, setUntilTurn] = useState(false)
   const caster = ((token.data.conditions ?? []) as string[]).includes('Concentrating')
   const add = (e: Omit<Effect, 'id'>) => sendTable({ t: 'effect.add', id: token.id, effect: { ...e, ...(e.concentration ? { from: token.id } : {}) } })
   if (!can && !effects.length) return null
@@ -36,7 +37,7 @@ function Effects({ token, can }: { token: Token; can: boolean }) {
       <div className="tt-chips" role="group" aria-label="Effects">
         {effects.map((e) => (
           <span key={e.id} className="tt-chip on" title={modsText(e)}>
-            {e.name}{e.rounds != null ? ` (${e.rounds})` : ''}{modsText(e) ? ` ${modsText(e)}` : ''}
+            {e.name}{e.rounds != null ? ` (${e.rounds})` : e.until ? ' (until their turn ends)' : ''}{modsText(e) ? ` ${modsText(e)}` : ''}
             {can && <button className="tt-x" aria-label={`End ${e.name}`} onClick={() => sendTable({ t: 'effect.remove', id: token.id, effectId: e.id })}>×</button>}
           </span>
         ))}
@@ -50,7 +51,8 @@ function Effects({ token, can }: { token: Token; can: boolean }) {
           <input className="input" placeholder="Effect" aria-label="Spell effect" value={name} onChange={(e) => setName(e.target.value)} />
           <input className="input tt-num" inputMode="numeric" placeholder="Rounds" aria-label="Duration in rounds" value={rounds} onChange={(e) => setRounds(e.target.value.replace(/[^\d]/g, ''))} />
           <input className="input tt-num" inputMode="numeric" placeholder="AC" aria-label="Bonus to armor of the effect" value={ac} onChange={(e) => setAc(e.target.value.replace(/[^\d-]/g, ''))} />
-          <button className="btn sm" disabled={!name.trim()} onClick={() => { add({ name: name.trim(), rounds: rounds ? Math.min(999, Number(rounds)) : null, ...(Number(ac) ? { ac: Math.max(-10, Math.min(10, Number(ac))) } : {}) }); setName(''); setRounds(''); setAc('') }}>Apply</button>
+          <button className="btn sm" disabled={!name.trim()} onClick={() => { add({ name: name.trim(), rounds: untilTurn ? null : rounds ? Math.min(999, Number(rounds)) : null, ...(untilTurn ? { until: 'turn' as const } : {}), ...(Number(ac) ? { ac: Math.max(-10, Math.min(10, Number(ac))) } : {}) }); setName(''); setRounds(''); setAc(''); setUntilTurn(false) }}>Apply</button>
+          <label className="tt-check"><input type="checkbox" checked={untilTurn} onChange={(e) => setUntilTurn(e.target.checked)} />Until the end of their next turn</label>
           {caster && <small className="muted">Spell effects end when this token stops concentrating.</small>}
         </div>
       )}
@@ -345,10 +347,13 @@ export function CombatPanel() {
   const gm = role === 'gm'
   const system = useStore((st) => st.workspaces.find((w) => w.id === st.wsId)?.settings?.system ?? '5e')
   const unit = useTable((st) => st.scenes.find((x) => x.id === st.sceneId)?.unit ?? 'ft')
+  const sceneNow = useTable((st) => st.sceneId)
   const tokenOf = (id: string | null) => tokens.find((t) => t.id === id)
   const turnToken = tokenOf(combat.list.find((x) => x.id === combat.turn)?.tokenId ?? null)
   const myTurn = !!turnToken && !!you && turnToken.owners.includes(you.id)
   const control = (action: 'start' | 'next' | 'prev' | 'end' | 'clear') => sendTable({ t: 'combat.control', action })
+  // creatures staged from an encounter wait hidden in groups, to be shown a group at a time
+  const groups = Object.entries(tokens.filter((t) => t.hidden && typeof t.data.group === 'string' && t.sceneId === sceneNow).reduce<Record<string, string[]>>((acc, t) => { (acc[t.data.group as string] ??= []).push(t.id); return acc }, {}))
   const onList = new Set(combat.list.map((x) => x.tokenId))
   const addable = (gm ? tokens : []).filter((t) => !onList.has(t.id))
   const addSelected = addable.filter((t) => selected.includes(t.id))
@@ -368,6 +373,20 @@ export function CombatPanel() {
           <button className="btn sm" disabled={!addSelected.length} onClick={() => sendTable({ t: 'combat.add', tokenIds: addSelected.map((t) => t.id) })}>Add selected ({addSelected.length})</button>
           <button className="btn sm" disabled={!addable.length} onClick={() => sendTable({ t: 'combat.add', tokenIds: addable.map((t) => t.id) })}>Add all ({addable.length})</button>
           <button className="btn sm" disabled={!combat.list.some((x) => x.init === null)} title="Roll for everyone without an initiative, using the Dexterity bonus on their sheet" onClick={() => sendTable({ t: 'combat.roll' })}>Roll initiative</button>
+          <button className="btn sm" title="A line in the order that is not a creature: the lair acting at initiative 20" onClick={() => sendTable({ t: 'combat.marker', name: 'Lair actions', init: 20 })}>Lair actions</button>
+          <button className="btn sm" onClick={async () => { const name = await askText('A line in the order', { label: 'Name', placeholder: 'Collapsing ceiling', okLabel: 'Next' }); if (!name?.trim()) return; const init = await askText('Initiative', { label: 'When it comes up', initial: '20', okLabel: 'Add' }); const n = Math.round(Number(init)); if (init !== null && Number.isFinite(n)) sendTable({ t: 'combat.marker', name: name.trim(), init: n }) }}>Another line</button>
+        </div>
+      )}
+      {gm && groups.length > 0 && (
+        <div className="tt-form" role="group" aria-label="Hidden groups">
+          <b>Waiting out of sight</b>
+          {groups.map(([g, ids]) => (
+            <div key={g} className="tt-row">
+              <span className="grow">{g} <small className="muted">{ids.length} hidden</small></span>
+              <button className="btn sm" aria-label={`Reveal ${g}`} onClick={() => { for (const id of ids) sendTable({ t: 'token.update', id, patch: { hidden: false } }) }}>Reveal</button>
+              <button className="btn sm" aria-label={`Reveal ${g} and add to the fight`} title="Show them and put them in the order of play" onClick={() => { for (const id of ids) sendTable({ t: 'token.update', id, patch: { hidden: false } }); sendTable({ t: 'combat.add', tokenIds: ids }) }}>Reveal and fight</button>
+            </div>
+          ))}
         </div>
       )}
       {combat.list.length === 0 && <p className="muted tt-hint">{gm ? 'Select tokens on the map and add them, or add everyone on the scene.' : 'No combat has started.'}</p>}
@@ -385,6 +404,12 @@ export function CombatPanel() {
                     onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />
                 : <span className="tt-init">{x.init ?? '–'}</span>}
               <span className="grow ellipsis">{x.name}{x.hidden ? ' (hidden)' : ''}{x.moved ? <small className="muted"> moved {x.moved} {unit}</small> : null}{hp && hp.max ? <small className="muted"> {hp.value}/{hp.max}</small> : null}</span>
+              {(gm || mine) && combat.active && combat.turn === x.id && <button className="btn ghost sm" title="Wait: act later in the round, after the next one" aria-label={`${x.name} waits`} onClick={() => sendTable({ t: 'combat.delay', id: x.id })}>Wait</button>}
+              {x.legendary !== undefined && (
+                <span className="tt-actions" role="group" aria-label={`Legendary actions of ${x.name}`}>
+                  {[1, 2, 3].map((n) => <button key={n} className={`tt-pip${n > (x.legendary ?? 0) ? ' on' : ''}`} disabled={!gm} aria-label={`Legendary action ${n} of ${x.name}, ${n > (x.legendary ?? 0) ? 'ready' : 'used'}`} onClick={() => sendTable({ t: 'combat.legendary', id: x.id, used: n > (x.legendary ?? 0) ? n : n - 1 })} />)}
+                </span>
+              )}
               {(gm || mine) && combat.active && !x.done && system === 'pf2e' && (
                 <span className="tt-actions" role="group" aria-label={`Actions of ${x.name}`}>
                   {[1, 2, 3].map((n) => {
@@ -401,6 +426,8 @@ export function CombatPanel() {
                 <span className="tt-row-actions">
                   <button className="btn ghost sm" title={x.done ? 'Back in the fight' : 'Out of the fight'} aria-label={x.done ? 'Back in the fight' : 'Out of the fight'} onClick={() => sendTable({ t: 'combat.flag', id: x.id, done: !x.done })}>{x.done ? '↺' : '✕'}</button>
                   <button className="btn ghost sm" title={x.hidden ? 'Show to players' : 'Hide from players'} aria-label={x.hidden ? 'Show to players' : 'Hide from players'} onClick={() => sendTable({ t: 'combat.flag', id: x.id, hidden: !x.hidden })}>{x.hidden ? 'Show' : 'Hide'}</button>
+                  <button className="btn ghost sm" title={x.legendary === undefined ? 'Track legendary actions' : 'Stop tracking legendary actions'} aria-label={x.legendary === undefined ? `Track legendary actions of ${x.name}` : `Stop tracking legendary actions of ${x.name}`} onClick={() => sendTable({ t: 'combat.legendary', id: x.id, used: x.legendary === undefined ? 0 : null })}>L</button>
+                  <button className="btn ghost sm" title={x.note ? `Reminder: ${x.note}` : 'Something to say when their turn begins'} aria-label={`Reminder for ${x.name}`} onClick={async () => { const t = await askText(`Reminder for ${x.name}`, { label: 'Said when their turn begins', initial: x.note ?? '', okLabel: 'Save' }); if (t !== null) sendTable({ t: 'combat.reminder', id: x.id, text: t }) }}>{x.note ? '✎' : '+'}</button>
                   <button className="btn ghost sm" title="Remove from the order" aria-label="Remove from the order" onClick={() => sendTable({ t: 'combat.remove', ids: [x.id] })}>–</button>
                 </span>
               )}

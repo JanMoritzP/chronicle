@@ -31,7 +31,7 @@ export interface Deck { id: string; name: string; size: number; remaining: numbe
 export interface Trigger { id: string; name: string; scene: string | null; event: 'enter' | 'round' | 'down'; x: number; y: number; radius: number; action: 'say' | 'handout' | 'play'; arg: string; once: boolean; fired: boolean }
 export interface Track { id: string; name: string; url: string; loop: boolean }
 export interface Pin { id: string; x: number; y: number; label: string; pageId: string | null; gmOnly: boolean }
-export interface Combatant { id: string; tokenId: string | null; name: string; init: number | null; hidden: boolean; done: boolean; reaction?: boolean; actions?: number; moved?: number }
+export interface Combatant { id: string; tokenId: string | null; name: string; init: number | null; hidden: boolean; done: boolean; reaction?: boolean; actions?: number; moved?: number; legendary?: number; note?: string }
 export interface Combat { active: boolean; round: number; turn: string | null; list: Combatant[] }
 export const NO_COMBAT: Combat = { active: false, round: 0, turn: null, list: [] }
 export interface Die { v: number; dropped?: boolean; extra?: boolean }

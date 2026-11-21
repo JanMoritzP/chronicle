@@ -1,4 +1,4 @@
-import { advance, emptyCombat, end, ordered, start, visible, withList, type Combat, type Combatant } from '../server/src/combat'
+import { delay, marker, advance, emptyCombat, end, ordered, start, visible, withList, type Combat, type Combatant } from '../server/src/combat'
 
 let failed = 0
 const check = (name: string, ok: boolean, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name} ${extra}`); if (!ok) failed++ }
@@ -45,6 +45,16 @@ const spent = { ...r1, list: r1.list.map((x) => ({ ...x, reaction: true })) }
 const r2 = advance(spent, 1)
 check('a combatant whose turn begins has their reaction back', r2.list.find((x) => x.id === 'b')!.reaction === false && r2.list.find((x) => x.id === 'a')!.reaction === true)
 check('going back a turn leaves reactions as they were', advance(r2, -1).list.every((x) => x.reaction === r2.list.find((y) => y.id === x.id)!.reaction))
+
+const d0 = start(withList(emptyCombat(), [c('a', 20), c('b', 15), c('z', 10)]))
+const d1 = delay(d0, 'a')!
+check('someone who waits goes after the next one and the turn passes', names(d1) === 'b,a,z' && d1.turn === 'b' && d1.list.find((x) => x.id === 'a')!.init === 15)
+check('they stay there in the order and come up after that one', advance(d1, 1).turn === 'a' && advance(advance(d1, 1), 1).turn === 'z')
+check('only the one whose turn it is can wait, and not the last', delay(d0, 'b') === null && delay(advance(advance(d0, 1), 1), 'z') === null && delay(emptyCombat(), 'a') === null)
+const lair = marker(d0, 'lair', 'Lair actions', 20)
+check('the lair gets a line in the order, with no creature', lair.list.some((x) => x.id === 'lair' && x.tokenId === null && x.init === 20) && names(lair) === 'a,lair,b,z')
+const lg = start(withList(emptyCombat(), [{ ...c('boss', 20), legendary: 2 }, c('x', 10)]))
+check('legendary actions come back when the turn of the creature begins', advance(advance(lg, 1), 1).list.find((x) => x.id === 'boss')!.legendary === 0 && lg.list.find((x) => x.id === 'boss')!.legendary === 2)
 
 console.log(failed ? `\n${failed} failed` : '\nall passed')
 process.exit(failed ? 1 : 0)

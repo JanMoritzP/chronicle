@@ -1297,3 +1297,51 @@ test('drawing: arrows, shapes, fading marks and pins on the map', { tag: '@featu
   await expect(dialog).toHaveCount(0)
   await expect(async () => { expect((await canvas.screenshot()).equals(before)).toBe(false) }).toPass()
 })
+
+test('combat: waiting, a lair line, legendary actions, reminders and effects that end with a turn', { tag: '@feature:table.combat-more' }, async ({ app }) => {
+  await openTable(app)
+  await makeScene(app, 'Throne room')
+  await makeToken(app, 'Knight')
+  await makeToken(app, 'Lich')
+  await app.locator('.tt-panel .seg').getByRole('button', { name: /Combat/ }).click()
+  await app.getByRole('button', { name: /Add all/ }).click()
+  await app.getByLabel('Initiative of Knight').fill('18')
+  await app.getByLabel('Initiative of Knight').press('Enter')
+  await app.getByLabel('Initiative of Lich').fill('12')
+  await app.getByLabel('Initiative of Lich').press('Enter')
+  await app.getByRole('button', { name: 'Start combat' }).click()
+  const order = app.getByRole('list', { name: 'Order of play' })
+  await expect(order.locator('[aria-current=step]')).toContainText('Knight')
+
+  // the knight waits: the lich goes first and the knight comes after
+  await app.getByRole('button', { name: 'Knight waits' }).click()
+  await expect(order.locator('[aria-current=step]')).toContainText('Lich')
+  await expect(order.locator('li').first()).toContainText('Lich')
+
+  // the lair
+  await app.getByRole('button', { name: 'Lair actions' }).click()
+  await expect(order).toContainText('Lair actions')
+
+  // legendary actions for the lich
+  await app.getByRole('button', { name: 'Track legendary actions of Lich' }).click()
+  const pips = app.getByRole('group', { name: 'Legendary actions of Lich' })
+  await expect(pips.getByRole('button', { name: /ready/ })).toHaveCount(3)
+  await pips.getByRole('button', { name: /^Legendary action 2 of Lich/ }).click()
+  await expect(pips.getByRole('button', { name: /used/ })).toHaveCount(2)
+
+  // a reminder is said when the turn comes
+  await app.getByRole('button', { name: 'Reminder for Knight' }).click()
+  await app.getByRole('dialog').getByRole('textbox').fill('The knight remembers the oath.')
+  await app.getByRole('dialog').locator('button[type=submit]').click()
+  await app.getByRole('button', { name: 'Next turn' }).click()
+  await app.getByRole('button', { name: 'Next turn' }).click()
+  await app.locator('.tt-panel .seg').getByRole('button', { name: /Chat/ }).click()
+  await expect(app.getByRole('list', { name: 'Chat' })).toContainText('The knight remembers the oath.')
+
+  // an effect that ends with the turn
+  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Token', exact: true }).click()
+  await app.getByLabel('Spell effect', { exact: true }).fill('Stunned')
+  await app.getByLabel('Until the end of their next turn').check()
+  await app.getByRole('button', { name: 'Apply', exact: true }).click()
+  await expect(app.getByRole('group', { name: 'Effects' })).toContainText('Stunned (until their turn ends)')
+})
