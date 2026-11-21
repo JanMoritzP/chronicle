@@ -486,6 +486,29 @@ const migrations: (string | ((d: Database.Database) => void))[] = [
   );
   CREATE INDEX handouts_ws ON handouts(workspace_id);
   `,
+  // roll tables (a list to roll on) and card decks (with where every card is)
+  `
+  CREATE TABLE roll_tables (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    entries TEXT NOT NULL DEFAULT '',
+    secret INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+  CREATE INDEX roll_tables_ws ON roll_tables(workspace_id);
+  CREATE TABLE decks (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    cards TEXT NOT NULL DEFAULT '',
+    state TEXT NOT NULL DEFAULT '{}',
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+  CREATE INDEX decks_ws ON decks(workspace_id);
+  `,
 ]
 
 export const SCHEMA_VERSION = migrations.length

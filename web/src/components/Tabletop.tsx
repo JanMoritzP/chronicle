@@ -11,6 +11,7 @@ import { pickImage, uploadImage } from '../tabletop/upload'
 import { EncounterPanel } from './TableEncounters'
 import { TilePanel, TilesSection } from './TableTiles'
 import { HandoutViewer, HandoutsPanel } from './TableHandouts'
+import { TablesAndDecks } from './TableDecks'
 import { ChatPanel, CombatPanel, LinkPage, SightLight, TokenSheet, TokenStats } from './TableParts'
 import { Select } from './Select'
 
@@ -39,7 +40,7 @@ export function TableView() {
   const sceneId = useTable((s) => s.sceneId)
   const error = useTable((s) => s.error)
   const [tool, setTool] = useState<Tool>('select')
-  const [panel, setPanel] = useState<'token' | 'scene' | 'table' | 'chat' | 'combat' | 'encounters' | 'handouts'>('token')
+  const [panel, setPanel] = useState<'token' | 'scene' | 'table' | 'chat' | 'combat' | 'encounters' | 'handouts' | 'games'>('token')
   const combat = useTable((s) => s.combat)
   const unread = useTable((s) => s.unread)
   const narrow = useNarrow()
@@ -241,6 +242,7 @@ export function TableView() {
               <button className={panel === 'combat' ? 'on' : ''} onClick={() => setPanel('combat')}><Swords size={12} /> Combat{combat.active ? ` (R${combat.round})` : ''}</button>
               <button className={panel === 'chat' ? 'on' : ''} onClick={() => setPanel('chat')}><MessageSquare size={12} /> Chat{unread > 0 && panel !== 'chat' ? ` (${unread})` : ''}</button>
               <button className={panel === 'handouts' ? 'on' : ''} onClick={() => setPanel('handouts')}>Handouts</button>
+              <button className={panel === 'games' ? 'on' : ''} onClick={() => setPanel('games')}>Tables and decks</button>
               <button className={panel === 'table' ? 'on' : ''} onClick={() => setPanel('table')}>Table</button>
             </div>
             {panel === 'token' && (selectedTile && !selected.length && gm ? <TilePanel /> : <TokenPanel token={one} count={selected.length} />)}
@@ -249,6 +251,7 @@ export function TableView() {
             {panel === 'table' && <TablePanel />}
             {panel === 'chat' && <ChatPanel />}
             {panel === 'handouts' && <HandoutsPanel />}
+            {panel === 'games' && <TablesAndDecks />}
             {panel === 'combat' && <CombatPanel />}
             {panel === 'encounters' && gm && <EncounterPanel />}
           </aside>

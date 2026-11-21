@@ -25,6 +25,9 @@ export type TileLayer = 'bg' | 'overhead' | 'gm'
 export interface Tile { id: string; sceneId: string; image: string; x: number; y: number; w: number; h: number; rotation: number; layer: TileLayer; locked: boolean; hidden: boolean; z: number }
 export interface Drawing { id: string; sceneId: string; userId: string; kind: DrawKind; points: { x: number; y: number }[]; color: string; width: number; fill: string; text: string; gmOnly: boolean }
 export interface Handout { id: string; title: string; text: string; image: string; /** only the GM is told who can read it */ revealed?: 'all' | string[] }
+export interface RollTable { id: string; name: string; secret: boolean; size: number; /** only the GM is sent the entries */ entries?: string }
+export interface DeckCard { id: number; name: string; text: string }
+export interface Deck { id: string; name: string; size: number; remaining: number; discard: DeckCard[]; hand: DeckCard[]; held: Record<string, number>; cardsText?: string }
 export interface Combatant { id: string; tokenId: string | null; name: string; init: number | null; hidden: boolean; done: boolean; reaction?: boolean }
 export interface Combat { active: boolean; round: number; turn: string | null; list: Combatant[] }
 export const NO_COMBAT: Combat = { active: false, round: 0, turn: null, list: [] }
@@ -61,6 +64,8 @@ interface TableState {
   /** The explored area of this scene for this person, as a PNG in base64 */
   fog: string | null
   handouts: Handout[]
+  rolltables: RollTable[]
+  decks: Deck[]
   /** the handout open on this person's screen */
   shown: Handout | null
   error: string
@@ -68,7 +73,7 @@ interface TableState {
 
 export const useTable = create<TableState>(() => ({
   conn: 'closed', you: null, role: 'spectator', settings: DEFAULT_SETTINGS, scenes: [], active: null, sceneId: null, tokens: [], online: [], members: [],
-  selected: [], cursors: {}, rulers: {}, chat: [], unread: 0, combat: NO_COMBAT, drawings: [], tiles: [], selectedTile: null, walls: [], lights: [], fog: null, handouts: [], shown: null, error: '',
+  selected: [], cursors: {}, rulers: {}, chat: [], unread: 0, combat: NO_COMBAT, drawings: [], tiles: [], selectedTile: null, walls: [], lights: [], fog: null, handouts: [], rolltables: [], decks: [], shown: null, error: '',
 }))
 
 type Listener = (m: any) => void
@@ -86,7 +91,7 @@ export function applyMessage(m: any) {
       // after a reconnect the same scene comes back: what the person had selected stays selected
       set((s) => ({
         you: m.you, role: m.you.role, settings: { ...DEFAULT_SETTINGS, ...m.settings }, scenes: m.scenes, active: m.active, sceneId: m.sceneId,
-        handouts: m.handouts ?? [], tokens: m.tokens, online: m.online, members: m.members ?? [], chat: m.chat ?? [], unread: 0, combat: m.combat ?? NO_COMBAT, drawings: m.drawings ?? [], tiles: m.tiles ?? [], selectedTile: m.sceneId === s.sceneId && (m.tiles ?? []).some((t: Tile) => t.id === s.selectedTile) ? s.selectedTile : null, walls: m.walls ?? [], lights: m.lights ?? [], fog: m.fog ?? null,
+        handouts: m.handouts ?? [], rolltables: m.rolltables ?? [], decks: m.decks ?? [], tokens: m.tokens, online: m.online, members: m.members ?? [], chat: m.chat ?? [], unread: 0, combat: m.combat ?? NO_COMBAT, drawings: m.drawings ?? [], tiles: m.tiles ?? [], selectedTile: m.sceneId === s.sceneId && (m.tiles ?? []).some((t: Tile) => t.id === s.selectedTile) ? s.selectedTile : null, walls: m.walls ?? [], lights: m.lights ?? [], fog: m.fog ?? null,
         selected: m.sceneId === s.sceneId ? s.selected.filter((id) => m.tokens.some((t: Token) => t.id === id)) : [], cursors: {}, rulers: {},
       }))
       break
@@ -116,6 +121,8 @@ export function applyMessage(m: any) {
     }); break
     case 'chat.msg': set((s) => ({ chat: [...s.chat.slice(-299), m.msg], unread: m.msg.userId === s.you?.id ? s.unread : s.unread + 1 })); break
     case 'handouts': set((s) => ({ handouts: m.handouts, shown: s.shown && m.handouts.some((h: Handout) => h.id === s.shown!.id) ? m.handouts.find((h: Handout) => h.id === s.shown!.id) : null })); break
+    case 'rolltables': set({ rolltables: m.tables }); break
+    case 'decks': set({ decks: m.decks }); break
     case 'handout.show': set({ shown: m.handout }); break
     case 'nack': set({ error: m.error }); break
   }
@@ -161,7 +168,7 @@ export function leaveTable() {
   const s = socket
   socket = null
   s?.close()
-  set({ conn: 'closed', you: null, role: 'spectator', scenes: [], tokens: [], sceneId: null, active: null, selected: [], cursors: {}, rulers: {}, online: [], members: [], chat: [], unread: 0, combat: NO_COMBAT, drawings: [], tiles: [], selectedTile: null, walls: [], lights: [], fog: null, handouts: [], shown: null, error: '' })
+  set({ conn: 'closed', you: null, role: 'spectator', scenes: [], tokens: [], sceneId: null, active: null, selected: [], cursors: {}, rulers: {}, online: [], members: [], chat: [], unread: 0, combat: NO_COMBAT, drawings: [], tiles: [], selectedTile: null, walls: [], lights: [], fog: null, handouts: [], rolltables: [], decks: [], shown: null, error: '' })
 }
 
 /** Sends a message; an operation id comes back with a refusal so the cause can be shown. */

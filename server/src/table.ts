@@ -11,12 +11,13 @@ import { uid } from './pages.js'
 import { publishWorld } from './live.js'
 import { presenceChanged } from './presence.js'
 import { ALLOWED } from './routes/uploads.js'
-import { parseChat, readable, type Kind, type Part } from './chat.js'
+import { parseChat, readable, withInline, type Kind, type Part } from './chat.js'
 import { buildSight, canSee, type Sight, type SightToken } from './sight.js'
 import { advance, emptyCombat, end as endCombat, start as startCombat, visible as visibleCombat, withList, type Combat } from './combat.js'
 import { cryptoRng, parseRoll } from './dice.js'
 import { adjustDamage, concentrationDc, deathSave, longRest, modOf, saveBonusOf, shortRest, type Effect } from './rules5e.js'
 import { parseSheet, type Sheet } from './sheet.js'
+import { cardsText, discardFromHand, drawCards, entriesText, freshDeck, handOf, parseCards, parseEntries, pick, toDiscard, toHand, type DeckState } from './tables.js'
 import { effectsOf, MAX_EFFECTS, modsOf, tick } from './effects.js'
 import { encounterRow } from './routes/encounters.js'
 import {
@@ -261,12 +262,53 @@ function showHandout(ws: string, h: HandoutDb, only?: (c: Conn) => boolean) {
   for (const c of inWorld(ws)) if (c.role !== 'gm' && mayRead(h, c.user.id) && (!only || only(c))) send(c, { t: 'handout.show', handout: { id: h.id, title: h.title, text: h.text, image: h.image } })
 }
 
+// ---------- roll tables and decks ----------
+
+interface RollTableDb { id: string; name: string; entries: string; secret: number; updated_at: number }
+const rollTableRows = (ws: string) => db.prepare('SELECT id, name, entries, secret, updated_at FROM roll_tables WHERE workspace_id = ? ORDER BY name COLLATE NOCASE').all(ws) as RollTableDb[]
+/** The tables a person can see: the GM all of them with their entries, the others the names of the ones that are not secret. */
+function rollTablesFor(c: Conn) {
+  return rollTableRows(c.ws).filter((t) => c.role === 'gm' || !t.secret).map((t) => ({ id: t.id, name: t.name, secret: !!t.secret, size: parseEntries(t.entries).length, ...(c.role === 'gm' ? { entries: t.entries } : {}) }))
+}
+function sendRollTables(ws: string) { for (const c of inWorld(ws)) send(c, { t: 'rolltables', tables: rollTablesFor(c) }) }
+
+interface DeckDb { id: string; name: string; cards: string; state: string }
+const deckRows = (ws: string) => db.prepare('SELECT id, name, cards, state FROM decks WHERE workspace_id = ? ORDER BY name COLLATE NOCASE').all(ws) as DeckDb[]
+const deckState = (d: DeckDb): DeckState => {
+  const st = parse<Partial<DeckState>>(d.state, {})
+  return { draw: st.draw ?? [], discard: st.discard ?? [], hands: st.hands ?? {} }
+}
+const saveDeck = (id: string, st: DeckState) => db.prepare('UPDATE decks SET state = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(st), now(), id)
+/** Everyone sees the decks, the face-up discard pile and how many cards each person holds; a person sees only their own cards. */
+function decksFor(c: Conn) {
+  return deckRows(c.ws).map((d) => {
+    const cards = parseCards(d.cards), st = deckState(d)
+    const view = (i: number) => ({ id: i, name: cards[i]?.name ?? '?', text: cards[i]?.text ?? '' })
+    return {
+      id: d.id, name: d.name, size: cards.length, remaining: st.draw.length, discard: st.discard.map(view),
+      hand: handOf(st, c.user.id).map(view), held: Object.fromEntries(Object.entries(st.hands).filter(([u]) => u !== c.user.id).map(([u, h]) => [u, h.length])),
+      ...(c.role === 'gm' ? { cardsText: d.cards } : {}),
+    }
+  })
+}
+function sendDecks(ws: string) { for (const c of inWorld(ws)) send(c, { t: 'decks', decks: decksFor(c) }) }
+
+/** Rolls on a table and says what came up. A secret table, or a GM roll of one, is for the GMs and the roller only. */
+function rollOnTable(ws: string, c: Conn, t: RollTableDb) {
+  const entries = parseEntries(t.entries)
+  const hit = pick(entries, cryptoRng)
+  if (!hit) return false
+  const roll = { expr: `1d${hit.total}`, label: t.name, total: hit.roll, terms: [{ kind: 'dice' as const, sign: 1 as const, count: 1, sides: hit.total, dice: [{ v: hit.roll }], subtotal: hit.roll, text: `1d${hit.total}` }], crit: null }
+  postChat(ws, c.user.id, c.user.username, t.secret ? 'gmroll' : 'roll', [], [{ t: 'roll', roll }, { t: 'text', text: ' → ' }, ...withInline(entries[hit.index].text, cryptoRng)])
+  return true
+}
+
 function sendSnapshot(c: Conn) {
   const { active, settings } = stateOf(c.ws)
   viewFor(c, c.scene)
   send(c, {
     t: 'snapshot', you: { id: c.user.id, username: c.user.username, role: c.role }, settings, scenes: scenesOf(c.ws), active,
-    sceneId: c.scene, tokens: tokensFor(c, c.scene), online: onlineIn(c.ws), members: membersOf(c.ws), chat: historyFor(c), combat: visibleCombat(combatOf(c.ws), c.role === 'gm'), handouts: handoutsFor(c), ...sceneState(c),
+    sceneId: c.scene, tokens: tokensFor(c, c.scene), online: onlineIn(c.ws), members: membersOf(c.ws), chat: historyFor(c), combat: visibleCombat(combatOf(c.ws), c.role === 'gm'), handouts: handoutsFor(c), rolltables: rollTablesFor(c), decks: decksFor(c), ...sceneState(c),
   })
 }
 
@@ -661,7 +703,94 @@ async function handle(c: Conn, m: ClientMessage) {
       postChat(ws, c.user.id, before.name, 'emote', [], [{ t: 'text', text: `${said} (${res.saves.ok} successes, ${res.saves.fail} failures)` }])
       return emitToken(ws, before, tokenRow(m.id, ws)!)
     }
+    case 'rolltable.save': {
+      if (!gm) return nack(c, m, 'only the GM can do that')
+      const t = now()
+      if (m.id) {
+        if (!db.prepare('SELECT 1 FROM roll_tables WHERE id = ? AND workspace_id = ?').get(m.id, ws)) return nack(c, m, 'no such table')
+        db.prepare('UPDATE roll_tables SET name = ?, entries = ?, secret = ?, updated_at = ? WHERE id = ?').run(m.name, entriesText(parseEntries(m.entries)), m.secret ? 1 : 0, t, m.id)
+      } else {
+        if (rollTableRows(ws).length >= 100) return nack(c, m, 'That is as many tables as a world can keep.')
+        db.prepare('INSERT INTO roll_tables(id,workspace_id,name,entries,secret,created_at,updated_at) VALUES(?,?,?,?,?,?,?)').run(uid(), ws, m.name, entriesText(parseEntries(m.entries)), m.secret ? 1 : 0, t, t)
+      }
+      return sendRollTables(ws)
+    }
+    case 'rolltable.delete': {
+      if (!gm) return nack(c, m, 'only the GM can do that')
+      db.prepare('DELETE FROM roll_tables WHERE id = ? AND workspace_id = ?').run(m.id, ws)
+      return sendRollTables(ws)
+    }
+    case 'rolltable.roll': {
+      if (c.role === 'spectator') return nack(c, m, 'Spectators can watch but not roll.')
+      const t = rollTableRows(ws).find((x) => x.id === m.id)
+      if (!t || (t.secret && !gm)) return nack(c, m, 'no such table')
+      if (!rollOnTable(ws, c, t)) return nack(c, m, 'That table has no entries.')
+      return
+    }
+    case 'deck.save': {
+      if (!gm) return nack(c, m, 'only the GM can do that')
+      const cards = cardsText(parseCards(m.cards)), t = now()
+      const fresh = JSON.stringify(freshDeck(parseCards(cards).length, cryptoRng))
+      if (m.id) {
+        const old = db.prepare('SELECT cards FROM decks WHERE id = ? AND workspace_id = ?').get(m.id, ws) as { cards: string } | undefined
+        if (!old) return nack(c, m, 'no such deck')
+        // changing the cards deals them out again; changing only the name keeps the game as it is
+        if (old.cards !== cards) db.prepare('UPDATE decks SET name = ?, cards = ?, state = ?, updated_at = ? WHERE id = ?').run(m.name, cards, fresh, t, m.id)
+        else db.prepare('UPDATE decks SET name = ?, updated_at = ? WHERE id = ?').run(m.name, t, m.id)
+      } else {
+        if (deckRows(ws).length >= 50) return nack(c, m, 'That is as many decks as a world can keep.')
+        db.prepare('INSERT INTO decks(id,workspace_id,name,cards,state,created_at,updated_at) VALUES(?,?,?,?,?,?,?)').run(uid(), ws, m.name, cards, fresh, t, t)
+      }
+      return sendDecks(ws)
+    }
+    case 'deck.delete': {
+      if (!gm) return nack(c, m, 'only the GM can do that')
+      db.prepare('DELETE FROM decks WHERE id = ? AND workspace_id = ?').run(m.id, ws)
+      return sendDecks(ws)
+    }
+    case 'deck.shuffle': {
+      if (!gm) return nack(c, m, 'only the GM can do that')
+      const d = deckRows(ws).find((x) => x.id === m.id)
+      if (!d) return nack(c, m, 'no such deck')
+      saveDeck(d.id, freshDeck(parseCards(d.cards).length, cryptoRng))
+      postChat(ws, c.user.id, c.user.username, 'emote', [], [{ t: 'text', text: `shuffles the ${d.name} deck` }])
+      return sendDecks(ws)
+    }
+    case 'deck.draw': {
+      if (c.role === 'spectator') return nack(c, m, 'Spectators can watch but not draw.')
+      const d = deckRows(ws).find((x) => x.id === m.id)
+      if (!d) return nack(c, m, 'no such deck')
+      const cards = parseCards(d.cards)
+      const out = drawCards(deckState(d), m.count, cryptoRng)
+      if (!out.drawn.length) return nack(c, m, `The ${d.name} deck is empty. The GM can shuffle it.`)
+      const st = m.to === 'hand' ? toHand(out.state, c.user.id, out.drawn) : toDiscard(out.state, out.drawn)
+      saveDeck(d.id, st)
+      const named = out.drawn.map((i) => `${cards[i]?.name ?? '?'}${cards[i]?.text ? ` (${cards[i].text})` : ''}`).join(', ')
+      postChat(ws, c.user.id, c.user.username, 'emote', [], [{ t: 'text', text: m.to === 'hand' ? `draws ${out.drawn.length} ${out.drawn.length === 1 ? 'card' : 'cards'} from the ${d.name} deck` : `draws ${named} from the ${d.name} deck` }])
+      return sendDecks(ws)
+    }
+    case 'deck.play': {
+      if (c.role === 'spectator') return nack(c, m, 'Spectators can watch but not play cards.')
+      const d = deckRows(ws).find((x) => x.id === m.id)
+      if (!d) return nack(c, m, 'no such deck')
+      const st = discardFromHand(deckState(d), c.user.id, m.card)
+      if (!st) return nack(c, m, 'That card is not in your hand.')
+      const card = parseCards(d.cards)[m.card]
+      saveDeck(d.id, st)
+      postChat(ws, c.user.id, c.user.username, 'emote', [], [{ t: 'text', text: `plays ${card?.name ?? 'a card'}${card?.text ? ` (${card.text})` : ''} from the ${d.name} deck` }])
+      return sendDecks(ws)
+    }
     case 'chat': {
+      const cmd = /^\/(?:table|tbl)\s+(.+)$/i.exec(m.text.trim())
+      if (cmd) {
+        if (c.role === 'spectator') return nack(c, m, 'Spectators can talk but not roll.')
+        const want = cmd[1].trim().toLowerCase()
+        const rows = rollTableRows(ws).filter((t) => gm || !t.secret)
+        const t = rows.find((x) => x.name.toLowerCase() === want) ?? rows.find((x) => x.name.toLowerCase().startsWith(want))
+        if (!t) return nack(c, m, `There is no table called “${cmd[1].trim()}”. The tables are in the Tables tab.`)
+        if (!rollOnTable(ws, c, t)) return nack(c, m, 'That table has no entries.')
+        return
+      }
       const parsed = parseChat(m.text, undefined, worldSystem(ws))
       if ('error' in parsed) return nack(c, m, parsed.error)
       if (c.role === 'spectator' && parsed.kind !== 'say') return nack(c, m, 'Spectators can talk but not roll or whisper.')

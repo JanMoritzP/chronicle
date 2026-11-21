@@ -179,6 +179,15 @@ export const clientMessage = z.discriminatedUnion('t', [
   z.object({ t: z.literal('handout.reveal'), id, to: z.union([z.literal('all'), z.literal('none'), z.array(id).max(50)]) }),
   /** open it again on the screens of everyone who may read it */
   z.object({ t: z.literal('handout.show'), id }),
+  z.object({ t: z.literal('rolltable.save'), id: id.optional(), name: z.string().trim().min(1).max(60), entries: z.string().max(20000), secret: z.boolean() }),
+  z.object({ t: z.literal('rolltable.delete'), id }),
+  z.object({ t: z.literal('rolltable.roll'), id }),
+  z.object({ t: z.literal('deck.save'), id: id.optional(), name: z.string().trim().min(1).max(60), cards: z.string().max(20000) }),
+  z.object({ t: z.literal('deck.delete'), id }),
+  z.object({ t: z.literal('deck.shuffle'), id }),
+  /** to a hand nobody else sees, or face up on the table (and then onto the discard pile) */
+  z.object({ t: z.literal('deck.draw'), id, count: z.number().int().min(1).max(10), to: z.enum(['hand', 'table']) }),
+  z.object({ t: z.literal('deck.play'), id, card: z.number().int().min(0).max(1000) }),
   z.object({ t: z.literal('combat.control'), action: z.enum(['start', 'next', 'prev', 'end', 'clear']) }),
   z.object({ t: z.literal('encounter.stage'), id, sceneId: id, x: coord, y: coord, hidden: z.boolean().default(true), combat: z.boolean().default(false) }),
   z.object({

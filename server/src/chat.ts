@@ -8,7 +8,7 @@ export interface Parsed { kind: Kind; /** user name a whisper goes to */ to?: st
 
 const INLINE = /\[\[([^\]]{1,80})\]\]/g
 
-function withInline(text: string, rng: Rng): Part[] {
+export function withInline(text: string, rng: Rng): Part[] {
   const parts: Part[] = []
   let last = 0
   for (const m of text.matchAll(INLINE)) {

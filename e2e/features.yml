@@ -448,6 +448,9 @@ areas:
       - id: table.handouts
         name: "Handouts the GM writes and shows to chosen players, opening on their screens"
         files: [web/src/components/TableHandouts.tsx, server/src/table.ts]
+      - id: table.tables-decks
+        name: "Roll tables and card decks: players roll and draw, hands stay private, secret tables stay secret"
+        files: [web/src/components/TableDecks.tsx, server/src/tables.ts, server/src/table.ts]
       - id: table.fog
         name: "Fog of war and darkness are switched on per scene and kept"
         files: [web/src/components/Tabletop.tsx]
