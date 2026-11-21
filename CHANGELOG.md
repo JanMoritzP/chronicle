@@ -2,6 +2,11 @@
 
 Newest first. The version in `electron/package.json` is the app version; the release notes on GitHub are what the in-app update dialog shows, so keep each entry short and in plain words. Sections after 0.2.0 are written by `scripts/release.mjs` from the commit subjects, so the commit messages carry the release notes.
 
+## 0.53.0 (2026-11-21)
+
+### Features
+- roll templates, a /card line that posts a titled card of rolls
+
 ## 0.52.0 (2026-11-21)
 
 ### Features
