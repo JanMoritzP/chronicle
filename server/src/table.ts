@@ -12,6 +12,7 @@ import { publishWorld } from './live.js'
 import { presenceChanged } from './presence.js'
 import { ALLOWED } from './routes/uploads.js'
 import { parseChat, readable, type Kind, type Part } from './chat.js'
+import { buildSight, canSee, type Sight, type SightToken } from './sight.js'
 import { advance, emptyCombat, end as endCombat, start as startCombat, visible as visibleCombat, withList, type Combat } from './combat.js'
 import { parseRoll } from './dice.js'
 import { encounterRow } from './routes/encounters.js'
@@ -30,6 +31,8 @@ const CLOSE_DENIED = 4003
 interface Conn {
   socket: WebSocket; user: AuthUser; ws: string; wr: 'editor' | 'viewer'; role: TableRole; scene: string | null
   alive: boolean; limit: () => boolean; queue: Promise<void>
+  /** What this player's tokens see on the scene they are on (null when nothing is hidden from them), and which tokens they were told about. */
+  sight: Sight | null; shown: Set<string>
 }
 const conns = new Set<Conn>()
 
@@ -91,9 +94,28 @@ function viewFor(c: Conn, wanted?: string | null) {
   return scene
 }
 
-const tokensFor = (c: Conn, scene: string | null) => scene
-  ? (db.prepare('SELECT * FROM tokens WHERE scene_id = ? AND workspace_id = ? ORDER BY z, created_at').all(scene, c.ws) as TokenDb[]).map(tokenJson).filter((t) => canSeeToken(c.role, c.user.id, t)).map((t) => redact(c.role, c.user.id, t))
-  : []
+/** What a player's tokens can see on a scene, from the walls, lights and tokens as they are stored now. Null for everyone but players, and where there is no fog. */
+function sightFor(c: Conn, sceneId: string | null): Sight | null {
+  if (c.role !== 'player' || !sceneId) return null
+  const sc = sceneRow(sceneId, c.ws)
+  if (!sc || !(sc.fog || sc.darkness > 0)) return null
+  const walls = (db.prepare('SELECT x1, y1, x2, y2, kind, open FROM scene_walls WHERE scene_id = ?').all(sceneId) as WallDb[])
+    .filter((w) => w.kind === 'wall' || w.kind === 'secret' || (w.kind === 'door' && !w.open))
+  const tokens = (db.prepare('SELECT id, x, y, owners, data FROM tokens WHERE scene_id = ?').all(sceneId) as { id: string; x: number; y: number; owners: string; data: string }[])
+    .map((t): SightToken => ({ id: t.id, x: t.x, y: t.y, owners: parse<string[]>(t.owners, []), data: parse<SightToken['data']>(t.data, {}) }))
+  return buildSight({ width: sc.width, height: sc.height, gridSize: sc.grid_size, dist: sc.dist, fog: !!sc.fog, darkness: sc.darkness }, walls, tokens, c.user.id)
+}
+
+/** May this connection be told about the token: allowed to see it at all (hidden ones), and in sight where there is fog. */
+const tellable = (c: Conn, t: TokenRow) => canSeeToken(c.role, c.user.id, t) && canSee(c.sight, t)
+
+function tokensFor(c: Conn, scene: string | null) {
+  if (!scene) { c.sight = null; c.shown = new Set(); return [] }
+  c.sight = sightFor(c, scene)
+  const list = (db.prepare('SELECT * FROM tokens WHERE scene_id = ? AND workspace_id = ? ORDER BY z, created_at').all(scene, c.ws) as TokenDb[]).map(tokenJson).filter((t) => tellable(c, t))
+  c.shown = new Set(list.map((t) => t.id))
+  return list.map((t) => redact(c.role, c.user.id, t))
+}
 
 interface WallDb { id: string; x1: number; y1: number; x2: number; y2: number; kind: string; open: number }
 /** Everyone gets the walls (their screen needs them to work out what is hidden); a secret door looks like any other wall until the GM changes it. */
@@ -185,7 +207,7 @@ const sceneState = (c: Conn) => ({ walls: wallsFor(c, c.scene), lights: lightsOf
 function sendView(c: Conn) {
   send(c, { t: 'view', sceneId: c.scene, tokens: tokensFor(c, c.scene), ...sceneState(c) })
 }
-const sendWalls = (ws: string, sceneId: string) => { for (const c of inWorld(ws)) if (c.scene === sceneId) send(c, { t: 'walls', sceneId, walls: wallsFor(c, sceneId) }) }
+const sendWalls = (ws: string, sceneId: string) => { for (const c of inWorld(ws)) if (c.scene === sceneId) send(c, { t: 'walls', sceneId, walls: wallsFor(c, sceneId) }); scheduleSight(ws, sceneId) }
 const sendLights = (ws: string, sceneId: string) => { const lights = lightsOf(ws, sceneId); for (const c of inWorld(ws)) if (c.scene === sceneId) send(c, { t: 'lights', sceneId, lights }) }
 
 /** Everyone who may open the world, so the GM can hand out tokens to people who are not online. */
@@ -223,10 +245,32 @@ function emitToken(ws: string, before: TokenRow | null, after: TokenRow | null) 
   if (glows(before) || glows(after)) sendLights(ws, sceneId)
   for (const c of inWorld(ws)) {
     if (c.scene !== sceneId) continue
-    const sawBefore = !!before && canSeeToken(c.role, c.user.id, before)
-    const seesAfter = !!after && canSeeToken(c.role, c.user.id, after)
-    if (seesAfter) send(c, { t: 'token', token: redact(c.role, c.user.id, after!) })
-    else if (sawBefore) send(c, { t: 'token.remove', ids: [before!.id] })
+    const id = (after ?? before)!.id
+    if (after && tellable(c, after)) { c.shown.add(id); send(c, { t: 'token', token: redact(c.role, c.user.id, after) }) }
+    else if (c.shown.delete(id)) send(c, { t: 'token.remove', ids: [id] })
+  }
+  // whatever this changed about who can see what is worked out a moment later, once, however many changes came together
+  scheduleSight(ws, sceneId)
+}
+
+const sightTimers = new Map<string, NodeJS.Timeout>()
+function scheduleSight(ws: string, sceneId: string) {
+  const key = ws + ':' + sceneId
+  if (sightTimers.has(key)) return
+  sightTimers.set(key, setTimeout(() => { sightTimers.delete(key); refreshSight(ws, sceneId) }, 50))
+}
+
+/** Players are told about the tokens that came into view and told to forget the ones that left it. */
+function refreshSight(ws: string, sceneId: string) {
+  const watchers = inWorld(ws).filter((c) => c.scene === sceneId && c.role === 'player')
+  if (!watchers.length) return
+  const rows = (db.prepare('SELECT * FROM tokens WHERE scene_id = ? AND workspace_id = ?').all(sceneId, ws) as TokenDb[]).map(tokenJson)
+  for (const c of watchers) {
+    c.sight = sightFor(c, sceneId)
+    for (const t of rows) {
+      if (tellable(c, t)) { if (!c.shown.has(t.id)) { c.shown.add(t.id); send(c, { t: 'token', token: redact(c.role, c.user.id, t) }) } }
+      else if (c.shown.delete(t.id)) send(c, { t: 'token.remove', ids: [t.id] })
+    }
   }
 }
 
@@ -276,6 +320,7 @@ async function handle(c: Conn, m: ClientMessage) {
       if (!sceneRow(m.id, ws)) return nack(c, m, 'no such scene')
       if (!(await applyScenePatch(c, m, m.id, m.patch))) return
       for (const x of inWorld(ws)) send(x, { t: 'scene', scene: sceneJson(sceneRow(m.id, ws)!) })
+      scheduleSight(ws, m.id)
       return
     }
     case 'scene.delete': {
@@ -344,7 +389,7 @@ async function handle(c: Conn, m: ClientMessage) {
       for (const mv of m.moves) {
         const before = tokenRow(mv.id, ws)
         if (!before) continue
-        if (!canMoveToken(c.role, c.user.id, before, settings)) { send(c, { t: 'token', token: redact(c.role, c.user.id, before) }); continue }
+        if (!canMoveToken(c.role, c.user.id, before, settings)) { if (c.shown.has(before.id)) send(c, { t: 'token', token: redact(c.role, c.user.id, before) }); continue }
         upd.run(mv.x, mv.y, mv.rotation ?? before.rotation, now(), mv.id)
         emitToken(ws, before, tokenRow(mv.id, ws)!)
       }
@@ -621,10 +666,13 @@ async function handle(c: Conn, m: ClientMessage) {
       const next = settingsSchema.parse({ ...settings, ...m.patch })
       saveState(ws, stateOf(ws).active, next)
       for (const x of inWorld(ws)) {
+        const was = x.role
         x.role = roleAt(x.user, x.wr, next)
         send(x, { t: 'settings', settings: next, you: { id: x.user.id, username: x.user.username, role: x.role } })
         // someone who stopped running the table goes back to the table's scene
         if (x.role !== 'gm' && x.scene !== stateOf(ws).active) { viewFor(x, null); sendView(x) }
+        // a person who became a player (or stopped being one) is told again what they may see
+        else if (x.role !== was) sendView(x)
       }
       return announce(ws)
     }
@@ -683,7 +731,7 @@ export function attachTable(server: HttpServer) {
     wss.handleUpgrade(req, socket, head, (socket) => {
       const c: Conn = {
         socket, user, ws: m[1], wr: role, role: roleAt(user, role, stateOf(m[1]).settings), scene: null, alive: true,
-        limit: makeLimiter(90, 180), queue: Promise.resolve(),
+        limit: makeLimiter(90, 180), queue: Promise.resolve(), sight: null, shown: new Set(),
       }
       conns.add(c)
       presenceChanged()
