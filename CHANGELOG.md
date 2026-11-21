@@ -2,6 +2,11 @@
 
 Newest first. The version in `electron/package.json` is the app version; the release notes on GitHub are what the in-app update dialog shows, so keep each entry short and in plain words. Sections after 0.2.0 are written by `scripts/release.mjs` from the commit subjects, so the commit messages carry the release notes.
 
+## 0.66.0 (2026-11-21)
+
+### Features
+- a time of day at the table that sets the darkness of scenes
+
 ## 0.65.0 (2026-11-21)
 
 ### Features
