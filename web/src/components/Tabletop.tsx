@@ -15,6 +15,7 @@ import { HandoutViewer, HandoutsPanel } from './TableHandouts'
 import { AudioPlayer } from './TableAudio'
 import { TriggersSection } from './TableTriggers'
 import { MapEditor } from './MapEditor'
+import { TokenActions, TokenBars, TokenLook } from './TokenLook'
 import { TablesAndDecks } from './TableDecks'
 import { ChatPanel, CombatPanel, LinkPage, SightLight, TokenSheet, TokenStats } from './TableParts'
 import { Select } from './Select'
@@ -184,6 +185,11 @@ export function TableView() {
     if (e.key === 'Enter' && tool === 'wall') engine.current?.finishWalls()
     else if (e.key === 'Escape') { engine.current?.finishWalls(); useTable.setState({ selected: [] }); setTool('select') }
     else if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z') && !e.shiftKey) { e.preventDefault(); engine.current?.undoMove() }
+    else if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C') && sel.length) { clipboard = sel.map((t) => structuredClone(t)) }
+    else if ((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V') && clipboard.length && scene) {
+      e.preventDefault()
+      for (const t of clipboard) sendTable({ t: 'token.add', sceneId: scene.id, token: { name: t.name, x: t.x + scene.gridSize, y: t.y + scene.gridSize, size: t.size, rotation: t.rotation, image: t.image, color: t.color, hidden: t.hidden, owners: gm ? t.owners : [], data: t.data, ...(t.pageId ? { pageId: t.pageId } : {}) } })
+    }
     else if (e.key === 'f' || e.key === 'F') engine.current?.fit()
     else if (e.key === 'r' && !e.ctrlKey && sel.length) for (const t of sel) sendTable({ t: 'token.update', id: t.id, patch: { rotation: (t.rotation + 45) % 360 } })
     else if (gm && (e.key === 'Delete' || e.key === 'Backspace') && st.selectedTile && !sel.length) { e.preventDefault(); sendTable({ t: 'tile.delete', ids: [st.selectedTile] }) }
@@ -358,6 +364,9 @@ function MyStrip() {
   )
 }
 
+/** Tokens copied with Ctrl+C, for Ctrl+V to put down again. */
+let clipboard: Token[] = []
+
 function TokenPanel({ token, count }: { token: Token | null; count: number }) {
   const role = useTable((s) => s.role)
   const members = useTable((s) => s.members)
@@ -369,6 +378,7 @@ function TokenPanel({ token, count }: { token: Token | null; count: number }) {
   if (!token) {
     return (
       <>
+        {gm && count > 1 && <button className="btn sm" title="Roll each one's hit points from the dice on its sheet" onClick={() => sendTable({ t: 'token.rollhp', ids: useTable.getState().selected })}>Roll hit points for each</button>}
         <p className="muted tt-hint">{count > 1 ? `${count} tokens selected. R turns them, arrows move them${gm ? ', Delete removes them' : ''}.` : 'Click a token to select it. Hold Alt and click the map to ping. Drag empty ground to move the view, scroll to zoom.'}</p>
         <ul className="tt-tokens" aria-label="Tokens on this scene">
           {tokens.map((t) => <li key={t.id}><button className="btn ghost sm" onClick={() => useTable.setState({ selected: [t.id] })}><span className="tt-dot" style={{ background: t.color || '#6b7280' }} />{t.name || 'Unnamed'}{t.hidden ? ' (hidden)' : ''}</button></li>)}
@@ -382,6 +392,14 @@ function TokenPanel({ token, count }: { token: Token | null; count: number }) {
     <div className="tt-form">
       <label>Name<input className="input" value={name} disabled={!gm} onChange={(e) => setName(e.target.value)} onBlur={() => name !== token.name && patch({ name })} onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} /></label>
       <TokenStats token={token} />
+      <TokenBars token={token} can={gm} />
+      <TokenActions token={token} gm={gm} />
+      {gm && (
+        <>
+          <button className="btn sm" title="Roll the hit points from the dice on the sheet" onClick={() => sendTable({ t: 'token.rollhp', ids: [token.id] })}>Roll hit points</button>
+          <TokenLook token={token} />
+        </>
+      )}
       {gm && (
         <>
           <LinkPage token={token} />

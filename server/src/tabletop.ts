@@ -93,6 +93,24 @@ function validLightVision(d: Record<string, unknown>) {
   return true
 }
 
+const hex6 = (v: unknown) => typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v)
+/** How a token looks (shape, border, tint, flip, aura, elevation), its extra bars and its action buttons. */
+function validTokenLook(d: Record<string, unknown>) {
+  if (d.shape !== undefined && !['round', 'square', 'hex'].includes(d.shape as string)) return false
+  if (d.border !== undefined && !hex6(d.border)) return false
+  if (d.tint !== undefined && !hex6(d.tint)) return false
+  if (d.flip !== undefined && typeof d.flip !== 'boolean') return false
+  if (d.nameplate !== undefined && typeof d.nameplate !== 'boolean') return false
+  if (d.elevation !== undefined && !(typeof d.elevation === 'number' && Number.isFinite(d.elevation) && Math.abs(d.elevation) <= 99999)) return false
+  const a = d.aura as Record<string, unknown> | undefined
+  if (a !== undefined && !(a && typeof a === 'object' && num(a.radius, 2000) && hex6(a.color))) return false
+  const bars = d.bars
+  if (bars !== undefined && !(Array.isArray(bars) && bars.length <= 3 && bars.every((b) => b && typeof b.name === 'string' && b.name.length <= 20 && Number.isInteger(b.value) && Number.isInteger(b.max) && b.max >= 0 && b.max <= 99999 && Math.abs(b.value) <= 99999 && hex6(b.color)))) return false
+  const acts = d.actions
+  if (acts !== undefined && !(Array.isArray(acts) && acts.length <= 8 && acts.every((x) => x && typeof x.name === 'string' && x.name.length >= 1 && x.name.length <= 30 && typeof x.text === 'string' && x.text.length >= 1 && x.text.length <= 600))) return false
+  return true
+}
+
 export const tokenPatch = z.object({
   name: z.string().max(100),
   x: coord, y: coord,
@@ -105,7 +123,7 @@ export const tokenPatch = z.object({
   locked: z.boolean(),
   owners: z.array(id).max(50),
   z: z.number().int().min(-1000).max(1000),
-  data: z.record(z.string().max(40), z.unknown()).refine((d) => JSON.stringify(d).length <= 8000, 'data too large').refine(validLightVision, 'bad light or vision'),
+  data: z.record(z.string().max(40), z.unknown()).refine((d) => JSON.stringify(d).length <= 8000, 'data too large').refine(validLightVision, 'bad light or vision').refine(validTokenLook, 'bad token look'),
 }).partial().strict()
 
 export const scenePatch = z.object({
@@ -162,6 +180,8 @@ export const clientMessage = z.discriminatedUnion('t', [
   z.object({ t: z.literal('token.update'), id, patch: tokenPatch }),
   z.object({ t: z.literal('token.move'), moves: z.array(z.object({ id, x: coord, y: coord, rotation: z.number().finite().min(-3600).max(3600).optional() })).min(1).max(100) }),
   z.object({ t: z.literal('token.stat'), id, stat: statPatch.optional(), /** positive hurts, negative heals */ damage: z.number().int().min(-99999).max(99999).optional(), /** acid, fire, ... : lets resistances apply when automation is on */ type: z.string().max(30).optional() }),
+  /** the GM rolls the hit points of tokens from the dice on their sheets (a mob of goblins that are not all the same) */
+  z.object({ t: z.literal('token.rollhp'), ids: z.array(id).min(1).max(100) }),
   z.object({ t: z.literal('token.rest'), id, kind: z.enum(['short', 'long']), /** hit dice to spend on a short rest */ dice: z.number().int().min(0).max(40).optional() }),
   z.object({ t: z.literal('token.deathsave'), id }),
   z.object({ t: z.literal('effect.add'), id, effect: effectSchema }),

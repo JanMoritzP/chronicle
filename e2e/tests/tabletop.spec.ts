@@ -1160,3 +1160,49 @@ test('scenes: a folder, notes only the GM sees, a copy, and sending some players
   await expect(player.locator('.tt-scene, .tt-bar').first()).toContainText('Cellar copy')
   await expect(player.getByText('The barrel hides a trapdoor.')).toHaveCount(0)
 })
+
+test('tokens: a look of their own, extra bars, markers, and buttons that run a macro', { tag: '@feature:table.token-look' }, async ({ app }) => {
+  await openTable(app)
+  await makeScene(app, 'Lair')
+  await makeToken(app, 'Wyrm')
+  const look = app.getByRole('group', { name: 'Token look' })
+  await expect(async () => {
+    await look.getByTitle('Shape of the token').click()
+    await app.getByRole('option', { name: 'Hexagon' }).click({ timeout: 1500 })
+    await expect(look.getByTitle('Shape of the token')).toContainText('Hexagon', { timeout: 1500 })
+  }).toPass()
+  await look.getByLabel('Elevation').fill('30')
+  await look.getByLabel('Elevation').press('Tab')
+  await look.getByLabel('Aura radius').fill('15')
+  await look.getByLabel('Aura radius').press('Tab')
+  await expect(look.getByLabel('Aura colour')).toBeVisible()
+
+  // an extra bar
+  const bars = app.getByRole('group', { name: 'More bars' })
+  await bars.getByRole('button', { name: 'Add a bar' }).click()
+  await expect(bars.getByLabel('Mana value')).toHaveValue('10')
+  await bars.getByLabel('Mana value').fill('4')
+  await bars.getByLabel('Mana value').press('Tab')
+
+  // a marker of their own
+  await app.getByLabel('Custom marker').fill('Marked for death')
+  await app.getByLabel('Custom marker').press('Enter')
+  await expect(app.getByRole('group', { name: 'Conditions' }).getByRole('button', { name: 'Marked for death' })).toHaveAttribute('aria-pressed', 'true')
+
+  // a button on the token that rolls
+  const actions = app.getByRole('group', { name: 'Token actions' })
+  await actions.getByLabel('Action name').fill('Bite')
+  await actions.getByLabel('Action text').fill('/roll 1d20+9 bite')
+  await actions.getByRole('button', { name: 'Add the action' }).click()
+  await actions.getByRole('button', { name: 'Bite', exact: true }).click()
+  await app.locator('.tt-panel .seg').getByRole('button', { name: /Chat/ }).click()
+  await expect(app.getByRole('list', { name: 'Chat' })).toContainText('bite')
+
+  // all of it is kept
+  await app.waitForTimeout(400)
+  await app.reload()
+  await openTable(app)
+  await app.getByRole('list', { name: 'Tokens on this scene' }).getByRole('button', { name: 'Wyrm' }).click()
+  await expect(app.getByRole('group', { name: 'More bars' }).getByLabel('Mana value')).toHaveValue('4')
+  await expect(app.getByRole('group', { name: 'Token look' }).getByLabel('Elevation')).toHaveValue('30')
+})

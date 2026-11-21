@@ -14,6 +14,8 @@ export interface Combatant {
   reaction?: boolean
   /** Pathfinder 2e: actions left this turn (3 when not set); they are back at the start of the combatant's turn */
   actions?: number
+  /** how far the combatant has moved this turn, in the scene's units */
+  moved?: number
 }
 export interface Combat { active: boolean; round: number; turn: string | null; list: Combatant[] }
 
@@ -47,7 +49,7 @@ export function advance(c: Combat, step: 1 | -1): Combat {
   let round = c.round
   if (i >= order.length) { i = 0; round++ } else if (i < 0) { if (round > 1) { i = order.length - 1; round-- } else i = 0 }
   // a combatant's reaction is ready again when their turn comes round (going back a turn leaves it as it was)
-  const list = step === 1 ? c.list.map((x) => (x.id === order[i].id && (x.reaction || x.actions !== undefined) ? { ...x, reaction: false, actions: undefined } : x)) : c.list
+  const list = step === 1 ? c.list.map((x) => (x.id === order[i].id && (x.reaction || x.actions !== undefined || x.moved) ? { ...x, reaction: false, actions: undefined, moved: undefined } : x)) : c.list
   return { ...c, turn: order[i].id, round, list }
 }
 

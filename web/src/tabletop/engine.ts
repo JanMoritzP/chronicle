@@ -226,7 +226,7 @@ export class TableEngine {
   upsert(t: Token) { this.poke();
     this.tokens.set(t.id, t)
     if (!this.ready) return
-    const key = [t.image, t.color, t.name, t.size, t.hidden, t.locked, JSON.stringify(t.data.hp ?? null), (t.data.conditions ?? []).join(',')].join('|')
+    const key = [t.image, t.color, t.name, t.size, t.hidden, t.locked, JSON.stringify(t.data.hp ?? null), (t.data.conditions ?? []).join(','), JSON.stringify([t.data.shape, t.data.border, t.data.tint, t.data.flip, t.data.nameplate, t.data.elevation, t.data.aura, t.data.bars])].join('|')
     let v = this.views.get(t.id)
     if (!v || v.key !== key) {
       v?.box.destroy({ children: true })
@@ -248,11 +248,27 @@ export class TableEngine {
 
   private px(t: Token) { return this.scene ? tokenPixels(t.size, this.scene) : 70 * t.size }
 
+  /** The outline of a token: round, square with soft corners, or a hexagon. */
+  private shapePath(g: Graphics, r: number, shape: string) {
+    if (shape === 'square') return g.roundRect(-r, -r, r * 2, r * 2, r * 0.18)
+    if (shape === 'hex') return g.poly(Array.from({ length: 6 }, (_, i) => { const a = (Math.PI / 3) * i - Math.PI / 2; return [Math.cos(a) * r, Math.sin(a) * r] }).flat())
+    return g.circle(0, 0, r)
+  }
+
   private build(v: TokenView) {
     const t = v.token
     const d = this.px(t)
     const r = d / 2
-    const ring = new Graphics().circle(0, 0, r).fill({ color: new Color(t.color || '#6b7280').toNumber() }).stroke({ width: 3, color: 0x000000, alpha: 0.55 })
+    const shape = (t.data.shape as string) ?? 'round'
+    const border = typeof t.data.border === 'string' ? new Color(t.data.border).toNumber() : null
+    const aura = t.data.aura as { radius?: number; color?: string } | undefined
+    if (aura?.radius && aura.color && this.scene) {
+      const ar = (aura.radius / this.scene.dist) * this.scene.gridSize + r
+      const a = new Graphics().circle(0, 0, ar).fill({ color: new Color(aura.color).toNumber(), alpha: 0.16 }).stroke({ width: 2, color: new Color(aura.color).toNumber(), alpha: 0.55 })
+      a.label = 'aura'
+      v.box.addChild(a)
+    }
+    const ring = this.shapePath(new Graphics(), r, shape).fill({ color: new Color(t.color || '#6b7280').toNumber() }).stroke({ width: 3, color: border ?? 0x000000, alpha: border != null ? 1 : 0.55 })
     v.box.addChild(ring)
     if (!t.image) {
       const initial = new Text({ text: (t.name || '?').trim().slice(0, 2).toUpperCase(), style: { fontSize: Math.max(12, r * 0.8), fill: 0xffffff, fontFamily: 'sans-serif', fontWeight: '700' } })
@@ -265,11 +281,12 @@ export class TableEngine {
         const sprite = new Sprite(tex)
         sprite.anchor.set(0.5)
         const scale = d / Math.min(tex.width, tex.height)
-        sprite.scale.set(scale)
-        const mask = new Graphics().circle(0, 0, r - 1.5).fill({ color: 0xffffff })
+        sprite.scale.set(t.data.flip ? -scale : scale, scale)
+        if (typeof t.data.tint === 'string') sprite.tint = new Color(t.data.tint).toNumber()
+        const mask = this.shapePath(new Graphics(), r - 1.5, shape).fill({ color: 0xffffff })
         v.box.addChild(mask, sprite)
         sprite.mask = mask
-        v.box.addChild(new Graphics().circle(0, 0, r).stroke({ width: 3, color: 0x000000, alpha: 0.55 }))
+        v.box.addChild(this.shapePath(new Graphics(), r, shape).stroke({ width: 3, color: border ?? 0x000000, alpha: border != null ? 1 : 0.55 }))
         this.drawSelection(v)
       })
     }
@@ -290,6 +307,23 @@ export class TableEngine {
         v.box.addChild(x)
       }
     }
+    // extra bars (mana, ammunition, a clock): up to three, under the hit points
+    const bars = (t.data.bars ?? []) as { name: string; value: number; max: number; color: string }[]
+    const barTop = r + 2 + (hasBar ? 9 : 0)
+    bars.slice(0, 3).forEach((b, i) => {
+      const w = d * 0.9, ratio = b.max > 0 ? Math.max(0, Math.min(1, b.value / b.max)) : 0
+      const g = new Graphics().roundRect(-w / 2, barTop + i * 9, w, 7, 3).fill({ color: 0x000000, alpha: 0.7 })
+      if (ratio > 0) g.roundRect(-w / 2 + 1, barTop + i * 9 + 1, (w - 2) * ratio, 5, 2).fill({ color: new Color(b.color).toNumber() })
+      g.label = 'bar'
+      v.box.addChild(g)
+    })
+    if (typeof t.data.elevation === 'number' && t.data.elevation !== 0) {
+      const e = new Text({ text: `${t.data.elevation > 0 ? '↑' : '↓'}${Math.abs(t.data.elevation)}`, style: { fontSize: 11, fill: 0xffffff, fontFamily: 'sans-serif', fontWeight: '700', stroke: { color: 0x000000, width: 3 } } })
+      e.anchor.set(0.5)
+      e.position.set(r * 0.75, -r * 0.8)
+      e.label = 'cond'
+      v.box.addChild(e)
+    }
     const conditions = (t.data.conditions ?? []) as string[]
     conditions.slice(0, 5).forEach((c, i) => {
       const pip = new Graphics().circle(0, 0, 8).fill({ color: pipColor(c) }).stroke({ width: 1.5, color: 0x000000, alpha: 0.7 })
@@ -302,8 +336,8 @@ export class TableEngine {
     })
     const label = new Text({ text: t.name, style: { fontSize: 13, fill: 0xffffff, fontFamily: 'sans-serif', stroke: { color: 0x000000, width: 4 } } })
     label.anchor.set(0.5, 0)
-    label.y = r + (hasBar ? 11 : 2)
-    label.visible = !!t.name
+    label.y = r + (hasBar ? 11 : 2) + Math.min(3, bars.length) * 9
+    label.visible = !!t.name && t.data.nameplate !== false
     label.label = 'name'
     v.box.addChild(label)
     v.box.eventMode = 'none'
@@ -349,7 +383,7 @@ export class TableEngine {
     v.box.rotation = 0
     v.box.alpha = t.hidden ? 0.45 : 1
     // the picture turns with the token; the name stays upright
-    for (const c of v.box.children) if (!['name', 'sel', 'hp', 'down', 'cond', 'turn'].includes(c.label)) c.rotation = (t.rotation * Math.PI) / 180
+    for (const c of v.box.children) if (!['name', 'sel', 'hp', 'down', 'cond', 'turn', 'aura', 'bar'].includes(c.label)) c.rotation = (t.rotation * Math.PI) / 180
   }
 
   /** The token whose turn it is gets a blue ring. */

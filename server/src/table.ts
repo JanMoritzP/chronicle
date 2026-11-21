@@ -158,6 +158,19 @@ function saveCombat(ws: string, combat: Combat) {
   for (const x of inWorld(ws)) send(x, { t: 'combat', combat: visibleCombat(combat, x.role === 'gm') })
 }
 /** The initiative bonus of a creature, from the sheet on its page: its printed bonus, else its Dexterity modifier. */
+/** In combat, how far the token whose turn it is has moved this turn, in the scene's units (the longer way across the cells). */
+function trackMove(ws: string, before: TokenRow, after: TokenRow) {
+  const combat = combatOf(ws)
+  if (!combat.active || !combat.turn) return
+  const who = combat.list.find((x) => x.id === combat.turn)
+  if (!who || who.tokenId !== after.id) return
+  const sc = sceneRow(after.sceneId, ws)
+  if (!sc) return
+  const cells = Math.max(Math.abs(after.x - before.x), Math.abs(after.y - before.y)) / sc.grid_size
+  const moved = Math.round(((who.moved ?? 0) + cells * sc.dist) * 10) / 10
+  saveCombat(ws, withList(combat, combat.list.map((x) => (x.id === who.id ? { ...x, moved } : x))))
+}
+
 function initiativeBonus(ws: string, pageId: string | null) {
   if (!pageId) return 0
   const row = db.prepare('SELECT props FROM pages WHERE id = ? AND workspace_id = ?').get(pageId, ws) as { props: string } | undefined
@@ -677,6 +690,7 @@ async function handle(c: Conn, m: ClientMessage) {
         const after = tokenRow(mv.id, ws)!
         emitToken(ws, before, after)
         fireEnter(ws, c.user.id, before, after)
+        trackMove(ws, before, after)
       }
       return
     }
@@ -774,6 +788,23 @@ async function handle(c: Conn, m: ClientMessage) {
       const data = { ...before.data, effects: all.filter((e) => e.id !== m.effectId) }
       db.prepare('UPDATE tokens SET data = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(data), now(), m.id)
       return emitToken(ws, before, tokenRow(m.id, ws)!)
+    }
+    case 'token.rollhp': {
+      if (!gm) return nack(c, m, 'only the GM can do that')
+      let n = 0
+      for (const id of new Set(m.ids)) {
+        const t = tokenRow(id, ws)
+        const pg = t ? readSheet(ws, t.pageId) : null
+        const formula = pg?.sheet.hp.formula?.replace(/\s+/g, '')
+        const roll = formula ? parseRoll(formula) : null
+        if (!t || !roll || roll.total < 1) continue
+        const hp = { ...(t.data.hp as Record<string, number> | undefined), value: roll.total, max: roll.total, temp: 0 }
+        db.prepare('UPDATE tokens SET data = ?, updated_at = ? WHERE id = ?').run(JSON.stringify({ ...t.data, hp }), now(), id)
+        emitToken(ws, t, tokenRow(id, ws)!)
+        n++
+      }
+      if (!n) return nack(c, m, 'None of those tokens has a hit point formula on its sheet.')
+      return
     }
     case 'token.rest': {
       const before = tokenRow(m.id, ws)

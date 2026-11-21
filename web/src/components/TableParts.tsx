@@ -64,7 +64,7 @@ const baseOf = (c: string) => c.replace(/\s+\d+$/, '')
 export const rollText = (expr: string, label: string) => sendTable({ t: 'chat', text: `/roll ${expr} ${label}` })
 
 /** Can this person change the hit points, armor class and conditions of the token? */
-function useCanEdit(token: Token) {
+export function useCanEdit(token: Token) {
   const role = useTable((s) => s.role)
   const settings = useTable((s) => s.settings)
   const you = useTable((s) => s.you)
@@ -82,6 +82,7 @@ export function TokenStats({ token }: { token: Token }) {
   const gm = useTable((s) => s.role === 'gm')
   const [amount, setAmount] = useState('')
   const [kind, setKind] = useState('')
+  const [marker, setMarker] = useState('')
   const damageTypes = useRules().damageTypes
   const auto = useTable((s) => s.settings.automation)
   const hp = token.data.hp as { value?: number; max?: number; temp?: number } | undefined
@@ -151,10 +152,16 @@ export function TokenStats({ token }: { token: Token }) {
         </div>
       )}
       <div className="tt-chips" role="group" aria-label="Conditions">
-        {(can ? names : conditions.map(baseOf)).map((c) => (
+        {(can ? [...names, ...conditions.map(baseOf).filter((c) => !names.includes(c))] : conditions.map(baseOf)).map((c) => (
           <button key={c} className={`tt-chip${current(c) ? ' on' : ''}`} disabled={!can} aria-pressed={!!current(c)} onClick={() => toggle(c)}>{current(c) ?? c}</button>
         ))}
       </div>
+      {can && (
+        <div className="tt-row">
+          <input className="input" aria-label="Custom marker" placeholder="A marker of your own" maxLength={30} value={marker} onChange={(e) => setMarker(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && marker.trim()) { stat({ conditions: [...new Set([...conditions, marker.trim()])] }); setMarker('') } }} />
+          <button className="btn sm" disabled={!marker.trim()} onClick={() => { stat({ conditions: [...new Set([...conditions, marker.trim()])] }); setMarker('') }}>Add marker</button>
+        </div>
+      )}
       <Effects token={token} can={can} />
       {gm && hp && (
         <label className="tt-check"><input type="checkbox" checked={!!token.data.hpPrivate} onChange={(e) => stat({ hpPrivate: e.target.checked })} />Hide hit points from other players</label>
@@ -330,6 +337,7 @@ export function CombatPanel() {
   const selected = useTable((s) => s.selected)
   const gm = role === 'gm'
   const system = useStore((st) => st.workspaces.find((w) => w.id === st.wsId)?.settings?.system ?? '5e')
+  const unit = useTable((st) => st.scenes.find((x) => x.id === st.sceneId)?.unit ?? 'ft')
   const tokenOf = (id: string | null) => tokens.find((t) => t.id === id)
   const turnToken = tokenOf(combat.list.find((x) => x.id === combat.turn)?.tokenId ?? null)
   const myTurn = !!turnToken && !!you && turnToken.owners.includes(you.id)
@@ -369,7 +377,7 @@ export function CombatPanel() {
                     onBlur={(e) => { const raw = e.target.value.trim(); const n = raw === '' ? null : Math.round(Number(raw)); if (n === null ? x.init !== null : Number.isFinite(n) && n !== x.init) sendTable({ t: 'combat.init', id: x.id, value: n }) }}
                     onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />
                 : <span className="tt-init">{x.init ?? '–'}</span>}
-              <span className="grow ellipsis">{x.name}{x.hidden ? ' (hidden)' : ''}{hp && hp.max ? <small className="muted"> {hp.value}/{hp.max}</small> : null}</span>
+              <span className="grow ellipsis">{x.name}{x.hidden ? ' (hidden)' : ''}{x.moved ? <small className="muted"> moved {x.moved} {unit}</small> : null}{hp && hp.max ? <small className="muted"> {hp.value}/{hp.max}</small> : null}</span>
               {(gm || mine) && combat.active && !x.done && system === 'pf2e' && (
                 <span className="tt-actions" role="group" aria-label={`Actions of ${x.name}`}>
                   {[1, 2, 3].map((n) => {

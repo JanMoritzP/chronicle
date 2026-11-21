@@ -490,6 +490,9 @@ areas:
       - id: table.scene-tools
         name: "Scene folders, notes for the GM, copies, grid and ambient colour, and sending some players to another scene"
         files: [web/src/components/Tabletop.tsx, server/src/table.ts]
+      - id: table.token-look
+        name: "Token shape, border, tint, flip, elevation, aura, extra bars, markers of your own and action buttons"
+        files: [web/src/components/TokenLook.tsx, web/src/tabletop/engine.ts]
       - id: table.fog
         name: "Fog of war and darkness are switched on per scene and kept"
         files: [web/src/components/Tabletop.tsx]

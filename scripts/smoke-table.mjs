@@ -554,6 +554,10 @@ gm.send({ t: 'combat.init', id: prCombatant.id, value: 12 })
 await sleep(150)
 gm.send({ t: 'combat.control', action: 'start' })
 await sleep(150)
+const priestNow = gm.msgs.filter((m) => m.t === 'token' && m.token.id === priest.id).at(-1).token
+gm.send({ t: 'token.move', moves: [{ id: priest.id, x: priestNow.x + 140, y: priestNow.y }] })
+await sleep(250)
+check('in combat, how far the token whose turn it is has moved shows in the order', gm.msgs.filter((m) => m.t === 'combat').at(-1).combat.list.find((x) => x.id === prCombatant.id).moved === 10)
 n = pa.mark()
 gm.send({ t: 'combat.control', action: 'next' })
 await sleep(300)
@@ -842,6 +846,29 @@ gm.send({ t: 'scene.send', id: crypt, to: [alice.id] })
 await sleep(250)
 gm.send({ t: 'scene.delete', id: copy.id })
 await sleep(250)
+
+// how a token looks, its bars and actions, and rolled hit points
+gm.send({ t: 'token.add', sceneId: crypt, token: { name: 'Gaudy', x: 400, y: 400 } })
+const gaudy = (await gm.until((m) => m.t === 'token' && m.token.name === 'Gaudy')).token
+const lookData = { shape: 'hex', border: '#ff0000', tint: '#00ff00', flip: true, nameplate: false, elevation: 20, aura: { radius: 10, color: '#00ff00' }, bars: [{ name: 'Mana', value: 5, max: 10, color: '#4aa3ff' }], actions: [{ name: 'Bite', text: '/roll 1d20+4 bite' }] }
+gm.send({ t: 'token.update', id: gaudy.id, patch: { data: lookData } })
+await sleep(250)
+const gaudyNow = () => gm.msgs.filter((m) => m.t === 'token' && m.token.id === gaudy.id).at(-1).token
+check('a token can have a shape, border, tint, aura, bars and actions', gaudyNow().data.shape === 'hex' && gaudyNow().data.bars[0].name === 'Mana' && gaudyNow().data.actions[0].name === 'Bite' && gaudyNow().data.aura.radius === 10)
+for (const [name, bad] of [['shape', { shape: 'triangle' }], ['border colour', { border: 'red' }], ['four bars', { bars: [1, 2, 3, 4].map(() => ({ name: 'x', value: 1, max: 1, color: '#ffffff' })) }], ['an action without text', { actions: [{ name: 'x', text: '' }] }], ['an aura without a colour', { aura: { radius: 5 } }]]) {
+  gm.send({ t: 'token.update', id: gaudy.id, patch: { data: { ...lookData, ...bad } }, op: `bad-${name}` })
+  check(`a bad look is refused: ${name}`, !!(await gm.until((m) => m.t === 'nack' && m.op === `bad-${name}`)))
+}
+const mook = (await call('POST', `/api/workspaces/${ws}/pages`, { title: 'Mook', props: { type: 'monster', sheet: { v: 1, ruleset: '5e', name: 'Mook', size: 'Small', type: 'humanoid', alignment: '', abilities: { str: 8, dex: 14, con: 10, int: 10, wis: 8, cha: 8 }, ac: { value: 12, note: '' }, hp: { max: 9, formula: '2d6 + 3' }, speed: { walk: 30 }, saves: {}, skills: {}, senses: {}, vulnerabilities: '', resistances: '', immunities: '', conditionImmunities: '', languages: '', features: { traits: [], actions: [], bonus: [], reactions: [], legendary: [] } } } }, gmCookie)).data
+gm.send({ t: 'token.update', id: gaudy.id, patch: { pageId: mook.id } })
+await sleep(150)
+const seen = new Set()
+for (let i = 0; i < 6; i++) { gm.send({ t: 'token.rollhp', ids: [gaudy.id] }); await sleep(150); seen.add(gaudyNow().data.hp.max); }
+check('hit points can be rolled from the dice on the sheet, and differ from one roll to the next', [...seen].every((v) => v >= 5 && v <= 15) && seen.size > 1 && gaudyNow().data.hp.value === gaudyNow().data.hp.max, [...seen].join())
+pa.send({ t: 'token.rollhp', ids: [gaudy.id], op: 'rh' })
+check('a player cannot', !!(await pa.until((m) => m.t === 'nack' && m.op === 'rh')))
+gm.send({ t: 'token.delete', ids: [gaudy.id] })
+await sleep(150)
 
 // the GM brings everyone to look at one place
 n = pa.mark()
