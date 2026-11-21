@@ -35,7 +35,7 @@ export function degreeOf(total: number, dc: number, nat: 'hit' | 'miss' | null, 
   return (['critical failure', 'failure', 'success', 'critical success'] as const)[step]
 }
 
-function withDc(roll: Roll, system: string): Roll {
+export function withDc(roll: Roll, system: string): Roll {
   const m = /\bdc\s*(\d{1,2})\b/i.exec(roll.label)
   if (!m) return roll
   const dc = Number(m[1])

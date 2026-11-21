@@ -97,3 +97,14 @@ export function longRest(sheet: Sheet): { sheet: Sheet; lines: string[] } {
   if (regained) lines.push('hit dice recovered')
   return { sheet: next, lines }
 }
+
+/** Proficiency bonus from the total level of a character (1 to 4: +2, 5 to 8: +3, and so on). */
+export const proficiencyOf = (sheet: Pick<Sheet, 'classes'>) => 2 + Math.floor((Math.max(1, (sheet.classes ?? []).reduce((n, c) => n + c.level, 0)) - 1) / 4)
+
+/** A saving throw bonus: the sheet's own number when it has one, else the ability modifier plus proficiency for a character. No sheet means +0. */
+export function saveBonusOf(sheet: Sheet | undefined, ability: 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha'): number {
+  if (!sheet) return 0
+  const own = sheet.saves[ability]
+  if (own != null) return own
+  return modOf(sheet.abilities[ability]) + (sheet.kind === 'character' && sheet.profs?.saves.includes(ability) ? proficiencyOf(sheet) : 0)
+}

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../api'
+import { Select } from './Select'
 import { ABILITIES, FEATURE_GROUPS, PF_SKILLS, multipleAttack, pfLore, pfPerception, pfSave, pfSkill, pfStrike, SKILLS, abilityMod, crText, initiativeBonus, isCharacter, passivePerception, rollsIn, saveBonus, sheetOf, signed, skillBonus, speedText, usesLeft, type Sheet } from '../lib/sheet'
 
 // The sheet of a creature as a table card: every number that can be rolled is a button.
@@ -100,7 +101,16 @@ function Pf2eCard({ sheet, roll }: { sheet: Sheet; roll: RollFn }) {
   )
 }
 
-export function SheetCard({ sheet, roll, onPatch }: { sheet: Sheet; roll: RollFn; /** changes a field of the sheet by path (only given where the person may edit it) */ onPatch?: (patch: Record<string, unknown>) => void }) {
+export interface AttackKit {
+  /** the other tokens on the scene a person can see */
+  targets: { id: string; name: string }[]
+  /** the tokens selected besides this one */
+  selected: string[]
+  send: (targets: string[], a: { label: string; attack?: { bonus: number; mode?: 'adv' | 'dis' }; damage?: { expr: string; type?: string }[]; save?: { ability: string; dc: number; half: boolean } }) => void
+}
+
+export function SheetCard({ sheet, roll, onPatch, attack }: { sheet: Sheet; roll: RollFn; /** changes a field of the sheet by path (only given where the person may edit it) */ onPatch?: (patch: Record<string, unknown>) => void; /** when the table rolls attacks against targets */ attack?: AttackKit }) {
+  const [target, setTarget] = useState('')
   if (sheet.ruleset === 'pf2e' && sheet.pf2e) return <Pf2eCard sheet={sheet} roll={roll} />
   const slots = sheet.spellcasting?.slots ?? []
   const bonus = (n: number) => `${n >= 0 ? '+' : '-'}${Math.abs(n)}`
@@ -108,6 +118,15 @@ export function SheetCard({ sheet, roll, onPatch }: { sheet: Sheet; roll: RollFn
   return (
     <div className="tt-sheet">
       <div className="tt-sheet-sub muted">{[sheet.size, sheet.type, sheet.alignment && `, ${sheet.alignment}`].filter(Boolean).join(' ').replace(' ,', ',')}</div>
+      {attack && (
+        <div className="tt-row"><span className="muted">Target</span>
+          <Select className="input" value={target} onChange={setTarget} title="Target of attacks">
+            <option value="">Nobody</option>
+            {attack.selected.length > 1 && <option value="*">All selected tokens</option>}
+            {attack.targets.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </Select>
+        </div>
+      )}
       <div className="tt-sheet-facts">
         <span><b>AC</b> {sheet.ac.value}{sheet.ac.note ? ` (${sheet.ac.note})` : ''}</span>
         <span><b>HP</b> {isCharacter(sheet) ? `${sheet.hp.current ?? sheet.hp.max} / ${sheet.hp.max}` : `${sheet.hp.max}${sheet.hp.formula ? ` (${sheet.hp.formula})` : ''}`}</span>
@@ -174,6 +193,14 @@ export function SheetCard({ sheet, roll, onPatch }: { sheet: Sheet; roll: RollFn
                   <div className="tt-chips">
                     {r.attack != null && <button className="tt-roll" onClick={(e) => check(e, r.attack!, `${f.name}, attack`)}>To hit {signed(r.attack)}</button>}
                     {r.damage.map((d, j) => <button key={j} className="tt-roll" onClick={() => roll(d.expr, `${f.name}, ${d.type ? `${d.type} damage` : 'damage'}`)}>{d.expr}{d.type ? ` ${d.type}` : ''}</button>)}
+                    {attack && target && (r.attack != null || r.save) && (
+                      <button className="btn sm primary" aria-label={`Use ${f.name} on the target`} onClick={(e) => attack.send(target === '*' ? attack.selected : [target], {
+                        label: f.name,
+                        ...(r.attack != null ? { attack: { bonus: r.attack, ...(e.shiftKey ? { mode: 'adv' as const } : e.ctrlKey || e.metaKey ? { mode: 'dis' as const } : {}) } } : {}),
+                        ...(r.attack == null && r.save ? { save: { ability: r.save.ability.slice(0, 3).toLowerCase(), dc: r.save.dc, half: /half as much|half damage/i.test(f.text) } } : {}),
+                        damage: r.damage.map((d) => ({ expr: d.expr, ...(d.type ? { type: d.type } : {}) })),
+                      })}>Roll on target</button>
+                    )}
                   </div>
                 )}
               </details>

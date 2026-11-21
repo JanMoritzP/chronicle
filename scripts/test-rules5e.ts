@@ -1,4 +1,4 @@
-import { adjustDamage, concentrationDc, deathSave, longRest, shortRest, typesIn } from '../server/src/rules5e'
+import { adjustDamage, concentrationDc, deathSave, longRest, proficiencyOf, saveBonusOf, shortRest, typesIn } from '../server/src/rules5e'
 import type { Sheet } from '../server/src/sheet'
 
 let failed = 0
@@ -45,6 +45,10 @@ check('a short rest spends the largest dice first and heals', short.spent === 2 
 check('a short rest only readies features that come back on a rest', short.sheet.features.traits[1].used === 0 && short.sheet.features.traits[0].used === 2)
 check('a short rest cannot spend more dice than are left', shortRest(base, 9, () => 1).spent === 3)
 check('a short rest never heals beyond the maximum', shortRest(base, 3, () => 10).sheet.hp.current === 30)
+
+check('proficiency follows total level', proficiencyOf({ classes: [{ name: 'Fighter', level: 1 }] }) === 2 && proficiencyOf({ classes: [{ name: 'Fighter', level: 5 }] }) === 3 && proficiencyOf({ classes: [{ name: 'A', level: 10 }, { name: 'B', level: 7 }] }) === 6)
+check('a creature saves with its own number or its modifier', saveBonusOf({ ...base, saves: { dex: 5 } } as Sheet, 'dex') === 5 && saveBonusOf({ ...base, saves: {} } as Sheet, 'con') === 2 && saveBonusOf(undefined, 'con') === 0)
+check('a character adds proficiency to saves they are proficient in', saveBonusOf({ ...base, classes: [{ name: 'Cleric', level: 5 }], profs: { saves: ['wis'], skills: {} }, saves: {} } as Sheet, 'wis') === 3 && saveBonusOf({ ...base, classes: [{ name: 'Cleric', level: 5 }], profs: { saves: ['wis'], skills: {} }, saves: {} } as Sheet, 'con') === 2)
 
 console.log(failed ? `\n${failed} failed` : '\nall passed')
 process.exit(failed ? 1 : 0)

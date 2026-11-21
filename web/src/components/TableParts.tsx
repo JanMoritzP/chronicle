@@ -6,7 +6,7 @@ import { sendTable, useTable, type ChatMsg, type RollJson, type Token } from '..
 import { askText } from '../lib/dialog'
 import { PagePicker } from './PagePicker'
 import { Select } from './Select'
-import { SheetCard, loadSheet, useSheet } from './TableSheet'
+import { SheetCard, loadSheet, useSheet, type AttackKit } from './TableSheet'
 
 export const CONDITIONS = ['Blinded', 'Charmed', 'Concentrating', 'Deafened', 'Exhaustion', 'Frightened', 'Grappled', 'Incapacitated', 'Invisible', 'Paralyzed', 'Petrified', 'Poisoned', 'Prone', 'Restrained', 'Stunned', 'Unconscious']
 
@@ -140,12 +140,20 @@ export function LinkPage({ token }: { token: Token }) {
 export function TokenSheet({ token }: { token: Token }) {
   const { sheet, loading, reload } = useSheet(token.pageId, JSON.stringify(token.data.hp ?? null) + JSON.stringify(token.data.conditions ?? null))
   const can = useCanEdit(token)
+  const auto = useTable((s) => s.settings.automation)
+  const tokens = useTable((s) => s.tokens)
+  const selected = useTable((s) => s.selected)
   const nameOf = token.name || 'Token'
   if (!token.pageId) return null
   if (loading) return <p className="muted tt-hint">Loading the sheet…</p>
   if (!sheet) return <p className="muted tt-hint">This page has no stat block.</p>
   const patch = (p: Record<string, unknown>) => { if (token.pageId) void api.patchPage(token.pageId, { propsPatch: { sheet: p } }).then(reload).catch(() => reload()) }
-  return <SheetCard sheet={sheet} roll={(expr, label) => rollText(expr, `${nameOf}: ${label}`)} onPatch={can && sheet.kind === 'character' ? patch : undefined} />
+  const kit: AttackKit | undefined = auto?.attacks && can ? {
+    targets: tokens.filter((t) => t.id !== token.id).map((t) => ({ id: t.id, name: t.name })),
+    selected: selected.filter((id) => id !== token.id),
+    send: (targets, a) => sendTable({ t: 'attack', from: token.id, targets, ...a }),
+  } : undefined
+  return <SheetCard sheet={sheet} roll={(expr, label) => rollText(expr, `${nameOf}: ${label}`)} onPatch={can && sheet.kind === 'character' ? patch : undefined} attack={kit} />
 }
 
 // ---------- chat ----------

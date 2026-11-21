@@ -594,3 +594,45 @@ test('the GM switches on damage types: resistance halves a hit and it is said in
   await app.locator('.tt-panel .seg').getByRole('button', { name: /Chat/ }).click()
   await expect(app.getByRole('list', { name: 'Chat' })).toContainText('Death saving throw')
 })
+
+test('with attacks switched on, a feature can be rolled against a target and the damage is applied', { tag: '@feature:table.attacks' }, async ({ app, makePage }) => {
+  const sheet = {
+    v: 1, ruleset: '5e', name: 'Archer', size: 'Medium', type: 'humanoid', alignment: '',
+    abilities: { str: 10, dex: 14, con: 10, int: 10, wis: 10, cha: 10 }, ac: { value: 13, note: '' }, hp: { max: 11, formula: '' },
+    speed: { walk: 30 }, saves: {}, skills: {}, senses: {}, vulnerabilities: '', resistances: '', immunities: '', conditionImmunities: '', languages: '',
+    features: { traits: [], actions: [{ name: 'Longbow', text: 'Ranged Weapon Attack: +60 to hit, range 150/600 ft. Hit: 9 (1d4 + 6) piercing damage.' }], bonus: [], reactions: [], legendary: [] },
+  }
+  await makePage('Archer', { props: { type: 'monster', sheet } })
+  await app.reload()
+  await openTable(app)
+  await makeScene(app, 'Range')
+  await makeToken(app, 'Dummy')
+  await app.getByLabel('Maximum hit points').fill('50')
+  await app.getByLabel('Maximum hit points').press('Enter')
+  await app.getByLabel('Hit points', { exact: true }).fill('50')
+  await app.getByLabel('Hit points', { exact: true }).press('Enter')
+  await app.getByLabel('Armor class').fill('10')
+  await app.getByLabel('Armor class').press('Enter')
+  await makeToken(app, 'Archer 1')
+  await app.getByRole('button', { name: 'Link a page' }).click()
+  await app.getByPlaceholder('Find a monster or character…').fill('Archer')
+  await app.getByPlaceholder('Find a monster or character…').press('Enter')
+  await expect(app.locator('.tt-sheet')).toContainText('Medium humanoid')
+  // off by default: there is no target to choose
+  await expect(app.getByTitle('Target of attacks')).toHaveCount(0)
+  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Table', exact: true }).click()
+  await app.getByLabel('Attacks and saves rolled against targets, with the damage applied').click()
+  await expect(app.getByLabel('Attacks and saves rolled against targets, with the damage applied')).toBeChecked()
+  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Token', exact: true }).click()
+  await expect(async () => {
+    await app.getByTitle('Target of attacks').click()
+    await expect(app.getByRole('option', { name: 'Dummy' })).toBeVisible({ timeout: 1500 })
+  }).toPass()
+  await app.getByRole('option', { name: 'Dummy' }).click()
+  await app.locator('.tt-sheet').getByText('Longbow').click()
+  await app.getByRole('button', { name: 'Use Longbow on the target' }).click()
+  await app.locator('.tt-panel .seg').getByRole('button', { name: /Chat/ }).click()
+  const chat = app.getByRole('list', { name: 'Chat' })
+  await expect(chat).toContainText('Longbow, attack on Dummy')
+  await expect(chat).toContainText(/(critically hits|hits) Dummy for \d+ piercing|misses Dummy/)
+})

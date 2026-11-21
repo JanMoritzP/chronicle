@@ -15,7 +15,7 @@ import { parseChat, readable, type Kind, type Part } from './chat.js'
 import { buildSight, canSee, type Sight, type SightToken } from './sight.js'
 import { advance, emptyCombat, end as endCombat, start as startCombat, visible as visibleCombat, withList, type Combat } from './combat.js'
 import { cryptoRng, parseRoll } from './dice.js'
-import { adjustDamage, concentrationDc, deathSave, longRest, modOf, shortRest } from './rules5e.js'
+import { adjustDamage, concentrationDc, deathSave, longRest, modOf, saveBonusOf, shortRest, type Effect } from './rules5e.js'
 import { parseSheet, type Sheet } from './sheet.js'
 import { encounterRow } from './routes/encounters.js'
 import {
@@ -304,6 +304,72 @@ const realUsers = (ids: string[]) => ids.filter((i) => db.prepare('SELECT 1 FROM
 
 const nack = (c: Conn, m: ClientMessage, error: string) => send(c, { t: 'nack', op: m.op ?? null, error })
 
+/**
+ * Applies a change to a token's numbers and, when the GM switched the rules on, what follows from a hit: resistance, a spell kept going,
+ * falling unconscious. `say` is false when the caller reports the hit itself.
+ */
+function applyStat(ws: string, userId: string, before: TokenRow, stat: Record<string, any> | undefined, damage: number, type: string | undefined, settings: TableSettings, say = true): { error?: string; dealt?: number; effect?: Effect } {
+  const data: Record<string, any> = { ...before.data }
+  const st = stat ?? {}
+  if (st.hp) data.hp = { ...(data.hp ?? {}), ...st.hp }
+  if (st.ac !== undefined) { if (st.ac === null) delete data.ac; else data.ac = st.ac }
+  if (st.conditions) data.conditions = [...new Set(st.conditions)]
+  if (st.hpPrivate !== undefined) data.hpPrivate = st.hpPrivate
+  // rules the GM switched on: resistances, a spell kept going after a hit, falling unconscious
+  const auto = settings.automation
+  const pg = damage ? readSheet(ws, before.pageId) : null
+  const isChar = pg?.sheet.kind === 'character'
+  const notes: string[] = []
+  const rolls: Part[] = []
+  let dmg = damage
+  let effect: Effect = null
+  if (dmg > 0 && auto.damage) {
+    const adj = adjustDamage(dmg, type, pg?.sheet)
+    dmg = adj.amount
+    if (say) notes.push(`takes ${dmg} ${type?.trim().toLowerCase() ?? ''} damage${adj.effect ? ` (${adj.effect})` : ''}`.replace(/  +/g, ' '))
+  }
+  const wasHp = (data.hp as { value?: number } | undefined)?.value ?? 0
+  if (dmg) {
+    // damage wears down temporary hit points first; healing stops at the maximum
+    const hp = { value: 0, max: 0, temp: 0, ...(data.hp ?? {}) }
+    if (dmg > 0) {
+      const soak = Math.min(hp.temp, dmg)
+      hp.temp -= soak
+      hp.value = Math.max(0, hp.value - (dmg - soak))
+    } else hp.value = hp.max > 0 ? Math.min(hp.max, hp.value - dmg) : hp.value - dmg
+    data.hp = hp
+  }
+  const hpNow = (data.hp as { value?: number } | undefined)?.value ?? 0
+  let conditions = (data.conditions as string[] | undefined) ?? []
+  let resetSaves = false
+  if (dmg > 0 && auto.deathSaves && isChar && wasHp > 0 && hpNow === 0) { conditions = [...new Set([...conditions, 'Unconscious'])]; resetSaves = true; notes.push('falls unconscious') }
+  if (dmg < 0 && auto.deathSaves && isChar && wasHp === 0 && hpNow > 0) { conditions = conditions.filter((x) => x !== 'Unconscious'); resetSaves = true; notes.push('is back on their feet') }
+  if (dmg > 0 && auto.concentration && conditions.includes('Concentrating')) {
+    if (hpNow === 0 && wasHp > 0) { conditions = conditions.filter((x) => x !== 'Concentrating'); notes.push('loses concentration') }
+    else if (hpNow > 0) {
+      const dc = concentrationDc(dmg)
+      const bonus = pg ? pg.sheet.saves.con ?? modOf(pg.sheet.abilities.con) : 0
+      const parsed = parseChat(`/r 1d20${bonus < 0 ? '-' : '+'}${Math.abs(bonus)} Concentration save dc ${dc}`, undefined, worldSystem(ws))
+      if (!('error' in parsed)) {
+        rolls.push(...parsed.parts)
+        const roll = parsed.parts[0]
+        if (roll.t === 'roll' && (roll.roll.degree === 'failure' || roll.roll.degree === 'critical failure')) { conditions = conditions.filter((x) => x !== 'Concentrating'); notes.push('loses concentration') }
+      }
+    }
+  }
+  if (conditions.length || data.conditions) data.conditions = conditions
+  if (JSON.stringify(data).length > 8000) return { error: 'too much data' }
+  db.prepare('UPDATE tokens SET data = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(data), now(), before.id)
+  if (st.hp || dmg) followHp(ws, before.pageId, data.hp)
+  if (resetSaves && before.pageId) { const again = readSheet(ws, before.pageId); if (again?.sheet.deathSaves) writeSheet(ws, before.pageId, again.props, { ...again.sheet, deathSaves: { ok: 0, fail: 0 } }) }
+  // what happened is said at the table, but quietly (to the GM) when the token itself is a secret
+  const quiet = before.hidden || !!before.data.hpPrivate
+  if (notes.length) postChat(ws, userId, before.name, quiet ? 'gmroll' : 'emote', [], [{ t: 'text', text: notes.join(' and ') }])
+  if (rolls.length) postChat(ws, userId, before.name, quiet ? 'gmroll' : 'roll', [], rolls)
+  emitToken(ws, before, tokenRow(before.id, ws)!)
+  return { dealt: dmg, effect }
+}
+
 async function handle(c: Conn, m: ClientMessage) {
   const ws = c.ws
   const { settings } = stateOf(ws)
@@ -416,63 +482,71 @@ async function handle(c: Conn, m: ClientMessage) {
       if (!before) return nack(c, m, 'no such token')
       if (!canEditStats(c.role, c.user.id, before, settings)) return nack(c, m, 'not allowed')
       if (m.stat?.hpPrivate !== undefined && !gm) return nack(c, m, 'only the GM can do that')
-      const data: Record<string, any> = { ...before.data }
-      const st = m.stat ?? {}
-      if (st.hp) data.hp = { ...(data.hp ?? {}), ...st.hp }
-      if (st.ac !== undefined) { if (st.ac === null) delete data.ac; else data.ac = st.ac }
-      if (st.conditions) data.conditions = [...new Set(st.conditions)]
-      if (st.hpPrivate !== undefined) data.hpPrivate = st.hpPrivate
-      // rules the GM switched on: resistances, a spell kept going after a hit, falling unconscious
-      const auto = settings.automation
-      const pg = m.damage ? readSheet(ws, before.pageId) : null
-      const isChar = pg?.sheet.kind === 'character'
-      const notes: string[] = []
-      const rolls: Part[] = []
-      let dmg = m.damage ?? 0
-      if (dmg > 0 && auto.damage) {
-        const adj = adjustDamage(dmg, m.type, pg?.sheet)
-        dmg = adj.amount
-        notes.push(`takes ${dmg} ${m.type?.trim().toLowerCase() ?? ''} damage${adj.effect ? ` (${adj.effect})` : ''}`.replace(/  +/g, ' '))
-      }
-      const wasHp = (data.hp as { value?: number } | undefined)?.value ?? 0
-      if (dmg) {
-        // damage wears down temporary hit points first; healing stops at the maximum
-        const hp = { value: 0, max: 0, temp: 0, ...(data.hp ?? {}) }
-        if (dmg > 0) {
-          const soak = Math.min(hp.temp, dmg)
-          hp.temp -= soak
-          hp.value = Math.max(0, hp.value - (dmg - soak))
-        } else hp.value = hp.max > 0 ? Math.min(hp.max, hp.value - dmg) : hp.value - dmg
-        data.hp = hp
-      }
-      const hpNow = (data.hp as { value?: number } | undefined)?.value ?? 0
-      let conditions = (data.conditions as string[] | undefined) ?? []
-      let resetSaves = false
-      if (dmg > 0 && auto.deathSaves && isChar && wasHp > 0 && hpNow === 0) { conditions = [...new Set([...conditions, 'Unconscious'])]; resetSaves = true; notes.push('falls unconscious') }
-      if (dmg < 0 && auto.deathSaves && isChar && wasHp === 0 && hpNow > 0) { conditions = conditions.filter((x) => x !== 'Unconscious'); resetSaves = true; notes.push('is back on their feet') }
-      if (dmg > 0 && auto.concentration && conditions.includes('Concentrating')) {
-        if (hpNow === 0 && wasHp > 0) { conditions = conditions.filter((x) => x !== 'Concentrating'); notes.push('loses concentration') }
-        else if (hpNow > 0) {
-          const dc = concentrationDc(dmg)
-          const bonus = pg ? pg.sheet.saves.con ?? modOf(pg.sheet.abilities.con) : 0
-          const parsed = parseChat(`/r 1d20${bonus < 0 ? '-' : '+'}${Math.abs(bonus)} Concentration save dc ${dc}`, undefined, worldSystem(ws))
-          if (!('error' in parsed)) {
-            rolls.push(...parsed.parts)
-            const roll = parsed.parts[0]
-            if (roll.t === 'roll' && (roll.roll.degree === 'failure' || roll.roll.degree === 'critical failure')) { conditions = conditions.filter((x) => x !== 'Concentrating'); notes.push('loses concentration') }
+      const r = applyStat(ws, c.user.id, before, m.stat, m.damage ?? 0, m.type, settings)
+      if (r.error) return nack(c, m, r.error)
+      return
+    }
+    case 'attack': {
+      if (!settings.automation.attacks) return nack(c, m, 'Attacks are not automated at this table. The GM can switch that on.')
+      const from = tokenRow(m.from, ws)
+      if (!from) return nack(c, m, 'no such token')
+      if (!canEditStats(c.role, c.user.id, from, settings)) return nack(c, m, 'not allowed')
+      if (!m.attack && !m.save) return nack(c, m, 'Nothing to roll.')
+      const system = worldSystem(ws)
+      const bonusText = (n: number) => `${n < 0 ? '-' : '+'}${Math.abs(n)}`
+      for (const id of [...new Set(m.targets)]) {
+        const target = tokenRow(id, ws)
+        if (!target || target.sceneId !== from.sceneId || !canSeeToken(c.role, c.user.id, target)) continue
+        // a secret target keeps its numbers secret: the report goes to the GMs and the person who attacked
+        const quiet = target.hidden || !!target.data.hpPrivate
+        const kind: Kind = quiet ? 'gmroll' : 'roll'
+        const tsheet = readSheet(ws, target.pageId)?.sheet
+        const parts: Part[] = []
+        let multiplier = 1
+        let crit = false
+        let verdict = ''
+        if (m.attack) {
+          const ac = target.data.ac as number | undefined
+          const line = `/r 1d20${bonusText(m.attack.bonus)}${m.attack.mode ? ' ' + m.attack.mode : ''} ${m.label}, attack on ${target.name}${ac != null ? ` dc ${ac}` : ''}`
+          const parsed = parseChat(line, undefined, system)
+          if ('error' in parsed || parsed.parts[0].t !== 'roll') continue
+          const roll = parsed.parts[0].roll
+          parts.push(parsed.parts[0])
+          crit = roll.crit === 'hit'
+          if (ac == null) { multiplier = 0; verdict = `${target.name} has no armor class set, so the GM decides` }
+          else if (roll.crit === 'miss' || (roll.crit !== 'hit' && roll.total < ac)) { multiplier = 0; verdict = `misses ${target.name}` }
+          else verdict = `${crit ? 'critically hits' : 'hits'} ${target.name}`
+        }
+        if (m.save) {
+          const line = `/r 1d20${bonusText(saveBonusOf(tsheet, m.save.ability))} ${target.name}, ${m.save.ability.toUpperCase()} save dc ${m.save.dc}`
+          const parsed = parseChat(line, undefined, system)
+          if ('error' in parsed || parsed.parts[0].t !== 'roll') continue
+          const roll = parsed.parts[0].roll
+          parts.push(parsed.parts[0])
+          const saved = roll.degree === 'success' || roll.degree === 'critical success'
+          multiplier = saved ? (m.save.half ? 0.5 : 0) : 1
+          verdict = saved ? `${target.name} saves${m.save.half ? ' and takes half' : ''}` : `${target.name} fails the save`
+        }
+        // damage: dice are rolled again on a critical hit, and the total goes through the target's resistances
+        const dealt: string[] = []
+        if (multiplier > 0 && m.damage?.length) {
+          for (const d of m.damage) {
+            const roll = parseRoll(d.expr)
+            if (!roll) continue
+            let total = roll.total
+            if (crit) for (const t of parseRoll(d.expr)!.terms) if (t.kind === 'dice') total += t.sign * t.subtotal
+            const amount = Math.max(0, Math.floor(total * multiplier))
+            parts.push({ t: 'roll', roll: { ...roll, label: `${d.type ? d.type + ' ' : ''}damage${crit ? ' (critical)' : ''}`, total } })
+            const fresh = tokenRow(id, ws)
+            if (!fresh || amount <= 0) continue
+            const r = applyStat(ws, c.user.id, fresh, undefined, amount, d.type, settings, false)
+            if (!r.error) dealt.push(`${r.dealt} ${d.type?.trim().toLowerCase() ?? ''}${r.effect ? ` (${r.effect})` : ''}`.replace(/  +/g, ' ').trim())
           }
         }
+        postChat(ws, c.user.id, from.name, kind, [], parts)
+        postChat(ws, c.user.id, from.name, quiet ? 'gmroll' : 'emote', [], [{ t: 'text', text: `${verdict}${dealt.length ? ` for ${dealt.join(' and ')}` : ''}` }])
       }
-      if (conditions.length || data.conditions) data.conditions = conditions
-      if (JSON.stringify(data).length > 8000) return nack(c, m, 'too much data')
-      db.prepare('UPDATE tokens SET data = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(data), now(), m.id)
-      if (st.hp || dmg) followHp(ws, before.pageId, data.hp)
-      if (resetSaves && before.pageId) { const again = readSheet(ws, before.pageId); if (again?.sheet.deathSaves) writeSheet(ws, before.pageId, again.props, { ...again.sheet, deathSaves: { ok: 0, fail: 0 } }) }
-      // what happened is said at the table, but quietly (to the GM) when the token itself is a secret
-      const quiet = before.hidden || !!before.data.hpPrivate
-      if (notes.length) postChat(ws, c.user.id, before.name, quiet ? 'gmroll' : 'emote', [], [{ t: 'text', text: notes.join(' and ') }])
-      if (rolls.length) postChat(ws, c.user.id, before.name, quiet ? 'gmroll' : 'roll', [], rolls)
-      return emitToken(ws, before, tokenRow(m.id, ws)!)
+      return
     }
     case 'token.rest': {
       const before = tokenRow(m.id, ws)

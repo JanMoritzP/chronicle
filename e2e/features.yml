@@ -433,6 +433,9 @@ areas:
       - id: table.automation
         name: "Rules the GM switches on: damage types with resistance, concentration saves, death saves and rests"
         files: [web/src/components/TableParts.tsx, server/src/rules5e.ts, server/src/table.ts]
+      - id: table.attacks
+        name: "Attacks and saves rolled against targets, with the damage applied"
+        files: [web/src/components/TableSheet.tsx, server/src/table.ts]
       - id: table.fog
         name: "Fog of war and darkness are switched on per scene and kept"
         files: [web/src/components/Tabletop.tsx]

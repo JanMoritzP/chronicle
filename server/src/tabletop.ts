@@ -19,13 +19,13 @@ export const settingsSchema = z.object({
   /** Players see each other's cursors. */
   showCursors: z.boolean().default(true),
   /** Rules the table applies for the GM. All off until switched on, so a table plays fully by hand out of the box. */
-  automation: z.object({ damage: z.boolean().default(false), concentration: z.boolean().default(false), deathSaves: z.boolean().default(false) }).default({ damage: false, concentration: false, deathSaves: false }),
+  automation: z.object({ damage: z.boolean().default(false), concentration: z.boolean().default(false), deathSaves: z.boolean().default(false), attacks: z.boolean().default(false) }).default({ damage: false, concentration: false, deathSaves: false, attacks: false }),
 })
 /** A change to the settings: only the keys that are present (a partial of the schema above would fill the defaults back in). */
 export const settingsPatch = z.object({
   gms: z.array(z.string().max(64)).max(20),
   playersMoveOwn: z.boolean(), playersCreateTokens: z.boolean(), playersEditOwnStats: z.boolean(), playersOpenDoors: z.boolean(), playersDraw: z.boolean(), playersPing: z.boolean(), playersRuler: z.boolean(), showCursors: z.boolean(),
-  automation: z.object({ damage: z.boolean(), concentration: z.boolean(), deathSaves: z.boolean() }),
+  automation: z.object({ damage: z.boolean(), concentration: z.boolean(), deathSaves: z.boolean(), attacks: z.boolean() }),
 }).partial().strict()
 export type TableSettings = z.infer<typeof settingsSchema>
 export const DEFAULT_SETTINGS: TableSettings = settingsSchema.parse({})
@@ -147,6 +147,12 @@ export const clientMessage = z.discriminatedUnion('t', [
   z.object({ t: z.literal('token.stat'), id, stat: statPatch.optional(), /** positive hurts, negative heals */ damage: z.number().int().min(-99999).max(99999).optional(), /** acid, fire, ... : lets resistances apply when automation is on */ type: z.string().max(30).optional() }),
   z.object({ t: z.literal('token.rest'), id, kind: z.enum(['short', 'long']), /** hit dice to spend on a short rest */ dice: z.number().int().min(0).max(40).optional() }),
   z.object({ t: z.literal('token.deathsave'), id }),
+  z.object({
+    t: z.literal('attack'), from: id, targets: z.array(id).min(1).max(20), label: z.string().max(80),
+    attack: z.object({ bonus: z.number().int().min(-30).max(60), mode: z.enum(['adv', 'dis']).optional() }).optional(),
+    damage: z.array(z.object({ expr: z.string().min(1).max(40), type: z.string().max(30).optional() })).max(4).optional(),
+    save: z.object({ ability: z.enum(['str', 'dex', 'con', 'int', 'wis', 'cha']), dc: z.number().int().min(1).max(40), half: z.boolean() }).optional(),
+  }),
   z.object({ t: z.literal('token.delete'), ids: z.array(id).min(1).max(100) }),
   z.object({ t: z.literal('settings.set'), patch: settingsPatch }),
   z.object({ t: z.literal('chat'), text: z.string().min(1).max(600), as: z.string().max(60).optional() }),
