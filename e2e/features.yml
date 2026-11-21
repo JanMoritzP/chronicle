@@ -466,6 +466,9 @@ areas:
       - id: table.perf
         name: "Options for a slow machine and a frame rate readout"
         files: [web/src/lib/tableperf.ts, web/src/tabletop/engine.ts, web/src/tabletop/fog.ts, web/src/components/Tabletop.tsx]
+      - id: table.stairs
+        name: "Stairs: a trigger that takes a token to another scene"
+        files: [web/src/components/TableTriggers.tsx, server/src/table.ts]
       - id: table.stats
         name: "Hit points, damage, healing and conditions on a token, with a linked page's sheet"
         files: [web/src/components/TableParts.tsx, web/src/components/TableSheet.tsx]

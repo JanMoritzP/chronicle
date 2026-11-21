@@ -30,7 +30,7 @@ export interface Handout { id: string; title: string; text: string; image: strin
 export interface RollTable { id: string; name: string; secret: boolean; size: number; /** only the GM is sent the entries */ entries?: string }
 export interface DeckCard { id: number; name: string; text: string }
 export interface Deck { id: string; name: string; size: number; remaining: number; discard: DeckCard[]; hand: DeckCard[]; held: Record<string, number>; cardsText?: string }
-export interface Trigger { id: string; name: string; scene: string | null; event: 'enter' | 'round' | 'down'; x: number; y: number; radius: number; action: 'say' | 'handout' | 'play'; arg: string; once: boolean; fired: boolean }
+export interface Trigger { id: string; name: string; scene: string | null; event: 'enter' | 'round' | 'down'; x: number; y: number; radius: number; action: 'say' | 'handout' | 'play' | 'travel'; arg: string; once: boolean; fired: boolean }
 export interface Track { id: string; name: string; url: string; loop: boolean; /** starts when this scene is shown to the table */ scene?: string | null }
 export interface Pin { id: string; x: number; y: number; label: string; pageId: string | null; gmOnly: boolean }
 export interface Combatant { id: string; tokenId: string | null; name: string; init: number | null; hidden: boolean; done: boolean; reaction?: boolean; actions?: number; moved?: number; legendary?: number; note?: string }

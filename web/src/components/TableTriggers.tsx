@@ -7,7 +7,7 @@ import { Select } from './Select'
 // table, shows a handout to everyone or starts a track from the jukebox. Only the GM sees them (on the map they are orange circles).
 
 const EVENTS: Record<Trigger['event'], string> = { enter: 'A player token comes into the place', round: 'A new round of combat begins', down: 'A token goes down to 0 hit points' }
-const ACTIONS: Record<Trigger['action'], string> = { say: 'Say something at the table', handout: 'Show a handout to everyone', play: 'Play a track' }
+const ACTIONS: Record<Trigger['action'], string> = { say: 'Say something at the table', handout: 'Show a handout to everyone', play: 'Play a track', travel: 'Take the token to another scene (stairs)' }
 
 export function TriggersSection({ scene }: { scene: Scene }) {
   const triggers = useTable((s) => s.triggers)
@@ -38,7 +38,10 @@ export function TriggersSection({ scene }: { scene: Scene }) {
     sendTable({ t: 'trigger.save', ...(editing && editing !== 'new' ? { id: editing.id } : {}), name: name.trim(), scene: here ? scene.id : null, event, x: place?.x ?? 0, y: place?.y ?? 0, radius: Math.min(50, Math.max(0.5, Number(radius) || 1)), action, arg: action === 'say' ? arg.trim() : arg, once })
     setEditing(null)
   }
-  const say = (t: Trigger) => (t.action === 'say' ? `says “${t.arg}”` : t.action === 'handout' ? `shows ${handouts.find((h) => h.id === t.arg)?.title ?? 'a handout'}` : `plays ${tracks.find((x) => x.id === t.arg)?.name ?? 'a track'}`)
+  const scenes = useTable((s) => s.scenes)
+  const [col, row] = [arg.split('|')[1] ?? '1', arg.split('|')[2] ?? '1']
+  const setTravel = (scene: string, c: string, r: string) => setArg(scene ? `${scene}|${c.replace(/\D/g, '').slice(0, 4) || '0'}|${r.replace(/\D/g, '').slice(0, 4) || '0'}` : '')
+  const say = (t: Trigger) => (t.action === 'travel' ? `goes to ${scenes.find((s) => s.id === t.arg.split('|')[0])?.name ?? 'another scene'}` : t.action === 'say' ? `says “${t.arg}”` : t.action === 'handout' ? `shows ${handouts.find((h) => h.id === t.arg)?.title ?? 'a handout'}` : `plays ${tracks.find((x) => x.id === t.arg)?.name ?? 'a track'}`)
 
   return (
     <div className="tt-form" role="region" aria-label="Triggers">
@@ -87,6 +90,16 @@ export function TriggersSection({ scene }: { scene: Scene }) {
               <option value="">Choose a track</option>
               {tracks.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
             </Select>
+          )}
+          {action === 'travel' && (
+            <div className="tt-row">
+              <Select className="input" value={arg.split('|')[0] ?? ''} onChange={(v) => setTravel(v, col, row)} title="Scene to go to">
+                <option value="">Choose a scene</option>
+                {scenes.filter((s) => s.id !== scene.id).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </Select>
+              <label>Column<input className="input tt-num" type="number" min={0} aria-label="Arrive in column" value={col} onChange={(e) => setTravel(arg.split('|')[0] ?? '', e.target.value, row)} /></label>
+              <label>Row<input className="input tt-num" type="number" min={0} aria-label="Arrive in row" value={row} onChange={(e) => setTravel(arg.split('|')[0] ?? '', col, e.target.value)} /></label>
+            </div>
           )}
           <label className="tt-check"><input type="checkbox" checked={once} onChange={(e) => setOnce(e.target.checked)} />Only the first time</label>
           <label className="tt-check"><input type="checkbox" checked={here} onChange={(e) => setHere(e.target.checked)} />Only on this scene</label>

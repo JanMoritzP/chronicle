@@ -375,7 +375,22 @@ const triggerJson = (t: TriggerDb) => ({ id: t.id, name: t.name, scene: t.scene_
 /** Only the GM is told about triggers: a player must not learn where the traps are. */
 function sendTriggers(ws: string) { const triggers = triggerRows(ws).map(triggerJson); for (const c of inWorld(ws)) if (c.role === 'gm') send(c, { t: 'triggers', triggers }) }
 
-/** What a trigger does: says its text at the table, shows a handout to everyone, or starts a track. */
+/** The scene, column and row a travel trigger sends a token to, from its text "sceneId|column|row". */
+const travelArg = (arg: string) => { const m = /^([A-Za-z0-9-]{1,60})\|(\d{1,4})\|(\d{1,4})$/.exec(arg); return m ? { scene: m[1], col: Number(m[2]), row: Number(m[3]) } : null }
+
+/** Takes a token to another scene (stairs, a trapdoor, a gate to another floor). Its owners come along to look at that scene. */
+function travelToken(ws: string, who: TokenRow, dest: { scene: string; col: number; row: number }) {
+  const sc = sceneRow(dest.scene, ws)
+  if (!sc || sc.id === who.sceneId) return
+  const x = Math.min(sc.width, (dest.col + 0.5) * sc.grid_size), y = Math.min(sc.height, (dest.row + 0.5) * sc.grid_size)
+  emitToken(ws, who, null)
+  db.prepare('UPDATE tokens SET scene_id = ?, x = ?, y = ?, updated_at = ? WHERE id = ?').run(sc.id, x, y, now(), who.id)
+  const after = tokenRow(who.id, ws)!
+  emitToken(ws, null, after)
+  for (const c of inWorld(ws)) if (c.role === 'player' && after.owners.includes(c.user.id)) { c.scene = sc.id; sendView(c) }
+}
+
+/** What a trigger does: says its text at the table, shows a handout to everyone, starts a track, or takes the token that set it off to another scene. */
 function fireTrigger(ws: string, userId: string, t: TriggerDb, who?: TokenRow) {
   if (t.once) db.prepare('UPDATE triggers SET fired = 1 WHERE id = ?').run(t.id)
   if (t.action === 'say') {
@@ -387,6 +402,9 @@ function fireTrigger(ws: string, userId: string, t: TriggerDb, who?: TokenRow) {
       sendHandouts(ws)
       showHandout(ws, { ...h, revealed: '"all"' }, (x) => !mayRead(h, x.user.id))
     }
+  } else if (t.action === 'travel') {
+    const dest = travelArg(t.arg)
+    if (who && dest) travelToken(ws, who, dest)
   } else if (t.action === 'play') {
     if (db.prepare('SELECT 1 FROM tracks WHERE id = ? AND workspace_id = ?').get(t.arg, ws)) {
       if (!playing.has(ws)) playing.set(ws, new Set())
@@ -1078,6 +1096,7 @@ async function handle(c: Conn, m: ClientMessage) {
       if (m.action === 'handout' && !db.prepare('SELECT 1 FROM handouts WHERE id = ? AND workspace_id = ?').get(m.arg, ws)) return nack(c, m, 'Choose a handout of this world.')
       if (m.action === 'play' && !db.prepare('SELECT 1 FROM tracks WHERE id = ? AND workspace_id = ?').get(m.arg, ws)) return nack(c, m, 'Choose a track of this world.')
       if (m.action === 'say' && !m.arg.trim()) return nack(c, m, 'Write what is said.')
+      if (m.action === 'travel') { const d = travelArg(m.arg); if (!d || !sceneRow(d.scene, ws)) return nack(c, m, 'Choose a scene of this world to go to.') }
       if (m.id) {
         if (!db.prepare('SELECT 1 FROM triggers WHERE id = ? AND workspace_id = ?').get(m.id, ws)) return nack(c, m, 'no such trigger')
         db.prepare('UPDATE triggers SET name = ?, scene_id = ?, event = ?, x = ?, y = ?, radius = ?, action = ?, arg = ?, once = ?, fired = 0 WHERE id = ?').run(m.name, m.scene, m.event, m.x, m.y, m.radius, m.action, m.arg, m.once ? 1 : 0, m.id)

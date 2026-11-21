@@ -1395,6 +1395,32 @@ gm.send({ t: 'jukebox.remove', id: fiddle.id })
 gm.send({ t: 'jukebox.remove', id: drum.id })
 await sleep(200)
 
+// stairs: a trigger that takes the token to another scene
+gm.send({ t: 'scene.create', name: 'Upstairs' })
+const upScene = (await gm.until((m) => m.t === 'scene' && m.scene.name === 'Upstairs')).scene
+gm.send({ t: 'token.add', sceneId: crypt, token: { name: 'Climber', x: 70, y: 700, owners: [alice.id] } })
+const climber = (await gm.until((m) => m.t === 'token' && m.token.name === 'Climber')).token
+gm.send({ t: 'trigger.save', name: 'Stairs up', scene: crypt, event: 'enter', x: 70, y: 770, radius: 0.6, action: 'travel', arg: 'nowhere|1|1', once: false, op: 'badtravel' })
+check('stairs to a scene that is not there are refused', !!(await gm.until((m) => m.t === 'nack' && m.op === 'badtravel')))
+gm.send({ t: 'trigger.save', name: 'Stairs up', scene: crypt, event: 'enter', x: 70, y: 770, radius: 0.6, action: 'travel', arg: `${upScene.id}|3|2`, once: false })
+await sleep(250)
+const nTravel = pa.mark()
+const nTravelGm = gm.mark()
+gm.send({ t: 'token.move', moves: [{ id: climber.id, x: 70, y: 770 }] })
+await sleep(500)
+const upGrid = upScene.gridSize
+const upView = pa.since(nTravel, (m) => m.t === 'view' && m.sceneId === upScene.id)[0]
+const arrived = upView?.tokens.find((t) => t.id === climber.id)
+check('its owner is taken to look at that scene', !!upView)
+check('the token is on the other scene at the place named', !!arrived && arrived.x === 3.5 * upGrid && arrived.y === 2.5 * upGrid, JSON.stringify(arrived && { x: arrived.x, y: arrived.y }))
+check('and it is gone from the scene it left', gm.since(nTravelGm, (m) => m.t === 'token.remove' && m.ids.includes(climber.id)).length >= 1)
+gm.send({ t: 'trigger.delete', id: gm.msgs.filter((m) => m.t === 'triggers').at(-1).triggers.find((t) => t.name === 'Stairs up').id })
+gm.send({ t: 'token.delete', ids: [climber.id] })
+gm.send({ t: 'scene.delete', id: upScene.id })
+await sleep(300)
+// the player is back at the table's scene
+await pa.until((m) => m.t === 'view' && m.sceneId === crypt)
+
 // bad input
 gm.send({ t: 'token.update', id: aria.id, patch: { size: 9999 }, op: 'big' })
 check('out of range values are refused', !!(await gm.until((m) => m.t === 'nack' && m.op === 'big')))

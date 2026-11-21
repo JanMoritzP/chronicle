@@ -1705,3 +1705,33 @@ test('options for a slow machine, and the frame rate can be shown', { tag: '@fea
   await app.getByLabel('Show frames per second').uncheck()
   await expect(app.getByRole('status', { name: 'Performance' })).toHaveCount(0)
 })
+
+test('a trigger can be stairs that take a token to another scene', { tag: '@feature:table.stairs' }, async ({ app }) => {
+  await openTable(app)
+  await makeScene(app, 'Ground floor')
+  await app.locator('.tt-bar').getByRole('button', { name: 'Scene', exact: true }).click()
+  await app.getByPlaceholder('The crypt under the chapel').fill('Loft')
+  await app.getByRole('button', { name: 'Create' }).click()
+  await expect(app.getByRole('alert')).toHaveCount(0)
+  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Scene', exact: true }).click()
+  await app.getByRole('button', { name: 'New trigger' }).click()
+  await app.getByLabel('Trigger name').fill('Ladder')
+  await expect(async () => {
+    await app.getByTitle('When it happens').click()
+    await app.getByRole('option', { name: 'A new round of combat begins' }).click({ timeout: 1500 })
+    await expect(app.getByTitle('What it does')).toBeVisible({ timeout: 1500 })
+  }).toPass()
+  await expect(async () => {
+    await app.getByTitle('What it does').click()
+    await app.getByRole('option', { name: /Take the token to another scene/ }).click({ timeout: 1500 })
+    await expect(app.getByTitle('Scene to go to')).toBeVisible({ timeout: 1500 })
+  }).toPass()
+  await expect(async () => {
+    await app.getByTitle('Scene to go to').click()
+    await app.getByRole('option', { name: 'Loft' }).click({ timeout: 1500 })
+    await expect(app.getByRole('button', { name: 'Save trigger' })).toBeEnabled({ timeout: 1500 })
+  }).toPass()
+  await app.getByLabel('Arrive in column').fill('4')
+  await app.getByRole('button', { name: 'Save trigger' }).click()
+  await expect(app.getByRole('list', { name: 'Trigger list' })).toContainText('goes to Loft')
+})

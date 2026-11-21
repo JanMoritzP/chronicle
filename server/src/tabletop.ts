@@ -258,7 +258,7 @@ export const clientMessage = z.discriminatedUnion('t', [
   z.object({
     t: z.literal('trigger.save'), id: id.optional(), name: z.string().trim().min(1).max(60), scene: id.nullable(),
     event: z.enum(['enter', 'round', 'down']), x: coord, y: coord, radius: z.number().min(0.5).max(50),
-    action: z.enum(['say', 'handout', 'play']), arg: z.string().max(300), once: z.boolean(),
+    action: z.enum(['say', 'handout', 'play', 'travel']), arg: z.string().max(300), once: z.boolean(),
   }),
   z.object({ t: z.literal('trigger.delete'), id }),
   /** lets a trigger that fires once fire again */
