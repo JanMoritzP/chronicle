@@ -1098,6 +1098,17 @@ check('the GM can fetch the last session as it happened', rp.status === 200 && r
 check('in time order', rp.data.events.every((e, i) => i === 0 || e.ts >= rp.data.events[i - 1].ts))
 check('a player cannot', (await call('GET', `/api/workspaces/${ws}/replay`, null, alice.cookie)).status === 403)
 
+// turning a prop over, and picture variants
+gm.send({ t: 'token.add', sceneId: crypt, token: { name: 'Variant', x: 500, y: 500 } })
+const vt = (await gm.until((m) => m.t === 'token' && m.token.name === 'Variant')).token
+gm.send({ t: 'token.update', id: vt.id, patch: { data: { variants: [imgUp.url, imgUp.url] } } })
+await sleep(250)
+check('a token can have picture variants of this world', gm.msgs.filter((m) => m.t === 'token' && m.token.id === vt.id).at(-1).token.data.variants.length === 2)
+gm.send({ t: 'token.update', id: vt.id, patch: { data: { variants: ['https://evil.example/x.png'] } }, op: 'vbad' })
+check('but not pictures from anywhere else', !!(await gm.until((m) => m.t === 'nack' && m.op === 'vbad')))
+gm.send({ t: 'token.delete', ids: [vt.id] })
+await sleep(150)
+
 // the GM brings everyone to look at one place
 n = pa.mark()
 gm.send({ t: 'camera.pull', x: 100, y: 200, w: 800, h: 600 })
@@ -1230,6 +1241,16 @@ await pa.until((m) => m.t === 'view' && m.sceneId === crypt && pa.msgs.indexOf(m
 gm.send({ t: 'view', sceneId: crypt })
 gm.send({ t: 'scene.delete', id: fogMap })
 await sleep(200)
+
+// turning a prop over
+gm.send({ t: 'tile.add', sceneId: crypt, image: tileImg.url, x: 600, y: 600 })
+await sleep(300)
+const flipTile = gm.msgs.filter((m) => m.t === 'tiles').at(-1).tiles.at(-1)
+gm.send({ t: 'tile.update', id: flipTile.id, patch: { flip: true } })
+await sleep(300)
+check('a prop can be turned over', gm.msgs.filter((m) => m.t === 'tiles').at(-1).tiles.find((x) => x.id === flipTile.id).flip === true)
+gm.send({ t: 'tile.delete', ids: [flipTile.id] })
+await sleep(150)
 
 // bad input
 gm.send({ t: 'token.update', id: aria.id, patch: { size: 9999 }, op: 'big' })

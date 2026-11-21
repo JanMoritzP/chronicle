@@ -2,6 +2,8 @@ import { Plus, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { sendTable, useTable, type Token } from '../tabletop/state'
 import { runMacro } from './TableMacros'
+import { useStore } from '../store'
+import { pickImage, uploadImage } from '../tabletop/upload'
 import { Select } from './Select'
 
 // How a token looks beyond its picture (shape, border, tint, flip, name plate, elevation, aura), the extra bars under its hit points, and the buttons
@@ -14,6 +16,8 @@ const patchData = (token: Token, change: Record<string, unknown>) => {
 }
 
 export function TokenLook({ token }: { token: Token }) {
+  const wsId = useStore((s) => s.wsId)
+  const variants = ((token.data.variants as string[] | undefined) ?? [])
   const unit = useTable((s) => s.scenes.find((x) => x.id === s.sceneId)?.unit ?? 'ft')
   const d = token.data as { shape?: string; border?: string; tint?: string; flip?: boolean; nameplate?: boolean; elevation?: number; aura?: { radius: number; color: string } }
   return (
@@ -29,6 +33,11 @@ export function TokenLook({ token }: { token: Token }) {
         {d.border && <button className="btn sm" onClick={() => patchData(token, { border: undefined })}>Plain border</button>}
         <label>Tint<input className="tt-color" type="color" aria-label="Tint colour" value={d.tint ?? '#ffffff'} onChange={(e) => patchData(token, { tint: e.target.value })} /></label>
         {d.tint && <button className="btn sm" onClick={() => patchData(token, { tint: undefined })}>No tint</button>}
+      </div>
+      <div className="tt-row" role="group" aria-label="Picture variants">
+        <button className="btn sm" title="Add another picture this token can wear" onClick={async () => { const f = await pickImage(); if (!f || !wsId) return; const url = await uploadImage(wsId, f); if (url) patchData(token, { variants: [...variants, url].slice(0, 8) }) }}>Add a variant</button>
+        <button className="btn sm" disabled={variants.length < 1} title="Pick one of the variants at random" onClick={() => { const pool = [token.image, ...variants].filter(Boolean); sendTable({ t: 'token.update', id: token.id, patch: { image: pool[Math.floor(Math.random() * pool.length)] } }) }}>Shuffle the picture</button>
+        {variants.length > 0 && <button className="btn sm" onClick={() => patchData(token, { variants: undefined })}>Forget the variants ({variants.length})</button>}
       </div>
       <label className="tt-check"><input type="checkbox" checked={!!d.flip} onChange={(e) => patchData(token, { flip: e.target.checked || undefined })} />Flip the picture</label>
       <label className="tt-check"><input type="checkbox" checked={d.nameplate !== false} onChange={(e) => patchData(token, { nameplate: e.target.checked ? undefined : false })} />Show the label under the token</label>

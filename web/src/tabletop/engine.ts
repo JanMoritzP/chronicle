@@ -528,6 +528,7 @@ export class TableEngine {
         sprite.texture = tex
         sprite.width = t.w
         sprite.height = t.h
+        if (t.flip) sprite.scale.x = -Math.abs(sprite.scale.x)
         this.poke()
       })
       ;(t.layer === 'overhead' ? this.tileOver : t.layer === 'gm' ? this.tileGm : this.tileBg).addChild(box)

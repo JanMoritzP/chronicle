@@ -109,6 +109,8 @@ function validTokenLook(d: Record<string, unknown>) {
   if (a !== undefined && !(a && typeof a === 'object' && num(a.radius, 2000) && hex6(a.color))) return false
   const bars = d.bars
   if (bars !== undefined && !(Array.isArray(bars) && bars.length <= 3 && bars.every((b) => b && typeof b.name === 'string' && b.name.length <= 20 && Number.isInteger(b.value) && Number.isInteger(b.max) && b.max >= 0 && b.max <= 99999 && Math.abs(b.value) <= 99999 && hex6(b.color)))) return false
+  const vars = d.variants
+  if (vars !== undefined && !(Array.isArray(vars) && vars.length <= 8 && vars.every((v) => typeof v === 'string' && /^\/api\/uploads\/[A-Za-z0-9-]+$/.test(v)))) return false
   const acts = d.actions
   if (acts !== undefined && !(Array.isArray(acts) && acts.length <= 8 && acts.every((x) => x && typeof x.name === 'string' && x.name.length >= 1 && x.name.length <= 30 && typeof x.text === 'string' && x.text.length >= 1 && x.text.length <= 600))) return false
   return true
@@ -159,7 +161,7 @@ const wall = z.object({ x1: coord, y1: coord, x2: coord, y2: coord, kind: z.enum
 const tileImage = imageUrl.refine((v) => v.length > 0, 'a tile needs an image')
 export const tilePatch = z.object({
   x: coord, y: coord, w: z.number().min(8).max(20000), h: z.number().min(8).max(20000), rotation: z.number().finite().min(-3600).max(3600),
-  layer: z.enum(['bg', 'overhead', 'gm']), locked: z.boolean(), hidden: z.boolean(), z: z.number().int().min(-1000).max(1000),
+  layer: z.enum(['bg', 'overhead', 'gm']), locked: z.boolean(), hidden: z.boolean(), flip: z.boolean(), z: z.number().int().min(-1000).max(1000),
 }).partial().strict()
 export const wallPatch = z.object({ x1: coord, y1: coord, x2: coord, y2: coord, kind: z.enum(['wall', 'door', 'secret', 'window', 'oneway']), open: z.boolean() }).partial().strict()
 const hpValue = z.number().int().min(-9999).max(99999)

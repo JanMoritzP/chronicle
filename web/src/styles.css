@@ -995,3 +995,5 @@ button.cs-roll:disabled { cursor: default; }
 .tt-macro-folder[open] { display: flex; flex-wrap: wrap; gap: 4px; }
 .tt-macro-folder summary { cursor: pointer; list-style: none; }
 @media (min-width: 901px) { .tt-lefty .tt-main { flex-direction: row-reverse; } .tt-lefty .tt-panel { border-left: 0; border-right: 1px solid var(--border); } }
+/* a tablet at the table: bigger things to touch */
+@media (min-width: 768px) and (max-width: 1200px) and (pointer: coarse) { .tt-bar .btn, .tt-panel .btn, .tt-panel .seg button { min-height: 40px; } .tt-chip, .tt-roll { min-height: 34px; padding: 4px 12px; } .tt-pip { width: 20px; height: 20px; } .tt-panel { width: 340px; } }

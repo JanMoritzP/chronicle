@@ -213,6 +213,7 @@ export function CharacterSheet({ sheet, set, roll }: { sheet: Sheet; set?: (patc
                   <input type="number" className="sv-num" min={0} step="any" aria-label={`Weight of ${it.name || 'item'} in pounds`} title="Pounds, each" placeholder="lb" style={{ width: 56 }} value={it.weight ?? ''} onChange={(e) => setItems(items.map((x, j) => (j === i ? { ...x, weight: e.target.value === '' ? undefined : Math.max(0, Number(e.target.value)) } : x)))} />
                   <label className="sv-mini" title="Charges: spent, and in all"><Num label={`Charges of ${it.name || 'item'}`} value={it.charges?.max ?? 0} width={44} onChange={(n) => setItems(items.map((x, j) => (j === i ? { ...x, charges: n > 0 ? { used: Math.min(x.charges?.used ?? 0, n), max: n } : undefined } : x)))} />charges</label>
                   {it.charges && it.charges.max > 0 && <Bubbles label={`${it.name || 'Item'} charge`} total={it.charges.max} used={it.charges.used} onChange={(n) => setItems(items.map((x, j) => (j === i ? { ...x, charges: { max: x.charges!.max, used: n } } : x)))} />}
+                  <label className="sv-mini" title="Armor class this item adds while equipped"><Num label={`Armor class bonus of ${it.name || 'item'}`} value={it.acBonus ?? 0} min={-5} max={10} width={44} onChange={(n) => setItems(items.map((x, j) => (j === i ? { ...x, acBonus: n || undefined } : x)))} />AC</label>
                   <label className="sv-mini" title="Attuned"><input type="checkbox" aria-label={`${it.name || 'Item'} attuned`} checked={!!it.attuned} onChange={(e) => setItems(items.map((x, j) => (j === i ? { ...x, attuned: e.target.checked } : x)))} />Attuned</label>
                   <button className="icon-btn" aria-label={`Remove ${it.name || 'item'}`} onClick={() => setItems(items.filter((_, j) => j !== i))}><Trash2 size={12} /></button>
                 </>
@@ -223,9 +224,12 @@ export function CharacterSheet({ sheet, set, roll }: { sheet: Sheet; set?: (patc
         {items.length > 0 && (() => {
           const w = carriedWeight(items), load = loadOf(w, sheet.abilities.str), n = attunedCount(items)
           return (
+            <>
+            {items.some((i) => i.equipped && i.acBonus) && <p className="cs-load" aria-label="Armor class from items">Equipped items add {items.filter((i) => i.equipped).reduce((n, i) => n + (i.acBonus ?? 0), 0)} to armor class, for {sheet.ac.value + items.filter((i) => i.equipped).reduce((n, i) => n + (i.acBonus ?? 0), 0)} in all.</p>}
             <p className={`cs-load${load === 'light' && n <= MAX_ATTUNED ? '' : ' warn'}`} aria-label="Load">
               Carrying {w} of {capacityOf(sheet.abilities.str)} lb ({load}). Attuned to {n} of {MAX_ATTUNED}{n > MAX_ATTUNED ? ', more than a character can be' : ''}.
             </p>
+            </>
           )
         })()}
         {edit && (

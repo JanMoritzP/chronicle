@@ -23,7 +23,7 @@ export interface Ruler { user: string; name: string; points: { x: number; y: num
 export type Conn = 'connecting' | 'open' | 'closed'
 export type DrawKind = 'free' | 'line' | 'arrow' | 'polygon' | 'rect' | 'ellipse' | 'text' | 'cone' | 'beam' | 'blast' | 'cube'
 export type TileLayer = 'bg' | 'overhead' | 'gm'
-export interface Tile { id: string; sceneId: string; image: string; x: number; y: number; w: number; h: number; rotation: number; layer: TileLayer; locked: boolean; hidden: boolean; z: number }
+export interface Tile { flip?: boolean; id: string; sceneId: string; image: string; x: number; y: number; w: number; h: number; rotation: number; layer: TileLayer; locked: boolean; hidden: boolean; z: number }
 export interface Drawing { id: string; sceneId: string; userId: string; kind: DrawKind; points: { x: number; y: number }[]; color: string; width: number; fill: string; text: string; gmOnly: boolean }
 export interface Handout { id: string; title: string; text: string; image: string; /** only the GM is told who can read it */ revealed?: 'all' | string[] }
 export interface RollTable { id: string; name: string; secret: boolean; size: number; /** only the GM is sent the entries */ entries?: string }

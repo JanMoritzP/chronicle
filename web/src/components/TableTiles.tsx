@@ -61,6 +61,7 @@ export function TilePanel() {
         <button className="btn sm" onClick={() => scale(0.8)}>Smaller</button>
         <button className="btn sm" onClick={() => scale(1.25)}>Bigger</button>
       </div>
+      <div className="tt-row"><button className="btn sm" title="Turn the picture over, as in a mirror" onClick={() => patch({ flip: !tile.flip })}>{tile.flip ? 'Unflip' : 'Flip'}</button></div>
       <div className="tt-row">{num('Rotation', 'rotation', -3600)}<button className="btn sm" title="Turn 45 degrees" onClick={() => patch({ rotation: (tile.rotation + 45) % 360 })}><RotateCw size={13} /></button></div>
       <div className="tt-row">
         <button className="btn sm" onClick={() => patch({ locked: !tile.locked })}>{tile.locked ? <><LockOpen size={13} /> Unlock</> : <><Lock size={13} /> Lock</>}</button>

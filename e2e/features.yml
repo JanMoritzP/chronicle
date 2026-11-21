@@ -523,6 +523,9 @@ areas:
       - id: table.layout-more
         name: "Macro folders, and the table panel on the left for left-handed use"
         files: [web/src/components/TableMacros.tsx, web/src/components/Tabletop.tsx]
+      - id: sheet.item-ac
+        name: "Items with an armor class bonus and charges; props that can be turned over; token picture variants"
+        files: [web/src/components/CharacterSheet.tsx, web/src/components/TokenLook.tsx, web/src/components/TableTiles.tsx]
       - id: table.fog
         name: "Fog of war and darkness are switched on per scene and kept"
         files: [web/src/components/Tabletop.tsx]

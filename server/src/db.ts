@@ -613,6 +613,8 @@ const migrations: (string | ((d: Database.Database) => void))[] = [
   );
   CREATE INDEX session_events_ws ON session_events(workspace_id, ts);
   `,
+  // a prop can be turned over (mirrored)
+  `ALTER TABLE scene_tiles ADD COLUMN flip INTEGER NOT NULL DEFAULT 0`,
 ]
 
 export const SCHEMA_VERSION = migrations.length

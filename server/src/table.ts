@@ -244,7 +244,7 @@ function tilesFor(c: Conn, scene: string | null) {
   if (!scene) return []
   return (db.prepare('SELECT * FROM scene_tiles WHERE scene_id = ? AND workspace_id = ? ORDER BY z').all(scene, c.ws) as TileDb[])
     .filter((t) => c.role === 'gm' || (!t.hidden && t.layer !== 'gm'))
-    .map((t) => ({ id: t.id, sceneId: t.scene_id, image: t.image, x: t.x, y: t.y, w: t.w, h: t.h, rotation: t.rotation, layer: t.layer, locked: !!t.locked, hidden: !!t.hidden, z: t.z }))
+    .map((t) => ({ id: t.id, sceneId: t.scene_id, image: t.image, x: t.x, y: t.y, w: t.w, h: t.h, rotation: t.rotation, layer: t.layer, locked: !!t.locked, hidden: !!t.hidden, z: t.z, flip: !!(t as { flip?: number }).flip }))
 }
 const sendTiles = (ws: string, sceneId: string) => { for (const c of inWorld(ws)) if (c.scene === sceneId) send(c, { t: 'tiles', sceneId, tiles: tilesFor(c, sceneId) }) }
 
