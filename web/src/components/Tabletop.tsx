@@ -8,6 +8,7 @@ import { TableEngine, type Tool } from '../tabletop/engine'
 import { snap } from '../tabletop/grid'
 import { joinTable, leaveTable, onTableMessage, sendTable, useTable, type DrawKind, type Scene, type Token } from '../tabletop/state'
 import { pickImage, uploadImage } from '../tabletop/upload'
+import { exportUvtt, importUvtt } from '../tabletop/uvttFiles'
 import { EncounterPanel } from './TableEncounters'
 import { TilePanel, TilesSection } from './TableTiles'
 import { HandoutViewer, HandoutsPanel } from './TableHandouts'
@@ -421,6 +422,10 @@ function ScenePanel({ scene, active, wsId }: { scene: Scene; active: boolean; ws
       <div className="tt-row">
         <button className="btn sm" onClick={async () => { const f = await pickImage(); if (f) { const url = await uploadImage(wsId, f); if (url) patch({ bg: url }) } }}>Set map image</button>
         {scene.bg && <button className="btn sm" onClick={() => patch({ bg: '' })}>Remove image</button>}
+      </div>
+      <div className="tt-row">
+        <button className="btn sm" title="Make a new scene from a map file made by Dungeondraft or another map tool" onClick={() => void importUvtt(wsId)}>Import a Universal VTT map</button>
+        <button className="btn sm" title="Save this scene, its walls and lights as a map file" onClick={() => void exportUvtt(scene)}>Export as Universal VTT</button>
       </div>
       <label>Grid
         <Select className="input" value={scene.grid} onChange={(v) => patch({ grid: v })}>

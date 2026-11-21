@@ -927,3 +927,36 @@ test('a light can have a colour that is kept, and the GM can let players see thr
   await app.getByLabel('Players see through each other’s tokens').click()
   await expect(app.getByLabel('Players see through each other’s tokens')).toBeChecked()
 })
+
+test('a Universal VTT map becomes a scene with walls, doors and lights, and a scene can be exported as one', { tag: '@feature:table.uvtt' }, async ({ app }) => {
+  await openTable(app)
+  await makeScene(app, 'Start')
+  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Scene', exact: true }).click()
+  const png = makePng(40, 40, [90, 120, 60])
+  const file = {
+    format: 0.3,
+    resolution: { map_origin: { x: 0, y: 0 }, map_size: { x: 20, y: 12 }, pixels_per_grid: 70 },
+    line_of_sight: [[{ x: 1, y: 1 }, { x: 5, y: 1 }, { x: 5, y: 4 }]],
+    portals: [{ position: { x: 3, y: 1 }, bounds: [{ x: 2.5, y: 1 }, { x: 3.5, y: 1 }], rotation: 0, closed: true, freestanding: false }],
+    lights: [{ position: { x: 2, y: 3 }, range: 6, intensity: 1, color: 'ffffcc88', shadows: true }],
+    image: png.toString('base64'),
+  }
+  const chooser = app.waitForEvent('filechooser')
+  await app.getByRole('button', { name: 'Import a Universal VTT map' }).click()
+  await (await chooser).setFiles({ name: 'Old crypt.dd2vtt', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(file)) })
+  await expect(app.locator('.tt-bar')).toContainText('Old crypt')
+  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Token', exact: true }).click()
+  await expect(app.getByRole('list', { name: 'Tokens on this scene' })).toContainText('Light')
+  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Scene', exact: true }).click()
+  await expect(async () => {
+    const download = app.waitForEvent('download', { timeout: 3000 })
+    await app.getByRole('button', { name: 'Export as Universal VTT' }).click()
+    const path = await (await download).path()
+    const out = JSON.parse((await import('node:fs')).readFileSync(path, 'utf8'))
+    expect(out.resolution.pixels_per_grid).toBe(70)
+    expect(out.line_of_sight).toHaveLength(2)
+    expect(out.portals).toHaveLength(1)
+    expect(out.lights).toHaveLength(1)
+    expect(out.image.length).toBeGreaterThan(20)
+  }).toPass()
+})

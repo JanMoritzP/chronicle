@@ -466,6 +466,9 @@ areas:
       - id: table.light-colour
         name: "Coloured lights, roofs that fade over the viewer, and shared vision"
         files: [web/src/tabletop/fog.ts, web/src/tabletop/engine.ts, server/src/sight.ts]
+      - id: table.uvtt
+        name: "Import and export Universal VTT maps with their walls, doors and lights"
+        files: [web/src/tabletop/uvtt.ts, web/src/tabletop/uvttFiles.ts]
       - id: table.fog
         name: "Fog of war and darkness are switched on per scene and kept"
         files: [web/src/components/Tabletop.tsx]
