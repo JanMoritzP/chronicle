@@ -1330,6 +1330,28 @@ await sleep(250)
 check('a wall can be terrain', gm.since(nw, (m) => m.t === 'walls').at(-1)?.walls.some((w) => w.kind === 'terrain' && w.x1 === 10))
 await sleep(100)
 
+// named layers for props
+gm.send({ t: 'scene.update', id: crypt, patch: { layers: [{ id: 'furn1', name: 'Furniture', players: true, locked: false }, { id: 'secret1', name: 'Secrets', players: false, locked: true }] } })
+await sleep(250)
+check('a scene keeps its named layers', gm.msgs.filter((m) => m.t === 'scene' || m.t === 'scenes').length > 0 && JSON.stringify(gm.msgs.filter((m) => m.t === 'scene' && m.scene.id === crypt).at(-1)?.scene.layers).includes('Secrets'))
+gm.send({ t: 'scene.update', id: crypt, patch: { layers: [{ id: 'bad id!', name: 'x', players: true, locked: false }] }, op: 'badlayer' })
+check('a layer with a bad id is refused', !!(await gm.until((m) => m.t === 'nack' && m.op === 'badlayer')))
+const nl = pa.mark()
+gm.send({ t: 'tile.add', sceneId: crypt, image: tileImg.url, x: 400, y: 400, layerId: 'secret1' })
+gm.send({ t: 'tile.add', sceneId: crypt, image: tileImg.url, x: 450, y: 450, layerId: 'furn1' })
+await sleep(400)
+const gmTiles = gm.msgs.filter((m) => m.t === 'tiles').at(-1).tiles
+const playerTiles = pa.since(nl, (m) => m.t === 'tiles').at(-1)?.tiles ?? []
+check('the GM sees the tiles of every layer', gmTiles.some((t) => t.layerId === 'secret1') && gmTiles.some((t) => t.layerId === 'furn1'))
+check('players are not sent the tiles of a GM only layer', !playerTiles.some((t) => t.x === 400 && t.y === 400) && playerTiles.some((t) => t.layerId === 'furn1'))
+check('a locked layer locks its tiles', gmTiles.find((t) => t.layerId === 'secret1').locked === true && gmTiles.find((t) => t.layerId === 'furn1').locked === false)
+gm.send({ t: 'tile.update', id: gmTiles.find((t) => t.layerId === 'furn1').id, patch: { layerId: null } })
+await sleep(250)
+check('a tile can leave its layer', gm.msgs.filter((m) => m.t === 'tiles').at(-1).tiles.every((t) => t.layerId !== 'furn1'))
+gm.send({ t: 'tile.delete', ids: gm.msgs.filter((m) => m.t === 'tiles').at(-1).tiles.filter((t) => t.x === 400 || t.x === 450).map((t) => t.id) })
+gm.send({ t: 'scene.update', id: crypt, patch: { layers: [] } })
+await sleep(200)
+
 // bad input
 gm.send({ t: 'token.update', id: aria.id, patch: { size: 9999 }, op: 'big' })
 check('out of range values are refused', !!(await gm.until((m) => m.t === 'nack' && m.op === 'big')))

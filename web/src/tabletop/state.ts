@@ -5,7 +5,8 @@ import type { Light, Rect, Wall } from './fog'
 // What the browser knows about the table. The server is the only writer: this store only ever holds what it was told.
 
 export type TableRole = 'gm' | 'player' | 'spectator'
-export interface Scene extends GridSpec { id: string; name: string; sort: number; bg: string; width: number; height: number; fog: boolean; darkness: number; weather?: 'none' | 'rain' | 'snow'; folder?: string; /** only the GM is sent the notes */ notes?: string; gridColor?: string; gridOpacity?: number; ambient?: string }
+export interface Scene extends GridSpec { id: string; name: string; sort: number; bg: string; width: number; height: number; fog: boolean; darkness: number; weather?: 'none' | 'rain' | 'snow'; folder?: string; /** only the GM is sent the notes */ notes?: string; gridColor?: string; gridOpacity?: number; ambient?: string; /** named layers for props */ layers?: SceneLayer[] }
+export interface SceneLayer { id: string; name: string; players: boolean; locked: boolean }
 export interface Token {
   id: string; sceneId: string; name: string; x: number; y: number; size: number; rotation: number
   image: string; color: string; pageId: string | null; hidden: boolean; locked: boolean
@@ -23,7 +24,7 @@ export interface Ruler { user: string; name: string; points: { x: number; y: num
 export type Conn = 'connecting' | 'open' | 'closed'
 export type DrawKind = 'free' | 'line' | 'arrow' | 'polygon' | 'rect' | 'ellipse' | 'text' | 'cone' | 'beam' | 'blast' | 'cube'
 export type TileLayer = 'bg' | 'overhead' | 'gm'
-export interface Tile { flip?: boolean; id: string; sceneId: string; image: string; x: number; y: number; w: number; h: number; rotation: number; layer: TileLayer; locked: boolean; hidden: boolean; z: number }
+export interface Tile { flip?: boolean; layerId?: string | null; id: string; sceneId: string; image: string; x: number; y: number; w: number; h: number; rotation: number; layer: TileLayer; locked: boolean; hidden: boolean; z: number }
 export interface Drawing { id: string; sceneId: string; userId: string; kind: DrawKind; points: { x: number; y: number }[]; color: string; width: number; fill: string; text: string; gmOnly: boolean }
 export interface Handout { id: string; title: string; text: string; image: string; /** only the GM is told who can read it */ revealed?: 'all' | string[] }
 export interface RollTable { id: string; name: string; secret: boolean; size: number; /** only the GM is sent the entries */ entries?: string }
@@ -71,6 +72,8 @@ interface TableState {
   /** a ready check in progress: who answered, and how */
   ready: { answers: Record<string, boolean> } | null
   /** creatures that could hit someone who just walked away from them */
+  /** layers the person hid on their own screen (not for anyone else) */
+  hiddenLayers: string[]
   threats: { from: string; fromName: string; target: string; targetName: string }[]
   lights: Light[]
   /** The explored area of this scene for this person, as a PNG in base64 */
@@ -88,7 +91,7 @@ interface TableState {
 
 export const useTable = create<TableState>(() => ({
   conn: 'closed', you: null, role: 'spectator', settings: DEFAULT_SETTINGS, scenes: [], active: null, sceneId: null, tokens: [], online: [], members: [],
-  selected: [], cursors: {}, rulers: {}, chat: [], unread: 0, combat: NO_COMBAT, drawings: [], tiles: [], selectedTile: null, walls: [], reveals: [], pins: [], ready: null, threats: [], lights: [], fog: null, handouts: [], rolltables: [], decks: [], jukebox: { tracks: [], playing: [] }, triggers: [], shown: null, error: '',
+  selected: [], cursors: {}, rulers: {}, chat: [], unread: 0, combat: NO_COMBAT, drawings: [], tiles: [], selectedTile: null, walls: [], reveals: [], pins: [], ready: null, hiddenLayers: [], threats: [], lights: [], fog: null, handouts: [], rolltables: [], decks: [], jukebox: { tracks: [], playing: [] }, triggers: [], shown: null, error: '',
 }))
 
 type Listener = (m: any) => void

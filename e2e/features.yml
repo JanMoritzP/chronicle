@@ -433,6 +433,9 @@ areas:
       - id: table.cone
         name: "Cones of light, terrain walls and the washed-out look of darkvision"
         files: [web/src/tabletop/visibility.ts, web/src/tabletop/fog.ts, server/src/sight.ts, web/src/components/TableParts.tsx]
+      - id: table.layers
+        name: "Named layers for props: hide from players, lock, hide on my screen"
+        files: [web/src/components/TableTiles.tsx, server/src/table.ts]
       - id: table.stats
         name: "Hit points, damage, healing and conditions on a token, with a linked page's sheet"
         files: [web/src/components/TableParts.tsx, web/src/components/TableSheet.tsx]

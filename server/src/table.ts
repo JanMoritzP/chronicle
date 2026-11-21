@@ -45,16 +45,18 @@ const conns = new Set<Conn>()
 interface SceneRow {
   id: string; workspace_id: string; name: string; sort: number; bg: string; width: number; height: number
   grid: string; grid_size: number; unit: string; dist: number; diagonal: string; fog: number; darkness: number; weather: string
-  folder: string; notes: string; grid_color: string; grid_opacity: number; ambient: string
+  folder: string; notes: string; grid_color: string; grid_opacity: number; ambient: string; layers?: string
 }
+interface SceneLayer { id: string; name: string; players: boolean; locked: boolean }
+const layersOf = (r: Pick<SceneRow, 'layers'> | undefined): SceneLayer[] => parse<SceneLayer[]>(r?.layers ?? '[]', [])
 const sceneJson = (r: SceneRow) => ({
   id: r.id, name: r.name, sort: r.sort, bg: r.bg, width: r.width, height: r.height,
   grid: r.grid, gridSize: r.grid_size, unit: r.unit, dist: r.dist, diagonal: r.diagonal, fog: !!r.fog, darkness: r.darkness, weather: r.weather ?? 'none',
-  folder: r.folder ?? '', gridColor: r.grid_color ?? '#ffffff', gridOpacity: r.grid_opacity ?? 0.28, ambient: r.ambient ?? '',
+  folder: r.folder ?? '', gridColor: r.grid_color ?? '#ffffff', gridOpacity: r.grid_opacity ?? 0.28, ambient: r.ambient ?? '', layers: layersOf(r),
 })
 /** What one person is sent of a scene: the notes are the GM's. */
 const sceneFor = (c: Conn, r: SceneRow) => ({ ...sceneJson(r), ...(c.role === 'gm' ? { notes: r.notes ?? '' } : {}) })
-const SCENE_COLUMNS: Record<string, string> = { name: 'name', bg: 'bg', width: 'width', height: 'height', grid: 'grid', gridSize: 'grid_size', unit: 'unit', dist: 'dist', diagonal: 'diagonal', fog: 'fog', darkness: 'darkness', weather: 'weather', folder: 'folder', notes: 'notes', gridColor: 'grid_color', gridOpacity: 'grid_opacity', ambient: 'ambient' }
+const SCENE_COLUMNS: Record<string, string> = { name: 'name', bg: 'bg', width: 'width', height: 'height', grid: 'grid', gridSize: 'grid_size', unit: 'unit', dist: 'dist', diagonal: 'diagonal', fog: 'fog', darkness: 'darkness', weather: 'weather', folder: 'folder', notes: 'notes', gridColor: 'grid_color', gridOpacity: 'grid_opacity', ambient: 'ambient', layers: 'layers' }
 
 interface TokenDb {
   id: string; scene_id: string; name: string; x: number; y: number; size: number; rotation: number; image: string; color: string
@@ -248,13 +250,14 @@ const drawingRow = (id: string) => { const r = db.prepare('SELECT * FROM drawing
 /** Drawings the GM keeps to themselves are left out for everyone else. */
 const drawingsFor = (c: Conn, scene: string | null) => !scene ? [] : (db.prepare('SELECT * FROM drawings WHERE scene_id = ? AND workspace_id = ? ORDER BY created_at').all(scene, c.ws) as DrawingDb[]).filter((r) => c.role === 'gm' || !r.gm_only).map(drawingJson)
 
-interface TileDb { id: string; scene_id: string; image: string; x: number; y: number; w: number; h: number; rotation: number; layer: string; locked: number; hidden: number; z: number }
+interface TileDb { id: string; scene_id: string; image: string; x: number; y: number; w: number; h: number; rotation: number; layer: string; layer_id: string | null; locked: number; hidden: number; z: number }
 /** Props and overlays. What the GM keeps hidden, or on the GM layer, is left out for everyone else. */
 function tilesFor(c: Conn, scene: string | null) {
   if (!scene) return []
+  const named = new Map(layersOf(sceneRow(scene, c.ws)).map((l) => [l.id, l]))
   return (db.prepare('SELECT * FROM scene_tiles WHERE scene_id = ? AND workspace_id = ? ORDER BY z').all(scene, c.ws) as TileDb[])
-    .filter((t) => c.role === 'gm' || (!t.hidden && t.layer !== 'gm'))
-    .map((t) => ({ id: t.id, sceneId: t.scene_id, image: t.image, x: t.x, y: t.y, w: t.w, h: t.h, rotation: t.rotation, layer: t.layer, locked: !!t.locked, hidden: !!t.hidden, z: t.z, flip: !!(t as { flip?: number }).flip }))
+    .filter((t) => c.role === 'gm' || (!t.hidden && t.layer !== 'gm' && named.get(t.layer_id ?? '')?.players !== false))
+    .map((t) => ({ id: t.id, sceneId: t.scene_id, image: t.image, x: t.x, y: t.y, w: t.w, h: t.h, rotation: t.rotation, layer: t.layer, layerId: t.layer_id && named.has(t.layer_id) ? t.layer_id : null, locked: !!t.locked || !!named.get(t.layer_id ?? '')?.locked, hidden: !!t.hidden, z: t.z, flip: !!(t as { flip?: number }).flip }))
 }
 const sendTiles = (ws: string, sceneId: string) => { for (const c of inWorld(ws)) if (c.scene === sceneId) send(c, { t: 'tiles', sceneId, tiles: tilesFor(c, sceneId) }) }
 
@@ -681,12 +684,12 @@ async function handle(c: Conn, m: ClientMessage) {
       const id = uid(), t = now()
       const sort = ((db.prepare('SELECT MAX(sort) AS s FROM scenes WHERE workspace_id = ?').get(ws) as { s: number | null }).s ?? 0) + 1
       db.transaction(() => {
-        db.prepare(`INSERT INTO scenes(id,workspace_id,name,sort,bg,width,height,grid,grid_size,unit,dist,diagonal,fog,darkness,weather,folder,notes,grid_color,grid_opacity,ambient,created_at,updated_at)
-          SELECT ?,workspace_id,?,?,bg,width,height,grid,grid_size,unit,dist,diagonal,fog,darkness,weather,folder,notes,grid_color,grid_opacity,ambient,?,? FROM scenes WHERE id = ?`).run(id, `${src.name} copy`.slice(0, 120), sort, t, t, src.id)
+        db.prepare(`INSERT INTO scenes(id,workspace_id,name,sort,bg,width,height,grid,grid_size,unit,dist,diagonal,fog,darkness,weather,folder,notes,grid_color,grid_opacity,ambient,layers,created_at,updated_at)
+          SELECT ?,workspace_id,?,?,bg,width,height,grid,grid_size,unit,dist,diagonal,fog,darkness,weather,folder,notes,grid_color,grid_opacity,ambient,layers,?,? FROM scenes WHERE id = ?`).run(id, `${src.name} copy`.slice(0, 120), sort, t, t, src.id)
         for (const w of db.prepare('SELECT x1,y1,x2,y2,kind,open,locked FROM scene_walls WHERE scene_id = ?').all(src.id) as { x1: number; y1: number; x2: number; y2: number; kind: string; open: number; locked: number }[])
           db.prepare('INSERT INTO scene_walls(id,scene_id,workspace_id,x1,y1,x2,y2,kind,open,locked) VALUES(?,?,?,?,?,?,?,?,?,?)').run(uid(), id, ws, w.x1, w.y1, w.x2, w.y2, w.kind, w.open, w.locked)
-        for (const tl of db.prepare('SELECT image,x,y,w,h,rotation,layer,locked,hidden,z FROM scene_tiles WHERE scene_id = ?').all(src.id) as Record<string, any>[])
-          db.prepare('INSERT INTO scene_tiles(id,scene_id,workspace_id,image,x,y,w,h,rotation,layer,locked,hidden,z) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)').run(uid(), id, ws, tl.image, tl.x, tl.y, tl.w, tl.h, tl.rotation, tl.layer, tl.locked, tl.hidden, tl.z)
+        for (const tl of db.prepare('SELECT image,x,y,w,h,rotation,layer,locked,hidden,z,flip,layer_id FROM scene_tiles WHERE scene_id = ?').all(src.id) as Record<string, any>[])
+          db.prepare('INSERT INTO scene_tiles(id,scene_id,workspace_id,image,x,y,w,h,rotation,layer,locked,hidden,z,flip,layer_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(uid(), id, ws, tl.image, tl.x, tl.y, tl.w, tl.h, tl.rotation, tl.layer, tl.locked, tl.hidden, tl.z, tl.flip, tl.layer_id)
         for (const tk of db.prepare('SELECT name,x,y,size,rotation,image,color,page_id,hidden,locked,owners,z,data FROM tokens WHERE scene_id = ?').all(src.id) as Record<string, any>[])
           db.prepare('INSERT INTO tokens(id,scene_id,workspace_id,name,x,y,size,rotation,image,color,page_id,hidden,locked,owners,z,data,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(uid(), id, ws, tk.name, tk.x, tk.y, tk.size, tk.rotation, tk.image, tk.color, tk.page_id, tk.hidden, tk.locked, tk.owners, tk.z, tk.data, t, t)
         const md = db.prepare('SELECT doc FROM map_docs WHERE scene_id = ?').get(src.id) as { doc: string } | undefined
@@ -1325,7 +1328,7 @@ async function handle(c: Conn, m: ClientMessage) {
       const k = Math.min(1, (scene.grid_size * 3) / Math.max(dims.width, dims.height))
       const w = m.w ?? Math.max(8, Math.round(dims.width * k)), h = m.h ?? Math.max(8, Math.round(dims.height * k))
       const z = ((db.prepare('SELECT MAX(z) AS z FROM scene_tiles WHERE scene_id = ?').get(m.sceneId) as { z: number | null }).z ?? 0) + 1
-      db.prepare('INSERT INTO scene_tiles(id,scene_id,workspace_id,image,x,y,w,h,rotation,layer,locked,hidden,z) VALUES(?,?,?,?,?,?,?,?,0,?,0,0,?)').run(uid(), m.sceneId, ws, m.image, m.x, m.y, w, h, m.layer ?? 'bg', z)
+      db.prepare('INSERT INTO scene_tiles(id,scene_id,workspace_id,image,x,y,w,h,rotation,layer,locked,hidden,z,layer_id) VALUES(?,?,?,?,?,?,?,?,0,?,0,0,?,?)').run(uid(), m.sceneId, ws, m.image, m.x, m.y, w, h, m.layer ?? 'bg', z, m.layerId ?? null)
       return sendTiles(ws, m.sceneId)
     }
     case 'tile.update': {
@@ -1334,7 +1337,7 @@ async function handle(c: Conn, m: ClientMessage) {
       if (!t) return nack(c, m, 'no such tile')
       const cols = Object.keys(m.patch)
       if (!cols.length) return
-      db.prepare(`UPDATE scene_tiles SET ${cols.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`).run(...cols.map((k) => { const v = (m.patch as Record<string, unknown>)[k]; return typeof v === 'boolean' ? (v ? 1 : 0) : (v as string | number) }), m.id)
+      db.prepare(`UPDATE scene_tiles SET ${cols.map((k) => `${k === 'layerId' ? 'layer_id' : k} = ?`).join(', ')} WHERE id = ?`).run(...cols.map((k) => { const v = (m.patch as Record<string, unknown>)[k]; return typeof v === 'boolean' ? (v ? 1 : 0) : (v as string | number) }), m.id)
       return sendTiles(ws, t.s)
     }
     case 'tile.delete': {
@@ -1569,7 +1572,7 @@ async function applyScenePatch(c: Conn, m: ClientMessage, id: string, patch: Rec
   }
   const cols = Object.keys(p).filter((k) => k in SCENE_COLUMNS)
   if (!cols.length) return true
-  db.prepare(`UPDATE scenes SET ${cols.map((k) => `${SCENE_COLUMNS[k]} = ?`).join(', ')}, updated_at = ? WHERE id = ?`).run(...cols.map((k) => (typeof p[k] === 'boolean' ? (p[k] ? 1 : 0) : (p[k] as string | number))), now(), id)
+  db.prepare(`UPDATE scenes SET ${cols.map((k) => `${SCENE_COLUMNS[k]} = ?`).join(', ')}, updated_at = ? WHERE id = ?`).run(...cols.map((k) => (typeof p[k] === 'boolean' ? (p[k] ? 1 : 0) : Array.isArray(p[k]) ? JSON.stringify(p[k]) : (p[k] as string | number))), now(), id)
   return true
 }
 

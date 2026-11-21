@@ -152,6 +152,8 @@ export const scenePatch = z.object({
   gridOpacity: z.number().min(0).max(1),
   /** A colour laid over the whole scene (candle light, dusk), or none. */
   ambient: z.string().regex(/^(#[0-9a-fA-F]{6})?$/),
+  /** Named layers for props: the GM can hide one from the players or lock it. */
+  layers: z.array(z.object({ id: z.string().regex(/^[A-Za-z0-9-]{1,40}$/), name: z.string().min(1).max(40), players: z.boolean(), locked: z.boolean() }).strict()).max(12),
   /** Rain or snow falling over the scene, for everyone. */
   weather: z.enum(['none', 'rain', 'snow']),
 }).partial().strict()
@@ -161,7 +163,7 @@ const wall = z.object({ x1: coord, y1: coord, x2: coord, y2: coord, kind: z.enum
 const tileImage = imageUrl.refine((v) => v.length > 0, 'a tile needs an image')
 export const tilePatch = z.object({
   x: coord, y: coord, w: z.number().min(8).max(20000), h: z.number().min(8).max(20000), rotation: z.number().finite().min(-3600).max(3600),
-  layer: z.enum(['bg', 'overhead', 'gm']), locked: z.boolean(), hidden: z.boolean(), flip: z.boolean(), z: z.number().int().min(-1000).max(1000),
+  layer: z.enum(['bg', 'overhead', 'gm']), layerId: z.string().regex(/^[A-Za-z0-9-]{1,40}$/).nullable(), locked: z.boolean(), hidden: z.boolean(), flip: z.boolean(), z: z.number().int().min(-1000).max(1000),
 }).partial().strict()
 export const wallPatch = z.object({ x1: coord, y1: coord, x2: coord, y2: coord, kind: z.enum(['wall', 'door', 'secret', 'window', 'oneway', 'terrain']), open: z.boolean() }).partial().strict()
 const hpValue = z.number().int().min(-9999).max(99999)
@@ -277,7 +279,7 @@ export const clientMessage = z.discriminatedUnion('t', [
   z.object({ t: z.literal('pin.add'), sceneId: id, x: coord, y: coord, label: z.string().trim().min(1).max(60), pageId: id.nullable(), gmOnly: z.boolean() }),
   z.object({ t: z.literal('pin.delete'), id }),
   z.object({ t: z.literal('draw.clear'), sceneId: id }),
-  z.object({ t: z.literal('tile.add'), sceneId: id, image: tileImage, x: coord, y: coord, w: z.number().min(8).max(20000).optional(), h: z.number().min(8).max(20000).optional(), layer: z.enum(['bg', 'overhead', 'gm']).optional() }),
+  z.object({ t: z.literal('tile.add'), sceneId: id, image: tileImage, x: coord, y: coord, w: z.number().min(8).max(20000).optional(), h: z.number().min(8).max(20000).optional(), layer: z.enum(['bg', 'overhead', 'gm']).optional(), layerId: z.string().regex(/^[A-Za-z0-9-]{1,40}$/).optional() }),
   z.object({ t: z.literal('tile.update'), id, patch: tilePatch }),
   z.object({ t: z.literal('tile.delete'), ids: z.array(id).min(1).max(100) }),
   z.object({ t: z.literal('cursor'), x: coord, y: coord }),

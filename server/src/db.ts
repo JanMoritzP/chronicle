@@ -615,6 +615,9 @@ const migrations: (string | ((d: Database.Database) => void))[] = [
   `,
   // a prop can be turned over (mirrored)
   `ALTER TABLE scene_tiles ADD COLUMN flip INTEGER NOT NULL DEFAULT 0`,
+  // named layers of a scene (a list kept as JSON) and the layer a prop belongs to
+  `ALTER TABLE scenes ADD COLUMN layers TEXT NOT NULL DEFAULT '[]'`,
+  `ALTER TABLE scene_tiles ADD COLUMN layer_id TEXT`,
 ]
 
 export const SCHEMA_VERSION = migrations.length

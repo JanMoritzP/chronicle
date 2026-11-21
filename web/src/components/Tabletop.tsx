@@ -10,7 +10,7 @@ import { joinTable, leaveTable, onTableMessage, sendTable, useTable, type DrawKi
 import { pickImage, uploadImage } from '../tabletop/upload'
 import { exportUvtt, importUvtt } from '../tabletop/uvttFiles'
 import { EncounterPanel } from './TableEncounters'
-import { TilePanel, TilesSection } from './TableTiles'
+import { shownTiles, TilePanel, TilesSection } from './TableTiles'
 import { HandoutViewer, HandoutsPanel } from './TableHandouts'
 import { AudioPlayer } from './TableAudio'
 import { TriggersSection } from './TableTriggers'
@@ -140,7 +140,7 @@ export function TableView() {
       e.setSelected(useTable.getState().selected)
       e.setExplored(useTable.getState().fog)
       e.setDrawings(useTable.getState().drawings)
-      e.setTiles(useTable.getState().tiles)
+      e.setTiles(shownTiles(useTable.getState()))
       e.setSelectedTile(useTable.getState().selectedTile)
       e.setDrawStyle({ kind: 'free', color: '#ff5252', width: 4, fill: '' })
       const turn = () => { const s = useTable.getState(); e.setTurn(s.combat.active ? s.combat.list.find((x) => x.id === s.combat.turn)?.tokenId ?? null : null) }
@@ -150,7 +150,7 @@ export function TableView() {
         if (s.scenes !== prev.scenes || s.sceneId !== prev.sceneId) push()
         if (s.combat !== prev.combat || s.tokens !== prev.tokens) turn()
         if (s.drawings !== prev.drawings) e.setDrawings(s.drawings)
-        if (s.tiles !== prev.tiles) e.setTiles(s.tiles)
+        if (s.tiles !== prev.tiles || s.hiddenLayers !== prev.hiddenLayers) e.setTiles(shownTiles(s))
         if (s.selectedTile !== prev.selectedTile) e.setSelectedTile(s.selectedTile)
         if (s.walls !== prev.walls) e.setWalls(s.walls)
         if (s.reveals !== prev.reveals) e.setReveals(s.reveals)

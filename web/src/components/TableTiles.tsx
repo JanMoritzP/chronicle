@@ -1,6 +1,7 @@
 import { ArrowDown, ArrowUp, Eye, EyeOff, ImagePlus, Lock, LockOpen, RotateCw, Trash2 } from 'lucide-react'
 import { confirmDialog } from '../lib/dialog'
-import { sendTable, useTable, type Scene, type Tile, type TileLayer } from '../tabletop/state'
+import { alertDialog, askText } from '../lib/dialog'
+import { sendTable, useTable, type Scene, type SceneLayer, type Tile, type TileLayer } from '../tabletop/state'
 import { pickImage, uploadImage } from '../tabletop/upload'
 import { Select } from './Select'
 
@@ -10,6 +11,42 @@ const LAYERS: { id: TileLayer; label: string }[] = [
   { id: 'overhead', label: 'Above the tokens' },
   { id: 'gm', label: 'GM only' },
 ]
+
+/** The tiles this person has not hidden on their own screen by hiding a layer. */
+export const shownTiles = (s: { tiles: Tile[]; hiddenLayers: string[] }) => (s.hiddenLayers.length ? s.tiles.filter((t) => !t.layerId || !s.hiddenLayers.includes(t.layerId)) : s.tiles)
+
+/** Named layers of a scene: the GM groups props (furniture, secrets, a second floor), then hides, locks or hands them to the players as a group. */
+function LayersSection({ scene }: { scene: Scene }) {
+  const hiddenLayers = useTable((s) => s.hiddenLayers)
+  const layers = scene.layers ?? []
+  const save = (next: SceneLayer[]) => sendTable({ t: 'scene.update', id: scene.id, patch: { layers: next } })
+  const add = async () => {
+    const name = await askText('Name of the layer', { label: 'Name', placeholder: 'Furniture', okLabel: 'Add' })
+    if (!name?.trim()) return
+    if (layers.length >= 12) { await alertDialog('A scene can have up to 12 layers.'); return }
+    save([...layers, { id: Math.random().toString(36).slice(2, 10), name: name.trim().slice(0, 40), players: true, locked: false }])
+  }
+  const set = (l: SceneLayer, p: Partial<SceneLayer>) => save(layers.map((x) => (x.id === l.id ? { ...x, ...p } : x)))
+  const mine = (id: string) => useTable.setState((s) => ({ hiddenLayers: s.hiddenLayers.includes(id) ? s.hiddenLayers.filter((x) => x !== id) : [...s.hiddenLayers, id] }))
+  return (
+    <div className="tt-form" role="group" aria-label="Layers">
+      <b>Layers</b>
+      <ul className="tt-tokens" aria-label="Layers of this scene">
+        {layers.map((l) => (
+          <li key={l.id} className="tt-row">
+            <span className="grow ellipsis">{l.name}</span>
+            <button className="btn ghost sm" aria-label={`${hiddenLayers.includes(l.id) ? 'Show' : 'Hide'} ${l.name} on my screen`} title="Hide it on your own screen only" onClick={() => mine(l.id)}>{hiddenLayers.includes(l.id) ? <EyeOff size={13} /> : <Eye size={13} />}</button>
+            <button className="btn ghost sm" aria-label={`${l.players ? 'Hide' : 'Show'} ${l.name} ${l.players ? 'from' : 'to'} the players`} title={l.players ? 'The players see this layer' : 'Only the GM sees this layer'} aria-pressed={!l.players} onClick={() => set(l, { players: !l.players })}>{l.players ? 'Players see' : 'GM only'}</button>
+            <button className="btn ghost sm" aria-label={`${l.locked ? 'Unlock' : 'Lock'} ${l.name}`} aria-pressed={l.locked} onClick={() => set(l, { locked: !l.locked })}>{l.locked ? <Lock size={13} /> : <LockOpen size={13} />}</button>
+            <button className="btn ghost sm" aria-label={`Delete the layer ${l.name}`} onClick={() => save(layers.filter((x) => x.id !== l.id))}><Trash2 size={12} /></button>
+          </li>
+        ))}
+        {layers.length === 0 && <li className="muted tt-hint">Make a layer, then put tiles on it from the tile's panel.</li>}
+      </ul>
+      <div className="tt-row"><button className="btn sm" onClick={add}>Add a layer</button></div>
+    </div>
+  )
+}
 
 export function TilesSection({ scene, wsId, centre }: { scene: Scene; wsId: string; centre: () => { x: number; y: number } }) {
   const tiles = useTable((s) => s.tiles)
@@ -24,6 +61,7 @@ export function TilesSection({ scene, wsId, centre }: { scene: Scene; wsId: stri
   }
   return (
     <div className="tt-form">
+      <LayersSection scene={scene} />
       <b>Props and overlays</b>
       <div className="tt-row"><button className="btn sm" onClick={add}><ImagePlus size={13} /> Add a tile</button></div>
       <ul className="tt-tokens" aria-label="Tiles on this scene">
@@ -38,6 +76,7 @@ export function TilesSection({ scene, wsId, centre }: { scene: Scene; wsId: stri
 
 export function TilePanel() {
   const tile = useTable((s) => s.tiles.find((t) => t.id === s.selectedTile)) as Tile | undefined
+  const scene = useTable((s) => s.scenes.find((x) => x.id === s.sceneId))
   if (!tile) return <p className="muted tt-hint">Select a tile.</p>
   const patch = (p: Record<string, unknown>) => sendTable({ t: 'tile.update', id: tile.id, patch: p })
   const num = (label: string, key: 'x' | 'y' | 'w' | 'h' | 'rotation', min: number) => (
@@ -56,6 +95,14 @@ export function TilePanel() {
           {LAYERS.map((l) => <option key={l.id} value={l.id}>{l.label}</option>)}
         </Select>
       </label>
+      {(scene?.layers ?? []).length > 0 && (
+        <label>Named layer
+          <Select className="input" value={tile.layerId ?? ''} onChange={(v) => patch({ layerId: v || null })} title="The named layer this tile belongs to">
+            <option value="">None</option>
+            {(scene?.layers ?? []).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+          </Select>
+        </label>
+      )}
       <div className="tt-row">{num('Width', 'w', 8)}{num('Height', 'h', 8)}</div>
       <div className="tt-row">
         <button className="btn sm" onClick={() => scale(0.8)}>Smaller</button>
