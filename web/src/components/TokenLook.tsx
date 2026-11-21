@@ -31,7 +31,7 @@ export function TokenLook({ token }: { token: Token }) {
         {d.tint && <button className="btn sm" onClick={() => patchData(token, { tint: undefined })}>No tint</button>}
       </div>
       <label className="tt-check"><input type="checkbox" checked={!!d.flip} onChange={(e) => patchData(token, { flip: e.target.checked || undefined })} />Flip the picture</label>
-      <label className="tt-check"><input type="checkbox" checked={d.nameplate !== false} onChange={(e) => patchData(token, { nameplate: e.target.checked ? undefined : false })} />Show the name under the token</label>
+      <label className="tt-check"><input type="checkbox" checked={d.nameplate !== false} onChange={(e) => patchData(token, { nameplate: e.target.checked ? undefined : false })} />Show the label under the token</label>
       <div className="tt-row">
         <label>Height ({unit})<input className="input tt-num" type="number" aria-label="Elevation" defaultValue={d.elevation ?? 0} key={`el${d.elevation}`} onBlur={(e) => { const n = Math.round(Number(e.target.value) || 0); if (n !== (d.elevation ?? 0)) patchData(token, { elevation: n || undefined }) }} /></label>
         <label>Aura ({unit})<input className="input tt-num" type="number" min={0} aria-label="Aura radius" defaultValue={d.aura?.radius ?? 0} key={`au${d.aura?.radius}`} onBlur={(e) => { const n = Math.max(0, Number(e.target.value) || 0); if (n !== (d.aura?.radius ?? 0)) patchData(token, { aura: n ? { radius: n, color: d.aura?.color ?? '#ff5555' } : undefined }) }} /></label>
@@ -52,7 +52,7 @@ export function TokenBars({ token, can }: { token: Token; can: boolean }) {
     <div className="tt-form" role="group" aria-label="More bars">
       {bars.map((b, i) => (
         <div key={i} className="tt-row">
-          <input className="input" aria-label={`Bar ${i + 1} name`} defaultValue={b.name} maxLength={20} disabled={!can} key={`n${i}${b.name}`} onBlur={(e) => e.target.value !== b.name && set(bars.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))} />
+          <input className="input" aria-label={`Bar ${i + 1} label`} defaultValue={b.name} maxLength={20} disabled={!can} key={`n${i}${b.name}`} onBlur={(e) => e.target.value !== b.name && set(bars.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))} />
           <input className="input tt-num" type="number" aria-label={`${b.name || 'Bar'} value`} defaultValue={b.value} disabled={!can} key={`v${i}${b.value}`} onBlur={(e) => { const n = Math.round(Number(e.target.value)); if (Number.isFinite(n) && n !== b.value) set(bars.map((x, j) => (j === i ? { ...x, value: n } : x))) }} />
           <span>/</span>
           <input className="input tt-num" type="number" min={0} aria-label={`${b.name || 'Bar'} maximum`} defaultValue={b.max} disabled={!can} key={`m${i}${b.max}`} onBlur={(e) => { const n = Math.max(0, Math.round(Number(e.target.value))); if (Number.isFinite(n) && n !== b.max) set(bars.map((x, j) => (j === i ? { ...x, max: n } : x))) }} />
@@ -60,7 +60,7 @@ export function TokenBars({ token, can }: { token: Token; can: boolean }) {
           {can && <button className="btn ghost sm" aria-label={`Remove ${b.name || 'bar'}`} onClick={() => set(bars.filter((_, j) => j !== i))}><Trash2 size={12} /></button>}
         </div>
       ))}
-      {can && bars.length < 3 && <button className="btn sm" onClick={() => set([...bars, { name: ['Mana', 'Charges', 'Ammo'][bars.length], value: 10, max: 10, color: BAR_COLOURS[bars.length] }])}><Plus size={12} /> Add a bar</button>}
+      {can && bars.length < 3 && <button className="btn sm" onClick={() => set([...bars, { name: ['Mana', 'Charges', 'Ammo'][bars.length], value: 10, max: 10, color: BAR_COLOURS[bars.length] }])}><Plus size={12} /> New bar</button>}
     </div>
   )
 }
@@ -87,9 +87,9 @@ export function TokenActions({ token, gm }: { token: Token; gm: boolean }) {
       </div>
       {gm && actions.length < 8 && (
         <>
-          <input className="input" aria-label="Action name" placeholder="Action, for example Bite" maxLength={30} value={name} onChange={(e) => setName(e.target.value)} />
-          <textarea className="input" aria-label="Action text" rows={2} maxLength={600} placeholder={'/roll 1d20+4 bite\n/roll 1d6+2 piercing damage'} value={text} onChange={(e) => setText(e.target.value)} />
-          <button className="btn sm" disabled={!name.trim() || !text.trim()} onClick={() => { set([...actions, { name: name.trim(), text: text.trim() }]); setName(''); setText('') }}><Plus size={12} /> Add the action</button>
+          <input className="input" aria-label="Button label" placeholder="Action, for example Bite" maxLength={30} value={name} onChange={(e) => setName(e.target.value)} />
+          <textarea className="input" aria-label="Button macro" rows={2} maxLength={600} placeholder={'/roll 1d20+4 bite\n/roll 1d6+2 piercing damage'} value={text} onChange={(e) => setText(e.target.value)} />
+          <button className="btn sm" disabled={!name.trim() || !text.trim()} onClick={() => { set([...actions, { name: name.trim(), text: text.trim() }]); setName(''); setText('') }}><Plus size={12} /> Make the button</button>
         </>
       )}
     </div>

@@ -1179,7 +1179,7 @@ test('tokens: a look of their own, extra bars, markers, and buttons that run a m
 
   // an extra bar
   const bars = app.getByRole('group', { name: 'More bars' })
-  await bars.getByRole('button', { name: 'Add a bar' }).click()
+  await bars.getByRole('button', { name: 'New bar' }).click()
   await expect(bars.getByLabel('Mana value')).toHaveValue('10')
   await bars.getByLabel('Mana value').fill('4')
   await bars.getByLabel('Mana value').press('Tab')
@@ -1191,9 +1191,9 @@ test('tokens: a look of their own, extra bars, markers, and buttons that run a m
 
   // a button on the token that rolls
   const actions = app.getByRole('group', { name: 'Token actions' })
-  await actions.getByLabel('Action name').fill('Bite')
-  await actions.getByLabel('Action text').fill('/roll 1d20+9 bite')
-  await actions.getByRole('button', { name: 'Add the action' }).click()
+  await actions.getByLabel('Button label').fill('Bite')
+  await actions.getByLabel('Button macro').fill('/roll 1d20+9 bite')
+  await actions.getByRole('button', { name: 'Make the button' }).click()
   await actions.getByRole('button', { name: 'Bite', exact: true }).click()
   await app.locator('.tt-panel .seg').getByRole('button', { name: /Chat/ }).click()
   await expect(app.getByRole('list', { name: 'Chat' })).toContainText('bite')

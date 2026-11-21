@@ -159,7 +159,7 @@ export function TokenStats({ token }: { token: Token }) {
       {can && (
         <div className="tt-row">
           <input className="input" aria-label="Custom marker" placeholder="A marker of your own" maxLength={30} value={marker} onChange={(e) => setMarker(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && marker.trim()) { stat({ conditions: [...new Set([...conditions, marker.trim()])] }); setMarker('') } }} />
-          <button className="btn sm" disabled={!marker.trim()} onClick={() => { stat({ conditions: [...new Set([...conditions, marker.trim()])] }); setMarker('') }}>Add marker</button>
+          <button className="btn sm" disabled={!marker.trim()} onClick={() => { stat({ conditions: [...new Set([...conditions, marker.trim()])] }); setMarker('') }}>Put a marker on</button>
         </div>
       )}
       <Effects token={token} can={can} />
