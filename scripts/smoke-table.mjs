@@ -994,6 +994,19 @@ gm.send({ t: 'combat.control', action: 'clear' })
 gm.send({ t: 'token.delete', ids: [fast.id, slow.id] })
 await sleep(200)
 
+// speaking as someone, and out of character
+n = pa.mark()
+gm.send({ t: 'chat', text: '/as "Old Mara" Welcome, travellers.' })
+await sleep(250)
+const mara = pa.since(n, (m) => m.t === 'chat.msg' && m.msg.name === 'Old Mara')[0]?.msg
+check('the GM speaks as someone else', mara?.kind === 'say' && mara.parts[0].text === 'Welcome, travellers.' && mara.userId !== undefined)
+pa.send({ t: 'chat', text: '/as Mara I am the GM', op: 'as' })
+check('a player cannot', !!(await pa.until((m) => m.t === 'nack' && m.op === 'as')))
+n = gm.mark()
+pa.send({ t: 'chat', text: '/ooc back in a minute' })
+await sleep(250)
+check('out of character talk is its own kind of message', gm.since(n, (m) => m.t === 'chat.msg' && m.msg.kind === 'ooc' && m.msg.parts[0].text === 'back in a minute').length === 1)
+
 // the GM brings everyone to look at one place
 n = pa.mark()
 gm.send({ t: 'camera.pull', x: 100, y: 200, w: 800, h: 600 })

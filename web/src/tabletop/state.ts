@@ -38,7 +38,7 @@ export interface Die { v: number; dropped?: boolean; extra?: boolean }
 export type RollTerm = { kind: 'num'; sign: 1 | -1; value: number } | { kind: 'dice'; sign: 1 | -1; count: number; sides: number; dice: Die[]; subtotal: number; text: string }
 export interface RollJson { expr: string; label: string; total: number; terms: RollTerm[]; crit: 'hit' | 'miss' | null; dc?: number; degree?: 'critical success' | 'success' | 'failure' | 'critical failure' }
 export type ChatPart = { t: 'text'; text: string } | { t: 'roll'; roll: RollJson }
-export interface ChatMsg { id: string; ts: number; userId: string; name: string; kind: 'say' | 'roll' | 'gmroll' | 'emote' | 'whisper'; to: string[]; parts: ChatPart[] }
+export interface ChatMsg { id: string; ts: number; userId: string; name: string; kind: 'say' | 'roll' | 'gmroll' | 'emote' | 'whisper' | 'ooc'; to: string[]; parts: ChatPart[] }
 
 export const DEFAULT_SETTINGS: Settings = { gms: [], playersMoveOwn: true, playersCreateTokens: false, playersEditOwnStats: true, playersOpenDoors: false, playersDraw: true, playersPing: true, playersRuler: true, showCursors: true, sharedVision: false, automation: { damage: false, concentration: false, deathSaves: false, attacks: false } }
 

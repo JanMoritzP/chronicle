@@ -221,6 +221,11 @@ export function TokenSheet({ token }: { token: Token }) {
 // ---------- chat ----------
 
 function RollView({ r }: { r: RollJson }) {
+  const selected = useTable((s) => s.selected)
+  const canApply = useTable((s) => s.role !== 'spectator')
+  // a damage or healing roll can be put on the selected tokens with one click
+  const isDamage = /damage/i.test(r.label), isHeal = /heal/i.test(r.label) && !isDamage
+  const type = isDamage ? /([a-z]+)\s+damage/i.exec(r.label)?.[1]?.toLowerCase() : undefined
   return (
     <span className={`tt-rollout${r.crit ? ` ${r.crit}` : ''}`}>
       {r.label && <small className="tt-rolllabel">{r.label}</small>}
@@ -233,12 +238,15 @@ function RollView({ r }: { r: RollJson }) {
         </span>
         <b className="tt-total" aria-label={`Total ${r.total}`}>{r.total}</b>
         {r.degree && <span className={`tt-degree ${r.degree.replace(' ', '-')}`}>{r.degree} vs DC {r.dc}</span>}
+        {canApply && (isDamage || isHeal) && selected.length > 0 && (
+          <button className="btn ghost sm tt-apply" aria-label={`Apply ${r.total} ${isHeal ? 'healing' : 'damage'} to the selected tokens`} onClick={() => { for (const id of selected) sendTable({ t: 'token.stat', id, damage: isHeal ? -r.total : r.total, ...(type && type !== 'heal' ? { type } : {}) }) }}>{isHeal ? 'Heal' : 'Apply'} {selected.length > 1 ? `to ${selected.length}` : 'to selected'}</button>
+        )}
       </span>
     </span>
   )
 }
 
-const KIND_LABEL: Record<ChatMsg['kind'], string> = { say: '', roll: '', emote: '', whisper: 'whispers', gmroll: 'rolls privately' }
+const KIND_LABEL: Record<ChatMsg['kind'], string> = { say: '', roll: '', emote: '', whisper: 'whispers', gmroll: 'rolls privately', ooc: 'out of character' }
 
 function Message({ m, you, names }: { m: ChatMsg; you: string | undefined; names: Map<string, string> }) {
   const parts = m.parts.map((p, i) => (p.t === 'text' ? <span key={i}>{p.text}</span> : <RollView key={i} r={p.roll} />))

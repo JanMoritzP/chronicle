@@ -3,8 +3,8 @@ import { parseRoll, type Degree, type Rng, type Roll, cryptoRng } from './dice.j
 // What a line typed into the table chat means: plain talk, a roll, an emote or a whisper, with [[1d20+3]] rolling inside the text.
 
 export type Part = { t: 'text'; text: string } | { t: 'roll'; roll: Roll }
-export type Kind = 'say' | 'roll' | 'gmroll' | 'emote' | 'whisper'
-export interface Parsed { kind: Kind; /** user name a whisper goes to */ to?: string; parts: Part[] }
+export type Kind = 'say' | 'roll' | 'gmroll' | 'emote' | 'whisper' | 'ooc'
+export interface Parsed { kind: Kind; /** user name a whisper goes to */ to?: string; /** the name the GM speaks as (/as) */ as?: string; parts: Part[] }
 
 const INLINE = /\[\[([^\]]{1,80})\]\]/g
 
@@ -54,13 +54,19 @@ export function parseChat(line: string, rng: Rng = cryptoRng, system = '5e'): Pa
       if (!roll) return { error: 'That is not a roll. Try /roll 1d20+5, or 2d20kh1 for advantage.' }
       return { kind: name.toLowerCase().startsWith('g') ? 'gmroll' : 'roll', parts: [{ t: 'roll', roll: withDc(roll, system) }] }
     }
+    case 'as': {
+      const m = /^("[^"]{1,60}"|\S{1,60})\s+(.+)$/s.exec(rest)
+      if (!m) return { error: 'Speak as someone with /as Name what they say, or /as "Old Mara" what she says.' }
+      return { kind: 'say', as: m[1].replace(/^"|"$/g, ''), parts: withInline(m[2], rng) }
+    }
+    case 'ooc': case 'o': return rest ? { kind: 'ooc', parts: withInline(rest, rng) } : { error: 'Say something out of character with /ooc your message.' }
     case 'me': case 'em': return rest ? { kind: 'emote', parts: withInline(rest, rng) } : { error: 'What do you do? Try /me draws a sword.' }
     case 'w': case 'whisper': {
       const m = /^(\S+)\s+(.+)$/s.exec(rest)
       if (!m) return { error: 'Whisper to someone with /w name your message.' }
       return { kind: 'whisper', to: m[1], parts: withInline(m[2], rng) }
     }
-    default: return { error: `Unknown command /${name}. Try /roll, /gmroll, /w or /me.` }
+    default: return { error: `Unknown command /${name}. Try /roll, /gmroll, /w, /me, /ooc or /table.` }
   }
 }
 

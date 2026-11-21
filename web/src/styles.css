@@ -979,3 +979,5 @@ button.cs-roll:disabled { cursor: default; }
 .map-editor-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--panel); }
 .map-editor-scroll { flex: 1; overflow: auto; padding: 14px; background: #0c0b10; }
 .map-editor-scroll canvas { display: block; margin: 0 auto; box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5); }
+.tt-msg.ooc { opacity: .75; font-size: 13px; }
+.tt-apply { margin-left: 6px; }

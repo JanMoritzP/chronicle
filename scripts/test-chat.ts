@@ -42,5 +42,12 @@ check('a roll with a DC in its label is judged', dp.parts[0].roll.total === 22 &
 check('a roll without one is not', (parseChat('/roll 1d20+10 Stealth', fixed(12), 'pf2e') as any).parts[0].roll.degree === undefined)
 check('the same roll in 5e', (parseChat('/roll 1d20+4 dc 20', fixed(12), '5e') as any).parts[0].roll.degree === 'failure')
 
+const asNpc = parseChat('/as "Old Mara" Welcome, travellers.') as any
+check('the GM can speak as someone, with or without quotes', asNpc.as === 'Old Mara' && asNpc.kind === 'say' && asNpc.parts[0].text === 'Welcome, travellers.' && (parseChat('/as Mara hello') as any).as === 'Mara')
+check('speaking as nobody is an error', 'error' in (parseChat('/as') as any) && 'error' in (parseChat('/as Mara') as any))
+const ooc = parseChat('/ooc back in two minutes') as any
+check('out of character talk has its own kind', ooc.kind === 'ooc' && ooc.parts[0].text === 'back in two minutes' && (parseChat('/o hi') as any).kind === 'ooc' && 'error' in (parseChat('/ooc') as any))
+check('everyone can read it', readable({ kind: 'ooc', userId: 'a', to: [] }, 'b', false))
+
 console.log(failed ? `\n${failed} failed` : '\nall passed')
 process.exit(failed ? 1 : 0)

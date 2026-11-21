@@ -1048,7 +1048,8 @@ async function handle(c: Conn, m: ClientMessage) {
         if (!target) return nack(c, m, `Nobody called “${parsed.to}” can be reached at this table.`)
         to = [target.id]
       }
-      const name = gm && m.as ? m.as.trim() || c.user.username : c.user.username
+      if (parsed.as && !gm) return nack(c, m, 'Only the GM can speak as someone else.')
+      const name = parsed.as ?? (gm && m.as ? m.as.trim() || c.user.username : c.user.username)
       const msg = { id: uid(), ts: now(), userId: c.user.id, name, kind: parsed.kind, to, parts: parsed.parts }
       db.prepare('INSERT INTO chat_messages(id,workspace_id,user_id,name,ts,kind,to_ids,parts) VALUES(?,?,?,?,?,?,?,?)').run(msg.id, ws, msg.userId, name, msg.ts, msg.kind, JSON.stringify(to), JSON.stringify(msg.parts))
       db.prepare('DELETE FROM chat_messages WHERE workspace_id = ? AND ts < ?').run(ws, msg.ts - 90 * 24 * 3600 * 1000)
