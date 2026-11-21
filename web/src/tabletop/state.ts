@@ -5,7 +5,7 @@ import type { Light, Wall } from './fog'
 // What the browser knows about the table. The server is the only writer: this store only ever holds what it was told.
 
 export type TableRole = 'gm' | 'player' | 'spectator'
-export interface Scene extends GridSpec { id: string; name: string; sort: number; bg: string; width: number; height: number; fog: boolean; darkness: number }
+export interface Scene extends GridSpec { id: string; name: string; sort: number; bg: string; width: number; height: number; fog: boolean; darkness: number; weather?: 'none' | 'rain' | 'snow' }
 export interface Token {
   id: string; sceneId: string; name: string; x: number; y: number; size: number; rotation: number
   image: string; color: string; pageId: string | null; hidden: boolean; locked: boolean
@@ -28,6 +28,7 @@ export interface Handout { id: string; title: string; text: string; image: strin
 export interface RollTable { id: string; name: string; secret: boolean; size: number; /** only the GM is sent the entries */ entries?: string }
 export interface DeckCard { id: number; name: string; text: string }
 export interface Deck { id: string; name: string; size: number; remaining: number; discard: DeckCard[]; hand: DeckCard[]; held: Record<string, number>; cardsText?: string }
+export interface Trigger { id: string; name: string; scene: string | null; event: 'enter' | 'round' | 'down'; x: number; y: number; radius: number; action: 'say' | 'handout' | 'play'; arg: string; once: boolean; fired: boolean }
 export interface Track { id: string; name: string; url: string; loop: boolean }
 export interface Combatant { id: string; tokenId: string | null; name: string; init: number | null; hidden: boolean; done: boolean; reaction?: boolean; actions?: number }
 export interface Combat { active: boolean; round: number; turn: string | null; list: Combatant[] }
@@ -68,6 +69,8 @@ interface TableState {
   rolltables: RollTable[]
   decks: Deck[]
   jukebox: { tracks: Track[]; playing: string[] }
+  /** only the GM is sent these */
+  triggers: Trigger[]
   /** the handout open on this person's screen */
   shown: Handout | null
   error: string
@@ -75,7 +78,7 @@ interface TableState {
 
 export const useTable = create<TableState>(() => ({
   conn: 'closed', you: null, role: 'spectator', settings: DEFAULT_SETTINGS, scenes: [], active: null, sceneId: null, tokens: [], online: [], members: [],
-  selected: [], cursors: {}, rulers: {}, chat: [], unread: 0, combat: NO_COMBAT, drawings: [], tiles: [], selectedTile: null, walls: [], lights: [], fog: null, handouts: [], rolltables: [], decks: [], jukebox: { tracks: [], playing: [] }, shown: null, error: '',
+  selected: [], cursors: {}, rulers: {}, chat: [], unread: 0, combat: NO_COMBAT, drawings: [], tiles: [], selectedTile: null, walls: [], lights: [], fog: null, handouts: [], rolltables: [], decks: [], jukebox: { tracks: [], playing: [] }, triggers: [], shown: null, error: '',
 }))
 
 type Listener = (m: any) => void
@@ -93,7 +96,7 @@ export function applyMessage(m: any) {
       // after a reconnect the same scene comes back: what the person had selected stays selected
       set((s) => ({
         you: m.you, role: m.you.role, settings: { ...DEFAULT_SETTINGS, ...m.settings }, scenes: m.scenes, active: m.active, sceneId: m.sceneId,
-        handouts: m.handouts ?? [], rolltables: m.rolltables ?? [], decks: m.decks ?? [], jukebox: m.jukebox ?? { tracks: [], playing: [] }, tokens: m.tokens, online: m.online, members: m.members ?? [], chat: m.chat ?? [], unread: 0, combat: m.combat ?? NO_COMBAT, drawings: m.drawings ?? [], tiles: m.tiles ?? [], selectedTile: m.sceneId === s.sceneId && (m.tiles ?? []).some((t: Tile) => t.id === s.selectedTile) ? s.selectedTile : null, walls: m.walls ?? [], lights: m.lights ?? [], fog: m.fog ?? null,
+        handouts: m.handouts ?? [], rolltables: m.rolltables ?? [], decks: m.decks ?? [], jukebox: m.jukebox ?? { tracks: [], playing: [] }, triggers: m.triggers ?? [], tokens: m.tokens, online: m.online, members: m.members ?? [], chat: m.chat ?? [], unread: 0, combat: m.combat ?? NO_COMBAT, drawings: m.drawings ?? [], tiles: m.tiles ?? [], selectedTile: m.sceneId === s.sceneId && (m.tiles ?? []).some((t: Tile) => t.id === s.selectedTile) ? s.selectedTile : null, walls: m.walls ?? [], lights: m.lights ?? [], fog: m.fog ?? null,
         selected: m.sceneId === s.sceneId ? s.selected.filter((id) => m.tokens.some((t: Token) => t.id === id)) : [], cursors: {}, rulers: {},
       }))
       break
@@ -125,6 +128,7 @@ export function applyMessage(m: any) {
     case 'handouts': set((s) => ({ handouts: m.handouts, shown: s.shown && m.handouts.some((h: Handout) => h.id === s.shown!.id) ? m.handouts.find((h: Handout) => h.id === s.shown!.id) : null })); break
     case 'rolltables': set({ rolltables: m.tables }); break
     case 'decks': set({ decks: m.decks }); break
+    case 'triggers': set({ triggers: m.triggers }); break
     case 'jukebox': set({ jukebox: { tracks: m.tracks, playing: m.playing } }); break
     case 'handout.show': set({ shown: m.handout }); break
     case 'nack': set({ error: m.error }); break
@@ -171,7 +175,7 @@ export function leaveTable() {
   const s = socket
   socket = null
   s?.close()
-  set({ conn: 'closed', you: null, role: 'spectator', scenes: [], tokens: [], sceneId: null, active: null, selected: [], cursors: {}, rulers: {}, online: [], members: [], chat: [], unread: 0, combat: NO_COMBAT, drawings: [], tiles: [], selectedTile: null, walls: [], lights: [], fog: null, handouts: [], rolltables: [], decks: [], jukebox: { tracks: [], playing: [] }, shown: null, error: '' })
+  set({ conn: 'closed', you: null, role: 'spectator', scenes: [], tokens: [], sceneId: null, active: null, selected: [], cursors: {}, rulers: {}, online: [], members: [], chat: [], unread: 0, combat: NO_COMBAT, drawings: [], tiles: [], selectedTile: null, walls: [], lights: [], fog: null, handouts: [], rolltables: [], decks: [], jukebox: { tracks: [], playing: [] }, triggers: [], shown: null, error: '' })
 }
 
 /** Sends a message; an operation id comes back with a refusal so the cause can be shown. */

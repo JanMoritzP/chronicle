@@ -13,6 +13,7 @@ import { EncounterPanel } from './TableEncounters'
 import { TilePanel, TilesSection } from './TableTiles'
 import { HandoutViewer, HandoutsPanel } from './TableHandouts'
 import { AudioPlayer } from './TableAudio'
+import { TriggersSection } from './TableTriggers'
 import { TablesAndDecks } from './TableDecks'
 import { ChatPanel, CombatPanel, LinkPage, SightLight, TokenSheet, TokenStats } from './TableParts'
 import { Select } from './Select'
@@ -106,6 +107,7 @@ export function TableView() {
       viewer()
       push()
       e.setWalls(useTable.getState().walls)
+      e.setTriggers(useTable.getState().triggers.filter((t) => !t.scene || t.scene === useTable.getState().sceneId).filter((t) => t.event === 'enter'))
       e.setLights(useTable.getState().lights)
       e.setTokens(useTable.getState().tokens)
       e.setSelected(useTable.getState().selected)
@@ -124,6 +126,7 @@ export function TableView() {
         if (s.tiles !== prev.tiles) e.setTiles(s.tiles)
         if (s.selectedTile !== prev.selectedTile) e.setSelectedTile(s.selectedTile)
         if (s.walls !== prev.walls) e.setWalls(s.walls)
+        if (s.triggers !== prev.triggers || s.sceneId !== prev.sceneId) e.setTriggers(s.triggers.filter((t) => !t.scene || t.scene === s.sceneId).filter((t) => t.event === 'enter'))
         if (s.lights !== prev.lights) e.setLights(s.lights)
         if (s.sceneId !== prev.sceneId || s.fog !== prev.fog) e.setExplored(s.fog)
         if (s.tokens !== prev.tokens) e.setTokens(s.tokens)
@@ -298,6 +301,7 @@ export function TableView() {
             {panel === 'token' && (selectedTile && !selected.length && gm ? <TilePanel /> : <TokenPanel token={one} count={selected.length} />)}
             {panel === 'scene' && gm && scene && <TilesSection scene={scene} wsId={wsId} centre={() => engine.current?.centre() ?? { x: scene.width / 2, y: scene.height / 2 }} />}
             {panel === 'scene' && gm && scene && <ScenePanel scene={scene} active={active === scene.id} wsId={wsId} />}
+            {panel === 'scene' && gm && scene && <TriggersSection scene={scene} />}
             {panel === 'table' && <TablePanel />}
             {panel === 'chat' && <ChatPanel />}
             {panel === 'handouts' && <HandoutsPanel />}
@@ -451,6 +455,13 @@ function ScenePanel({ scene, active, wsId }: { scene: Scene; active: boolean; ws
         </Select>
       </label>
       <label className="tt-check"><input type="checkbox" checked={scene.fog} onChange={(e) => patch({ fog: e.target.checked })} />Fog of war: players only see what their tokens see</label>
+      <label>Weather
+        <Select className="input" value={scene.weather ?? 'none'} onChange={(v) => patch({ weather: v })} title="Weather over the scene">
+          <option value="none">Clear</option>
+          <option value="rain">Rain</option>
+          <option value="snow">Snow</option>
+        </Select>
+      </label>
       <label>Darkness ({Math.round(scene.darkness * 100)} %)<input type="range" min={0} max={100} value={Math.round(scene.darkness * 100)} onChange={(e) => patch({ darkness: Number(e.target.value) / 100 })} /></label>
       {scene.fog && <button className="btn sm" onClick={() => sendTable({ t: 'fog.reset', sceneId: scene.id })}>Forget what players explored</button>}
       <div className="tt-row"><label>Width (px){num('width', scene.width, 100)}</label><label>Height (px){num('height', scene.height, 100)}</label></div>

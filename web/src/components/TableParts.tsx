@@ -358,6 +358,7 @@ export function CombatPanel() {
         </div>
       )}
       {combat.list.length === 0 && <p className="muted tt-hint">{gm ? 'Select tokens on the map and add them, or add everyone on the scene.' : 'No combat has started.'}</p>}
+      <p className="sr-only" role="status">{combat.active ? `${combat.list.find((x) => x.id === combat.turn)?.name ?? 'Nobody'} is up, in combat round number ${combat.round}.` : ''}</p>
       <ol className="tt-order" aria-label="Order of play">
         {combat.list.map((x) => {
           const t = tokenOf(x.tokenId)

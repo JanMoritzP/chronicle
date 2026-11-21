@@ -523,6 +523,27 @@ const migrations: (string | ((d: Database.Database) => void))[] = [
   );
   CREATE INDEX tracks_ws ON tracks(workspace_id);
   `,
+  // triggers: what happens by itself when a player token enters a place, a round begins or a token goes down
+  `
+  CREATE TABLE triggers (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    scene_id TEXT,
+    name TEXT NOT NULL,
+    event TEXT NOT NULL,
+    x REAL NOT NULL DEFAULT 0,
+    y REAL NOT NULL DEFAULT 0,
+    radius REAL NOT NULL DEFAULT 1,
+    action TEXT NOT NULL,
+    arg TEXT NOT NULL DEFAULT '',
+    once INTEGER NOT NULL DEFAULT 1,
+    fired INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX triggers_ws ON triggers(workspace_id);
+  `,
+  // weather over a scene: none, rain or snow
+  `ALTER TABLE scenes ADD COLUMN weather TEXT NOT NULL DEFAULT 'none'`,
 ]
 
 export const SCHEMA_VERSION = migrations.length

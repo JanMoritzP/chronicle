@@ -65,6 +65,12 @@ export class TableEngine {
   private ruleLabel = new Text({ text: '', style: { fontSize: 14, fill: 0xffffff, fontFamily: 'sans-serif', stroke: { color: 0x000000, width: 3 } } })
   private marquee = new Graphics()
   private wallG = new Graphics()
+  private triggerG = new Graphics()
+  /** Rain or snow over the screen (not the map), drawn while the scene has any. */
+  private weatherG = new Graphics()
+  private weather: 'none' | 'rain' | 'snow' = 'none'
+  private drops: { x: number; y: number; v: number; s: number }[] = []
+  private triggers: { x: number; y: number; radius: number; fired: boolean }[] = []
   private drawLayer = new Container()
   private tileBg = new Container()
   private tileOver = new Container()
@@ -113,9 +119,11 @@ export class TableEngine {
     this.fog = new FogLayer(this.app)
     this.fog.onExplored = (png) => { if (!this.preview) this.hooks.onExplored(png) }
     this.fog.onDrawn = () => this.poke()
-    this.world.addChild(this.bg, this.gridG, this.tileBg, this.drawLayer, this.tokenLayer, this.tileOver, this.tileGm, this.fog.view, this.wallG, this.others, this.ruleG, this.ruleLabel, this.overlay, this.wallPreview, this.strokeG, this.tileSel, this.marquee)
+    this.world.addChild(this.bg, this.gridG, this.tileBg, this.drawLayer, this.tokenLayer, this.tileOver, this.tileGm, this.fog.view, this.wallG, this.triggerG, this.others, this.ruleG, this.ruleLabel, this.overlay, this.wallPreview, this.strokeG, this.tileSel, this.marquee)
     this.ruleLabel.visible = false
-    this.app.stage.addChild(this.world)
+    this.app.stage.addChild(this.world, this.weatherG)
+    this.weatherG.eventMode = 'none'
+    this.weatherG.visible = false
     const c = this.app.canvas
     c.addEventListener('pointerdown', this.down)
     c.addEventListener('pointermove', this.move)
@@ -153,6 +161,7 @@ export class TableEngine {
     if (scene && this.fitted !== scene.id) { this.fitted = scene.id; this.needFit = true; this.fit() }
     for (const v of this.views.values()) this.layout(v)
     this.fog.configure(scene, !this.gmView)
+    this.setWeather(scene?.weather ?? 'none')
     this.refreshVision()
   }
 
@@ -369,6 +378,40 @@ export class TableEngine {
     else if (was) void this.fog.loadExplored(this.explored)
     this.drawWalls()
     this.refreshVision()
+  }
+
+  /** The places that set something off, drawn for the GM only. */
+  /** Falling rain or snow in front of the map. */
+  private fall() {
+    const w = this.host.clientWidth, h = this.host.clientHeight
+    const g = this.weatherG
+    g.clear()
+    if (!w || !h) return
+    const rain = this.weather === 'rain'
+    if (!this.drops.length) this.drops = Array.from({ length: rain ? 160 : 110 }, () => ({ x: Math.random() * w, y: Math.random() * h, v: rain ? 14 + Math.random() * 8 : 1 + Math.random() * 2.2, s: 0.6 + Math.random() }))
+    for (const d of this.drops) {
+      if (rain) {
+        g.moveTo(d.x, d.y).lineTo(d.x - 3 * d.s, d.y + 14 * d.s).stroke({ width: 1, color: 0xbcd4ff, alpha: 0.45 })
+        d.x -= 3 * d.s * 0.5; d.y += d.v
+      } else {
+        g.circle(d.x, d.y, 1.4 * d.s).fill({ color: 0xffffff, alpha: 0.8 })
+        d.y += d.v; d.x += Math.sin((d.y + d.v * 40) / 40) * 0.7
+      }
+      if (d.y > h + 10 || d.x < -10) { d.y = -10; d.x = Math.random() * w }
+    }
+  }
+
+  /** Rain, snow or clear weather over this scene. */
+  setWeather(kind: 'none' | 'rain' | 'snow') { this.poke(); if (kind !== this.weather) this.drops = []; this.weather = kind; this.weatherG.visible = kind !== 'none'; if (kind === 'none') this.weatherG.clear() }
+
+  setTriggers(list: { x: number; y: number; radius: number; fired: boolean }[]) { this.poke(); this.triggers = list; this.drawTriggers() }
+
+  private drawTriggers() {
+    const g = this.triggerG
+    g.clear()
+    if (!this.ready || !this.me.gm || !this.scene) return
+    const k = 1 / this.world.scale.x
+    for (const t of this.triggers) g.circle(t.x, t.y, t.radius * this.scene.gridSize).fill({ color: 0xe08a2e, alpha: t.fired ? 0.05 : 0.12 }).stroke({ width: 2 * k, color: 0xe08a2e, alpha: t.fired ? 0.3 : 0.8 })
   }
 
   setWalls(walls: Wall[]) { this.walls = walls; if (this.ready) { this.poke(); this.fog.setWalls(walls); this.drawWalls() } }
@@ -979,6 +1022,7 @@ export class TableEngine {
     this.raf = requestAnimationFrame(this.loop)
     if (this.needFit && this.host.clientWidth) this.fit()
     if (this.pings.length) { this.tick(); this.poke() }
+    if (this.weather !== 'none') { this.fall(); this.poke() }
     if (performance.now() > this.activeUntil) return
     this.app.render()
   }

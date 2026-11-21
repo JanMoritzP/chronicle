@@ -42,13 +42,13 @@ const conns = new Set<Conn>()
 
 interface SceneRow {
   id: string; workspace_id: string; name: string; sort: number; bg: string; width: number; height: number
-  grid: string; grid_size: number; unit: string; dist: number; diagonal: string; fog: number; darkness: number
+  grid: string; grid_size: number; unit: string; dist: number; diagonal: string; fog: number; darkness: number; weather: string
 }
 const sceneJson = (r: SceneRow) => ({
   id: r.id, name: r.name, sort: r.sort, bg: r.bg, width: r.width, height: r.height,
-  grid: r.grid, gridSize: r.grid_size, unit: r.unit, dist: r.dist, diagonal: r.diagonal, fog: !!r.fog, darkness: r.darkness,
+  grid: r.grid, gridSize: r.grid_size, unit: r.unit, dist: r.dist, diagonal: r.diagonal, fog: !!r.fog, darkness: r.darkness, weather: r.weather ?? 'none',
 })
-const SCENE_COLUMNS: Record<string, string> = { name: 'name', bg: 'bg', width: 'width', height: 'height', grid: 'grid', gridSize: 'grid_size', unit: 'unit', dist: 'dist', diagonal: 'diagonal', fog: 'fog', darkness: 'darkness' }
+const SCENE_COLUMNS: Record<string, string> = { name: 'name', bg: 'bg', width: 'width', height: 'height', grid: 'grid', gridSize: 'grid_size', unit: 'unit', dist: 'dist', diagonal: 'diagonal', fog: 'fog', darkness: 'darkness', weather: 'weather' }
 
 interface TokenDb {
   id: string; scene_id: string; name: string; x: number; y: number; size: number; rotation: number; image: string; color: string
@@ -315,12 +315,63 @@ function jukeboxFor(ws: string) {
 }
 function sendJukebox(ws: string) { const j = jukeboxFor(ws); for (const c of inWorld(ws)) send(c, { t: 'jukebox', ...j }) }
 
+// ---------- triggers ----------
+
+interface TriggerDb { id: string; scene_id: string | null; name: string; event: string; x: number; y: number; radius: number; action: string; arg: string; once: number; fired: number }
+const triggerRows = (ws: string) => db.prepare('SELECT id, scene_id, name, event, x, y, radius, action, arg, once, fired FROM triggers WHERE workspace_id = ? ORDER BY created_at').all(ws) as TriggerDb[]
+const triggerJson = (t: TriggerDb) => ({ id: t.id, name: t.name, scene: t.scene_id, event: t.event, x: t.x, y: t.y, radius: t.radius, action: t.action, arg: t.arg, once: !!t.once, fired: !!t.fired })
+/** Only the GM is told about triggers: a player must not learn where the traps are. */
+function sendTriggers(ws: string) { const triggers = triggerRows(ws).map(triggerJson); for (const c of inWorld(ws)) if (c.role === 'gm') send(c, { t: 'triggers', triggers }) }
+
+/** What a trigger does: says its text at the table, shows a handout to everyone, or starts a track. */
+function fireTrigger(ws: string, userId: string, t: TriggerDb, who?: TokenRow) {
+  if (t.once) db.prepare('UPDATE triggers SET fired = 1 WHERE id = ?').run(t.id)
+  if (t.action === 'say') {
+    postChat(ws, userId, t.name, 'say', [], [{ t: 'text', text: t.arg.replace(/\{name\}/g, who?.name ?? 'Someone') }])
+  } else if (t.action === 'handout') {
+    const h = db.prepare('SELECT id, title, text, image, revealed, updated_at FROM handouts WHERE id = ? AND workspace_id = ?').get(t.arg, ws) as HandoutDb | undefined
+    if (h) {
+      db.prepare("UPDATE handouts SET revealed = '\"all\"', updated_at = ? WHERE id = ?").run(now(), h.id)
+      sendHandouts(ws)
+      showHandout(ws, { ...h, revealed: '"all"' }, (x) => !mayRead(h, x.user.id))
+    }
+  } else if (t.action === 'play') {
+    if (db.prepare('SELECT 1 FROM tracks WHERE id = ? AND workspace_id = ?').get(t.arg, ws)) {
+      if (!playing.has(ws)) playing.set(ws, new Set())
+      playing.get(ws)!.add(t.arg)
+      sendJukebox(ws)
+    }
+  }
+  sendTriggers(ws)
+}
+
+/** Fires the triggers of an event (a round begins, a token goes down) that have not been used up. */
+function fireEvent(ws: string, userId: string, event: 'round' | 'down', who?: TokenRow) {
+  for (const t of triggerRows(ws)) {
+    if (t.event !== event || (t.once && t.fired)) continue
+    if (t.scene_id && who && t.scene_id !== who.sceneId) continue
+    fireTrigger(ws, userId, t, who)
+  }
+}
+
+/** A player's token moved: the places it came into fire their triggers. */
+function fireEnter(ws: string, userId: string, before: TokenRow, after: TokenRow) {
+  if (!after.owners.length) return
+  const sc = sceneRow(after.sceneId, ws)
+  if (!sc) return
+  for (const t of triggerRows(ws)) {
+    if (t.event !== 'enter' || (t.once && t.fired) || (t.scene_id && t.scene_id !== after.sceneId)) continue
+    const inside = (p: { x: number; y: number }) => Math.hypot(p.x - t.x, p.y - t.y) <= t.radius * sc.grid_size
+    if (!inside(before) && inside(after)) fireTrigger(ws, userId, t, after)
+  }
+}
+
 function sendSnapshot(c: Conn) {
   const { active, settings } = stateOf(c.ws)
   viewFor(c, c.scene)
   send(c, {
     t: 'snapshot', you: { id: c.user.id, username: c.user.username, role: c.role }, settings, scenes: scenesOf(c.ws), active,
-    sceneId: c.scene, tokens: tokensFor(c, c.scene), online: onlineIn(c.ws), members: membersOf(c.ws), chat: historyFor(c), combat: visibleCombat(combatOf(c.ws), c.role === 'gm'), handouts: handoutsFor(c), rolltables: rollTablesFor(c), decks: decksFor(c), jukebox: jukeboxFor(c.ws), ...sceneState(c),
+    sceneId: c.scene, tokens: tokensFor(c, c.scene), online: onlineIn(c.ws), members: membersOf(c.ws), chat: historyFor(c), combat: visibleCombat(combatOf(c.ws), c.role === 'gm'), handouts: handoutsFor(c), rolltables: rollTablesFor(c), decks: decksFor(c), jukebox: jukeboxFor(c.ws), ...(c.role === 'gm' ? { triggers: triggerRows(c.ws).map(triggerJson) } : {}), ...sceneState(c),
   })
 }
 
@@ -447,6 +498,7 @@ function applyStat(ws: string, userId: string, before: TokenRow, stat: Record<st
   if (notes.length) postChat(ws, userId, before.name, quiet ? 'gmroll' : 'emote', [], [{ t: 'text', text: notes.join(' and ') }])
   if (rolls.length) postChat(ws, userId, before.name, quiet ? 'gmroll' : 'roll', [], rolls)
   emitToken(ws, before, tokenRow(before.id, ws)!)
+  if (dmg > 0 && wasHp > 0 && hpNow === 0) fireEvent(ws, userId, 'down', before)
   if (((before.data.conditions as string[] | undefined) ?? []).includes('Concentrating') && !conditions.includes('Concentrating')) endConcentration(ws, userId, before)
   return { dealt: dmg, effect }
 }
@@ -584,7 +636,9 @@ async function handle(c: Conn, m: ClientMessage) {
         if (!before) continue
         if (!canMoveToken(c.role, c.user.id, before, settings)) { if (c.shown.has(before.id)) send(c, { t: 'token', token: redact(c.role, c.user.id, before) }); continue }
         upd.run(mv.x, mv.y, mv.rotation ?? before.rotation, now(), mv.id)
-        emitToken(ws, before, tokenRow(mv.id, ws)!)
+        const after = tokenRow(mv.id, ws)!
+        emitToken(ws, before, after)
+        fireEnter(ws, c.user.id, before, after)
       }
       return
     }
@@ -775,6 +829,31 @@ async function handle(c: Conn, m: ClientMessage) {
       if (!gm) return nack(c, m, 'only the GM can do that')
       if (m.id === 'all') playing.delete(ws); else playing.get(ws)?.delete(m.id)
       return sendJukebox(ws)
+    }
+    case 'trigger.save': {
+      if (!gm) return nack(c, m, 'only the GM can do that')
+      if (m.scene && !sceneRow(m.scene, ws)) return nack(c, m, 'no such scene')
+      if (m.action === 'handout' && !db.prepare('SELECT 1 FROM handouts WHERE id = ? AND workspace_id = ?').get(m.arg, ws)) return nack(c, m, 'Choose a handout of this world.')
+      if (m.action === 'play' && !db.prepare('SELECT 1 FROM tracks WHERE id = ? AND workspace_id = ?').get(m.arg, ws)) return nack(c, m, 'Choose a track of this world.')
+      if (m.action === 'say' && !m.arg.trim()) return nack(c, m, 'Write what is said.')
+      if (m.id) {
+        if (!db.prepare('SELECT 1 FROM triggers WHERE id = ? AND workspace_id = ?').get(m.id, ws)) return nack(c, m, 'no such trigger')
+        db.prepare('UPDATE triggers SET name = ?, scene_id = ?, event = ?, x = ?, y = ?, radius = ?, action = ?, arg = ?, once = ?, fired = 0 WHERE id = ?').run(m.name, m.scene, m.event, m.x, m.y, m.radius, m.action, m.arg, m.once ? 1 : 0, m.id)
+      } else {
+        if (triggerRows(ws).length >= 100) return nack(c, m, 'That is as many triggers as a world can keep.')
+        db.prepare('INSERT INTO triggers(id,workspace_id,scene_id,name,event,x,y,radius,action,arg,once,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)').run(uid(), ws, m.scene, m.name, m.event, m.x, m.y, m.radius, m.action, m.arg, m.once ? 1 : 0, now())
+      }
+      return sendTriggers(ws)
+    }
+    case 'trigger.delete': {
+      if (!gm) return nack(c, m, 'only the GM can do that')
+      db.prepare('DELETE FROM triggers WHERE id = ? AND workspace_id = ?').run(m.id, ws)
+      return sendTriggers(ws)
+    }
+    case 'trigger.reset': {
+      if (!gm) return nack(c, m, 'only the GM can do that')
+      db.prepare('UPDATE triggers SET fired = 0 WHERE id = ? AND workspace_id = ?').run(m.id, ws)
+      return sendTriggers(ws)
     }
     case 'deck.save': {
       if (!gm) return nack(c, m, 'only the GM can do that')
@@ -1116,7 +1195,7 @@ async function handle(c: Conn, m: ClientMessage) {
       if (m.action === 'next') {
         const next = advance(combat, 1)
         saveCombat(ws, next)
-        if (combat.active && next.round > combat.round) tickEffects(ws, c.user.id)
+        if (combat.active && next.round > combat.round) { tickEffects(ws, c.user.id); fireEvent(ws, c.user.id, 'round') }
         return
       }
       if (m.action === 'prev') return saveCombat(ws, advance(combat, -1))

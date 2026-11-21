@@ -122,6 +122,8 @@ export const scenePatch = z.object({
   fog: z.boolean(),
   /** 0 is daylight, 1 is pitch dark; light sources push it back. */
   darkness: z.number().min(0).max(1),
+  /** Rain or snow falling over the scene, for everyone. */
+  weather: z.enum(['none', 'rain', 'snow']),
 }).partial().strict()
 
 const point = z.object({ x: coord, y: coord })
@@ -189,6 +191,14 @@ export const clientMessage = z.discriminatedUnion('t', [
   z.object({ t: z.literal('jukebox.remove'), id }),
   z.object({ t: z.literal('jukebox.play'), id }),
   z.object({ t: z.literal('jukebox.stop'), id: z.union([id, z.literal('all')]) }),
+  z.object({
+    t: z.literal('trigger.save'), id: id.optional(), name: z.string().trim().min(1).max(60), scene: id.nullable(),
+    event: z.enum(['enter', 'round', 'down']), x: coord, y: coord, radius: z.number().min(0.5).max(50),
+    action: z.enum(['say', 'handout', 'play']), arg: z.string().max(300), once: z.boolean(),
+  }),
+  z.object({ t: z.literal('trigger.delete'), id }),
+  /** lets a trigger that fires once fire again */
+  z.object({ t: z.literal('trigger.reset'), id }),
   z.object({ t: z.literal('deck.save'), id: id.optional(), name: z.string().trim().min(1).max(60), cards: z.string().max(20000) }),
   z.object({ t: z.literal('deck.delete'), id }),
   z.object({ t: z.literal('deck.shuffle'), id }),
