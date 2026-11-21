@@ -1075,6 +1075,23 @@ const pbu = await open(bob.cookie, ws)
 check('until the ban is lifted', !!(await pbu.until((m) => m.t === 'snapshot')))
 pb = pbu
 
+// the asset library
+const lib = await call('GET', `/api/workspaces/${ws}/uploads`, null, gmCookie)
+const wavAsset = lib.data.items.find((a) => a.id === sndData.url.split('/').pop())
+check('the GM sees every file of the world, sounds apart from pictures', lib.status === 200 && lib.data.items.length >= 2 && wavAsset?.kind === 'sound' && lib.data.items.some((a) => a.kind === 'image') && lib.data.used > 0)
+check('a player does not', (await call('GET', `/api/workspaces/${ws}/uploads`, null, alice.cookie)).status === 403)
+check('a file can be given tags, kept in lower case', (await call('PATCH', `/api/uploads/${wavAsset.id}`, { tags: ['Rain', 'storm', 'rain'] }, gmCookie)).status === 200 && (await call('GET', `/api/workspaces/${ws}/uploads`, null, gmCookie)).data.items.find((a) => a.id === wavAsset.id).tags.join() === 'rain,storm')
+check('but not by a player, or with a comma in a tag', (await call('PATCH', `/api/uploads/${wavAsset.id}`, { tags: ['x'] }, alice.cookie)).status === 403 && (await call('PATCH', `/api/uploads/${wavAsset.id}`, { tags: ['a,b'] }, gmCookie)).status === 400)
+if (lib.data.quota <= 10 * 1048576) {
+  const big = new FormData()
+  big.append('file', new Blob([Buffer.alloc(11 * 1048576)], { type: 'image/png' }), 'huge.png')
+  const r = await fetch(`${base}/api/workspaces/${ws}/uploads`, { method: 'POST', headers: { cookie: gmCookie }, body: big })
+  check('a world cannot keep more than its quota of files', r.status === 413 && /asset library/i.test((await r.json()).error))
+}
+const doomed = await (async () => { const f = new FormData(); f.append('file', new Blob([tinyPng], { type: 'image/png' }), 'doomed.png'); return (await fetch(`${base}/api/workspaces/${ws}/uploads`, { method: 'POST', headers: { cookie: gmCookie }, body: f })).json() })()
+check('a player cannot delete a file', (await call('DELETE', `/api/uploads/${doomed.id}`, null, alice.cookie)).status === 403)
+check('the GM can, and it is gone', (await call('DELETE', `/api/uploads/${doomed.id}`, null, gmCookie)).status === 200 && (await fetch(`${base}${doomed.url}`, { headers: { cookie: gmCookie } })).status === 404)
+
 // the GM brings everyone to look at one place
 n = pa.mark()
 gm.send({ t: 'camera.pull', x: 100, y: 200, w: 800, h: 600 })

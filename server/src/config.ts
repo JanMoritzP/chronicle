@@ -6,6 +6,8 @@ const here = path.dirname(fileURLToPath(import.meta.url))
 export const config = {
   port: Number(process.env.PORT ?? 3000),
   host: process.env.HOST ?? '0.0.0.0',
+  /** How much one world may keep in uploads, in megabytes. */
+  uploadQuotaMb: Math.max(10, Number(process.env.UPLOAD_QUOTA_MB ?? 1024) || 1024),
   dataDir: path.resolve(process.env.DATA_DIR ?? path.join(here, '..', '..', 'data')),
   webDist: path.resolve(process.env.WEB_DIST ?? path.join(here, '..', '..', 'web', 'dist')),
   adminUser: process.env.ADMIN_USER ?? 'gm',

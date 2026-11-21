@@ -599,6 +599,8 @@ const migrations: (string | ((d: Database.Database) => void))[] = [
   `,
   // a track can belong to a scene and start when the scene does
   `ALTER TABLE tracks ADD COLUMN scene_id TEXT`,
+  // tags on uploaded files, so the asset library can be searched
+  `ALTER TABLE uploads ADD COLUMN tags TEXT NOT NULL DEFAULT ''`,
 ]
 
 export const SCHEMA_VERSION = migrations.length

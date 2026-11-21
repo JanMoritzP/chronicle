@@ -15,6 +15,7 @@ import { HandoutViewer, HandoutsPanel } from './TableHandouts'
 import { AudioPlayer } from './TableAudio'
 import { TriggersSection } from './TableTriggers'
 import { MapEditor } from './MapEditor'
+import { AssetLibrary } from './AssetLibrary'
 import { PinDialog } from './PinDialog'
 import { ReadyBanner } from './ReadyBanner'
 import { TokenActions, TokenBars, TokenLook } from './TokenLook'
@@ -490,6 +491,7 @@ function SendPlayers({ scene }: { scene: Scene }) {
 function ScenePanel({ scene, active, wsId }: { scene: Scene; active: boolean; wsId: string }) {
   const [name, setName] = useState(scene.name)
   const [editing, setEditing] = useState(false)
+  const [library, setLibrary] = useState(false)
   useEffect(() => setName(scene.name), [scene.id, scene.name])
   const patch = (p: Record<string, unknown>) => sendTable({ t: 'scene.update', id: scene.id, patch: p })
   const num = (key: string, value: number, min: number) => (
@@ -504,7 +506,9 @@ function ScenePanel({ scene, active, wsId }: { scene: Scene; active: boolean; ws
       </div>
       <div className="tt-row">
         <button className="btn sm" title="Draw rooms, corridors, doors and lights and make this scene from them" onClick={() => setEditing(true)}>Open the map editor</button>
+        <button className="btn sm" title="Every picture and sound of this world" onClick={() => setLibrary(true)}>Asset library</button>
       </div>
+      {library && <AssetLibrary scene={scene} wsId={wsId} onClose={() => setLibrary(false)} />}
       {editing && <MapEditor scene={scene} wsId={wsId} onClose={() => setEditing(false)} />}
       <div className="tt-row">
         <button className="btn sm" title="Make a new scene from a map file made by Dungeondraft or another map tool" onClick={() => void importUvtt(wsId)}>Import a Universal VTT map</button>
