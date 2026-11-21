@@ -30,6 +30,12 @@ export class FogLayer {
   private lights: Light[] = []
   private viewers: Viewer[] = []
   private k = 1
+  /** how many pixels the fog is drawn at along the longer side: fewer is lighter on a slow machine */
+  private maxSide = MAX_SIDE
+  /** how long the last redraw of the fog took, in milliseconds */
+  lastMs = 0
+  /** a light that moves repaints every frame; a person on a slow machine can switch that off */
+  still = false
   private v?: RenderTexture
   private d?: RenderTexture
   private r?: RenderTexture
@@ -77,7 +83,7 @@ export class FogLayer {
     this.free()
     const s = this.scene
     if (!s) return
-    this.k = Math.min(1, MAX_SIDE / Math.max(s.width, s.height))
+    this.k = Math.min(1, this.maxSide / Math.max(s.width, s.height))
     const w = Math.max(16, Math.round(s.width * this.k)), h = Math.max(16, Math.round(s.height * this.k))
     const make = () => RenderTexture.create({ width: w, height: h, resolution: 1 })
     this.v = make(); this.d = make(); this.r = make(); this.e = make(); this.o = make()
@@ -92,7 +98,9 @@ export class FogLayer {
   /** Areas the GM showed the players: seen and lit, whatever the walls. */
   setReveals(reveals: Rect[]) { this.reveals = reveals; this.update() }
   /** Does a coloured light move (flicker, pulse)? Then the screen is painted again every frame. */
-  get animated() { return this.enabled && this.tintPolys.some((t) => t.anim) }
+  get animated() { return this.enabled && !this.still && this.tintPolys.some((t) => t.anim) }
+  /** Draws the fog at a lower or the normal detail (what was explored is kept, a little blurred). */
+  setDetail(low: boolean) { const side = low ? MAX_SIDE / 2 : MAX_SIDE; if (side !== this.maxSide) { this.maxSide = side; if (this.scene) { this.rebuild(); this.update() } } }
   /** The tint of moving lights for this moment. */
   animate(now: number) {
     this.tint.clear()
@@ -138,6 +146,7 @@ export class FogLayer {
   }
 
   private draw() {
+    const t0 = performance.now()
     const s = this.scene
     if (!this.enabled || !s || !this.v || !this.d || !this.r || !this.e || !this.o) return
     const k = this.k
@@ -227,6 +236,7 @@ export class FogLayer {
     cover.addChild(old, now)
     this.app.renderer.render({ container: cover, target: this.o, clear: true, clearColor: clear })
     cover.destroy({ children: true })
+    this.lastMs = performance.now() - t0
     this.onDrawn()
   }
 

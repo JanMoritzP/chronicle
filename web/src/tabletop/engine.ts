@@ -139,6 +139,7 @@ export class TableEngine {
     this.host.appendChild(this.app.canvas)
     this.app.canvas.style.touchAction = 'none'
     this.fog = new FogLayer(this.app)
+    this.fog.setDetail(this.perf.light); this.fog.still = this.perf.light
     this.fog.onExplored = (png) => { if (!this.preview) this.hooks.onExplored(png) }
     this.fog.onDrawn = () => this.poke()
     this.world.addChild(this.bg, this.gridG, this.tileBg, this.drawLayer, this.tokenLayer, this.tileOver, this.tileGm, this.ambientG, this.fog.view, this.revealG, this.pinLayer, this.wallG, this.triggerG, this.others, this.ruleG, this.ruleLabel, this.overlay, this.wallPreview, this.strokeG, this.tileSel, this.marquee)
@@ -461,7 +462,7 @@ export class TableEngine {
   }
 
   /** Rain, snow or clear weather over this scene. */
-  setWeather(kind: 'none' | 'rain' | 'snow') { this.poke(); if (kind !== this.weather) this.drops = []; this.weather = kind; this.weatherG.visible = kind !== 'none'; if (kind === 'none') this.weatherG.clear() }
+  setWeather(kind: 'none' | 'rain' | 'snow') { this.poke(); if (kind !== this.weather) this.drops = []; this.weather = kind; this.weatherG.visible = kind !== 'none' && !this.perf.light; if (kind === 'none') this.weatherG.clear() }
 
   setTriggers(list: { x: number; y: number; radius: number; fired: boolean }[]) { this.poke(); this.triggers = list; this.drawTriggers() }
 
@@ -686,6 +687,8 @@ export class TableEngine {
   /** Tokens that give their owner sight, and who is hidden by the dark. */
   private refreshVision() {
     this.updateRoofs()
+    // on a slow machine the fog waits until the token is put down
+    if (this.perf.fogOnDrop && this.drag?.kind === 'tokens' && this.drag.moved) { this.visionPending = true; return }
     if (!this.ready || this.gmView) {
       for (const v of this.views.values()) v.box.visible = true
       return
@@ -1196,6 +1199,7 @@ export class TableEngine {
       this.setSelected(ids)
     }
     this.drag = null
+    if (this.visionPending) { this.visionPending = false; this.refreshVision() }
   }
 
   // ---------- drawing the overlays ----------
@@ -1223,11 +1227,30 @@ export class TableEngine {
   /** Keeps painting for a moment: called whenever anything on screen may have changed. */
   private poke = () => { this.activeUntil = performance.now() + 600 }
 
+  /** Settings for a slow machine, and the numbers that show how it is doing. */
+  private perf = { fogOnDrop: false, light: false }
+  private visionPending = false
+  private frames = 0
+  private frameFrom = performance.now()
+  private fps = 0
+  setPerformance(p: { fogOnDrop: boolean; light: boolean }) {
+    this.perf = p
+    if (!this.fog) return
+    this.fog.setDetail(p.light)
+    this.fog.still = p.light
+    this.weatherG.visible = !p.light && this.weather !== 'none'
+    this.poke()
+  }
+  /** Frames drawn per second over the last second, and how long the last redraw of the fog took. */
+  getStats() { return { fps: this.fps, fogMs: this.fog.lastMs } }
+
   private loop = () => {
     this.raf = requestAnimationFrame(this.loop)
+    this.frames++
+    { const t = performance.now(); if (t - this.frameFrom >= 1000) { this.fps = Math.round((this.frames * 1000) / (t - this.frameFrom)); this.frames = 0; this.frameFrom = t } }
     if (this.needFit && this.host.clientWidth) this.fit()
     if (this.pings.length) { this.tick(); this.poke() }
-    if (this.weather !== 'none') { this.fall(); this.poke() }
+    if (this.weather !== 'none' && !this.perf.light) { this.fall(); this.poke() }
     if (this.fog.animated) { this.fog.animate(performance.now()); this.poke() }
     if (performance.now() > this.activeUntil) return
     this.app.render()

@@ -16,6 +16,7 @@ import { AudioPlayer } from './TableAudio'
 import { TriggersSection } from './TableTriggers'
 import { MapEditor } from './MapEditor'
 import { AssetLibrary } from './AssetLibrary'
+import { loadPerf, savePerf, statsText, type Perf } from '../lib/tableperf'
 import { bind, DEFAULT_KEYS, KEY_ACTIONS, loadKeys, pressed, saveKeys, type KeyAction } from '../lib/tablekeys'
 import { PinDialog } from './PinDialog'
 import { ReadyBanner } from './ReadyBanner'
@@ -209,6 +210,15 @@ export function TableView() {
   const one = selected.length === 1 ? tokens.find((t) => t.id === selected[0]) ?? null : null
 
   const [keys, setKeys] = useState(loadKeys)
+  const [perf, setPerf] = useState(loadPerf)
+  const [stats, setStats] = useState('')
+  useEffect(() => { const on = () => setPerf(loadPerf()); window.addEventListener('tt-perf', on); return () => window.removeEventListener('tt-perf', on) }, [])
+  useEffect(() => { engine.current?.setPerformance(perf) }, [perf])
+  useEffect(() => {
+    if (!perf.show) { setStats(''); return }
+    const t = window.setInterval(() => { const s = engine.current?.getStats(); if (s) setStats(statsText(s)) }, 1000)
+    return () => clearInterval(t)
+  }, [perf.show])
   useEffect(() => { const on = () => setKeys(loadKeys()); window.addEventListener('tt-keys', on); return () => window.removeEventListener('tt-keys', on) }, [])
   // keys act on the selection
   const onKey = (e: React.KeyboardEvent) => {
@@ -369,6 +379,7 @@ export function TableView() {
       </div>
       <HandoutViewer />
       <ReadyBanner />
+      {stats && <div className="tt-stats-badge" role="status" aria-label="Performance">{stats}</div>}
       <ThreatBanner />
       {pinAt && <PinDialog at={pinAt} onClose={() => setPinAt(null)} />}
       <AudioPlayer />
@@ -628,6 +639,12 @@ function TablePanel() {
         </ul>
       )}
       <label className="tt-check"><input type="checkbox" checked={lefty} onChange={(e) => { setLefty(e.target.checked); try { localStorage.setItem('tt-left', e.target.checked ? '1' : '') } catch { /* private window */ } }} />Panel on the left (for left-handed use)</label>
+      <div className="tt-form" role="group" aria-label="Slower machine">
+        <b>If the table is slow</b>
+        <PerfBox k="fogOnDrop" label="Work out the fog when a token is put down" />
+        <PerfBox k="light" label="Lighter drawing: coarser fog, no weather, no moving lights" />
+        <PerfBox k="show" label="Show frames per second" />
+      </div>
       <div className="tt-form" role="group" aria-label="Keys">
         <b>Keys</b>
         {KEY_ACTIONS.filter((a) => !a.gm || gm).map((a) => <KeyField key={a.id} action={a.id} label={a.label} />)}
@@ -673,4 +690,11 @@ function KeyField({ action, label }: { action: KeyAction; label: string }) {
       {error && <small role="alert" className="muted">{error}</small>}
     </div>
   )
+}
+
+/** One option for a slow machine, kept in this browser. */
+function PerfBox({ k, label }: { k: keyof Perf; label: string }) {
+  const [perf, setPerf] = useState(loadPerf)
+  useEffect(() => { const on = () => setPerf(loadPerf()); window.addEventListener('tt-perf', on); return () => window.removeEventListener('tt-perf', on) }, [])
+  return <label className="tt-check"><input type="checkbox" checked={perf[k]} onChange={(e) => savePerf({ ...loadPerf(), [k]: e.target.checked })} />{label}</label>
 }

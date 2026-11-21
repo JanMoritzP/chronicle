@@ -1008,3 +1008,5 @@ button.cs-roll:disabled { cursor: default; }
 
 .tt-msg .tt-keep { opacity: .35; font-size: 11px; padding: 0 4px; }
 .tt-msg:hover .tt-keep, .tt-msg .tt-keep:focus-visible { opacity: .8; }
+
+.tt-stats-badge { position: absolute; left: 8px; bottom: 8px; z-index: 5; font: 11px/1.2 ui-monospace, monospace; background: rgba(0,0,0,.6); color: #fff; padding: 3px 6px; border-radius: 4px; pointer-events: none; }
