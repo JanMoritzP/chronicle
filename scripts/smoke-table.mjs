@@ -420,6 +420,64 @@ check('and so are temporary hit points', (await call('GET', `/api/pages/${heroPa
 gm.send({ t: 'token.delete', ids: [heroTok.id] })
 await sleep(100)
 
+// rules the GM can switch on: resistances, concentration, death saves and rests
+const knight = { ...charSheet, name: 'Knight', resistances: 'fire', abilities: { ...charSheet.abilities, con: 14 }, hitDice: [{ sides: 10, total: 4, used: 3 }], deathSaves: { ok: 0, fail: 0 }, spellcasting: { ability: 'wis', slots: [{ total: 4, used: 3 }] } }
+const knightPage = (await call('POST', `/api/workspaces/${ws}/pages`, { title: 'Knight', props: { type: 'person', sheet: knight } }, gmCookie)).data
+gm.send({ t: 'token.add', sceneId: crypt, token: { name: 'Knight', x: 70, y: 70, owners: [alice.id] } })
+const knightTok = (await gm.until((m) => m.t === 'token' && m.token.name === 'Knight')).token
+gm.send({ t: 'token.update', id: knightTok.id, patch: { pageId: knightPage.id } })
+gm.send({ t: 'token.stat', id: knightTok.id, stat: { hp: { value: 30, max: 30 } } })
+const sheetOf = async () => (await call('GET', `/api/pages/${knightPage.id}`, null, gmCookie)).data.props.sheet
+const hpOf = (tok) => gm.msgs.filter((m) => m.t === 'token' && m.token.id === tok.id).at(-1)?.token.data.hp?.value
+await sleep(250)
+gm.send({ t: 'token.stat', id: knightTok.id, damage: 10, type: 'fire' })
+await sleep(250)
+check('with automation off a damage type changes nothing', hpOf(knightTok) === 20)
+gm.send({ t: 'settings.set', patch: { automation: { damage: true, concentration: true, deathSaves: true } } })
+await pa.until((m) => m.t === 'settings' && m.settings.automation?.damage)
+n = pa.mark()
+pa.send({ t: 'token.stat', id: knightTok.id, damage: 10, type: 'fire' })
+await sleep(300)
+check('with automation on, a resisted type is halved', hpOf(knightTok) === 15)
+check('and it is said at the table', pa.since(n, (m) => m.t === 'chat.msg' && m.msg.name === 'Knight' && JSON.stringify(m.msg.parts).includes('resistant')).length === 1)
+gm.send({ t: 'token.stat', id: knightTok.id, stat: { conditions: ['Concentrating'] } })
+await sleep(150)
+n = pa.mark()
+gm.send({ t: 'token.stat', id: knightTok.id, damage: 3, type: 'slashing' })
+await sleep(300)
+const conSave = pa.since(n, (m) => m.t === 'chat.msg' && m.msg.parts.some((p) => p.t === 'roll' && p.roll.dc === 10))
+check('a hit on someone who concentrates makes them save against DC 10', conSave.length === 1 && ['success', 'failure'].includes(conSave[0].msg.parts[0].roll.degree))
+gm.send({ t: 'token.stat', id: knightTok.id, stat: { conditions: ['Concentrating'] } })
+await sleep(150)
+gm.send({ t: 'token.stat', id: knightTok.id, damage: 500, type: 'slashing' })
+await sleep(300)
+const down = gm.msgs.filter((m) => m.t === 'token' && m.token.id === knightTok.id).at(-1).token
+check('at 0 hit points they fall unconscious and lose concentration', down.data.hp.value === 0 && down.data.conditions.includes('Unconscious') && !down.data.conditions.includes('Concentrating'))
+pa.send({ t: 'token.deathsave', id: knightTok.id })
+await sleep(300)
+const ds = (await sheetOf()).deathSaves
+check('a death save is rolled and counted on the sheet', ds.ok + ds.fail >= 1 || (await sheetOf()).hp.current === 1)
+const pb2 = await open(bob.cookie, ws)
+await pb2.until((m) => m.t === 'snapshot')
+pb2.send({ t: 'token.rest', id: knightTok.id, kind: 'long', op: 'bobrest' })
+check("another player cannot rest someone else's character", !!(await pb2.until((m) => m.t === 'nack' && m.op === 'bobrest')))
+pb2.sock.close()
+pa.send({ t: 'token.rest', id: knightTok.id, kind: 'long' })
+await sleep(300)
+const rested = await sheetOf()
+check('a long rest fills hit points, slots, hit dice and clears death saves', rested.hp.current === 30 && rested.spellcasting.slots[0].used === 0 && rested.hitDice[0].used === 1 && rested.deathSaves.fail === 0)
+check('and the token follows', hpOf(knightTok) === 30)
+gm.send({ t: 'token.stat', id: knightTok.id, damage: 20 })
+await sleep(200)
+pa.send({ t: 'token.rest', id: knightTok.id, kind: 'short', dice: 1 })
+await sleep(300)
+check('a short rest spends a hit die to heal', (await sheetOf()).hitDice[0].used === 2 && (await sheetOf()).hp.current > 10)
+pa.send({ t: 'token.deathsave', id: knightTok.id, op: 'alive' })
+check('death saves are only for someone at 0 hit points', !!(await pa.until((m) => m.t === 'nack' && m.op === 'alive')))
+gm.send({ t: 'settings.set', patch: { automation: { damage: false, concentration: false, deathSaves: false } } })
+gm.send({ t: 'token.delete', ids: [knightTok.id] })
+await sleep(100)
+
 // tiles and templates
 const tilePng = await sharp({ create: { width: 300, height: 150, channels: 3, background: '#a52' } }).png().toBuffer()
 const tileUpload = async (cookie, world) => {

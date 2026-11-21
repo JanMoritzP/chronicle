@@ -428,6 +428,11 @@ function TablePanel() {
         <>
           <b><Crosshair size={13} /> Rules of the table</b>
           {flags.map(([k, label]) => <label key={k} className="tt-check"><input type="checkbox" checked={settings[k]} onChange={(e) => set({ [k]: e.target.checked })} />{label}</label>)}
+          <b>Rules the table applies for you</b>
+          <p className="muted" style={{ fontSize: 12, margin: 0 }}>All off, so you play by hand until you choose. They apply to tokens linked to a sheet.</p>
+          {([['damage', 'Damage types: resistance, vulnerability and immunity'], ['concentration', 'Concentration saves when someone who concentrates is hurt'], ['deathSaves', 'Falling unconscious at 0 hit points, and death saves']] as const).map(([k, label]) => (
+            <label key={k} className="tt-check"><input type="checkbox" checked={settings.automation[k]} onChange={(e) => set({ automation: { ...settings.automation, [k]: e.target.checked } })} />{label}</label>
+          ))}
           <b>Also runs the table</b>
           {members.filter((m) => m.role !== 'owner' && m.role !== 'viewer').map((m) => (
             <label key={m.id} className="tt-check"><input type="checkbox" checked={settings.gms.includes(m.id)} onChange={(e) => set({ gms: e.target.checked ? [...settings.gms, m.id] : settings.gms.filter((g) => g !== m.id) })} />{m.username}</label>

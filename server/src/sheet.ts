@@ -13,7 +13,7 @@ const usage = z.discriminatedUnion('type', [
   z.object({ type: z.literal('rest') }),
 ])
 const feature = z.object({
-  name: text(200), text: text(8000), usage: usage.optional(), cost: optInt(1, 10),
+  name: text(200), text: text(8000), usage: usage.optional(), cost: optInt(1, 10), used: optInt(0, 99),
   actions: z.enum(['one', 'two', 'three', 'reaction', 'free']).optional(), bonus: int(-30, 60).optional(), damage: text(100).optional(), agile: z.boolean().optional(),
 })
 const features = z.array(feature).max(60)

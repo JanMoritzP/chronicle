@@ -14,7 +14,9 @@ import { ALLOWED } from './routes/uploads.js'
 import { parseChat, readable, type Kind, type Part } from './chat.js'
 import { buildSight, canSee, type Sight, type SightToken } from './sight.js'
 import { advance, emptyCombat, end as endCombat, start as startCombat, visible as visibleCombat, withList, type Combat } from './combat.js'
-import { parseRoll } from './dice.js'
+import { cryptoRng, parseRoll } from './dice.js'
+import { adjustDamage, concentrationDc, deathSave, longRest, modOf, shortRest } from './rules5e.js'
+import { parseSheet, type Sheet } from './sheet.js'
 import { encounterRow } from './routes/encounters.js'
 import {
   canCreateToken, canEditStats, canMoveToken, canPing, canRuler, canSeeToken, clientMessage, makeLimiter, parseSettings, redact, roleAt, settingsSchema,
@@ -169,6 +171,20 @@ function followHp(ws: string, pageId: string | null, hp: { value?: number; max?:
   if (typeof hp.temp === 'number') h.temp = Math.max(0, Math.min(100000, Math.round(hp.temp)))
   if (typeof hp.max === 'number') h.max = Math.max(0, Math.min(100000, Math.round(hp.max)))
   db.prepare('UPDATE pages SET props = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(props), now(), pageId)
+  publishWorld(ws, { k: 'refresh', area: 'pages', pageId })
+}
+
+/** The structured sheet of the page a token stands for, with the props it lives in. */
+function readSheet(ws: string, pageId: string | null) {
+  if (!pageId) return null
+  const row = db.prepare('SELECT props FROM pages WHERE id = ? AND workspace_id = ?').get(pageId, ws) as { props: string } | undefined
+  if (!row) return null
+  const props = parse<Record<string, unknown>>(row.props, {})
+  const sheet = parseSheet(props.sheet)
+  return sheet ? { props, sheet } : null
+}
+function writeSheet(ws: string, pageId: string, props: Record<string, unknown>, sheet: Sheet) {
+  db.prepare('UPDATE pages SET props = ?, updated_at = ? WHERE id = ?').run(JSON.stringify({ ...props, sheet }), now(), pageId)
   publishWorld(ws, { k: 'refresh', area: 'pages', pageId })
 }
 
@@ -406,19 +422,98 @@ async function handle(c: Conn, m: ClientMessage) {
       if (st.ac !== undefined) { if (st.ac === null) delete data.ac; else data.ac = st.ac }
       if (st.conditions) data.conditions = [...new Set(st.conditions)]
       if (st.hpPrivate !== undefined) data.hpPrivate = st.hpPrivate
-      if (m.damage) {
+      // rules the GM switched on: resistances, a spell kept going after a hit, falling unconscious
+      const auto = settings.automation
+      const pg = m.damage ? readSheet(ws, before.pageId) : null
+      const isChar = pg?.sheet.kind === 'character'
+      const notes: string[] = []
+      const rolls: Part[] = []
+      let dmg = m.damage ?? 0
+      if (dmg > 0 && auto.damage) {
+        const adj = adjustDamage(dmg, m.type, pg?.sheet)
+        dmg = adj.amount
+        notes.push(`takes ${dmg} ${m.type?.trim().toLowerCase() ?? ''} damage${adj.effect ? ` (${adj.effect})` : ''}`.replace(/  +/g, ' '))
+      }
+      const wasHp = (data.hp as { value?: number } | undefined)?.value ?? 0
+      if (dmg) {
         // damage wears down temporary hit points first; healing stops at the maximum
         const hp = { value: 0, max: 0, temp: 0, ...(data.hp ?? {}) }
-        if (m.damage > 0) {
-          const soak = Math.min(hp.temp, m.damage)
+        if (dmg > 0) {
+          const soak = Math.min(hp.temp, dmg)
           hp.temp -= soak
-          hp.value = Math.max(0, hp.value - (m.damage - soak))
-        } else hp.value = hp.max > 0 ? Math.min(hp.max, hp.value - m.damage) : hp.value - m.damage
+          hp.value = Math.max(0, hp.value - (dmg - soak))
+        } else hp.value = hp.max > 0 ? Math.min(hp.max, hp.value - dmg) : hp.value - dmg
         data.hp = hp
       }
+      const hpNow = (data.hp as { value?: number } | undefined)?.value ?? 0
+      let conditions = (data.conditions as string[] | undefined) ?? []
+      let resetSaves = false
+      if (dmg > 0 && auto.deathSaves && isChar && wasHp > 0 && hpNow === 0) { conditions = [...new Set([...conditions, 'Unconscious'])]; resetSaves = true; notes.push('falls unconscious') }
+      if (dmg < 0 && auto.deathSaves && isChar && wasHp === 0 && hpNow > 0) { conditions = conditions.filter((x) => x !== 'Unconscious'); resetSaves = true; notes.push('is back on their feet') }
+      if (dmg > 0 && auto.concentration && conditions.includes('Concentrating')) {
+        if (hpNow === 0 && wasHp > 0) { conditions = conditions.filter((x) => x !== 'Concentrating'); notes.push('loses concentration') }
+        else if (hpNow > 0) {
+          const dc = concentrationDc(dmg)
+          const bonus = pg ? pg.sheet.saves.con ?? modOf(pg.sheet.abilities.con) : 0
+          const parsed = parseChat(`/r 1d20${bonus < 0 ? '-' : '+'}${Math.abs(bonus)} Concentration save dc ${dc}`, undefined, worldSystem(ws))
+          if (!('error' in parsed)) {
+            rolls.push(...parsed.parts)
+            const roll = parsed.parts[0]
+            if (roll.t === 'roll' && (roll.roll.degree === 'failure' || roll.roll.degree === 'critical failure')) { conditions = conditions.filter((x) => x !== 'Concentrating'); notes.push('loses concentration') }
+          }
+        }
+      }
+      if (conditions.length || data.conditions) data.conditions = conditions
       if (JSON.stringify(data).length > 8000) return nack(c, m, 'too much data')
       db.prepare('UPDATE tokens SET data = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(data), now(), m.id)
-      if (st.hp || m.damage) followHp(ws, before.pageId, data.hp)
+      if (st.hp || dmg) followHp(ws, before.pageId, data.hp)
+      if (resetSaves && before.pageId) { const again = readSheet(ws, before.pageId); if (again?.sheet.deathSaves) writeSheet(ws, before.pageId, again.props, { ...again.sheet, deathSaves: { ok: 0, fail: 0 } }) }
+      // what happened is said at the table, but quietly (to the GM) when the token itself is a secret
+      const quiet = before.hidden || !!before.data.hpPrivate
+      if (notes.length) postChat(ws, c.user.id, before.name, quiet ? 'gmroll' : 'emote', [], [{ t: 'text', text: notes.join(' and ') }])
+      if (rolls.length) postChat(ws, c.user.id, before.name, quiet ? 'gmroll' : 'roll', [], rolls)
+      return emitToken(ws, before, tokenRow(m.id, ws)!)
+    }
+    case 'token.rest': {
+      const before = tokenRow(m.id, ws)
+      if (!before) return nack(c, m, 'no such token')
+      if (!canEditStats(c.role, c.user.id, before, settings)) return nack(c, m, 'not allowed')
+      const pg = readSheet(ws, before.pageId)
+      if (!pg || pg.sheet.kind !== 'character') return nack(c, m, 'Only a token with a character sheet can rest.')
+      const out = m.kind === 'long' ? longRest(pg.sheet) : shortRest(pg.sheet, m.dice ?? 0, cryptoRng)
+      writeSheet(ws, before.pageId!, pg.props, out.sheet)
+      const data: Record<string, any> = { ...before.data }
+      if (data.hp) data.hp = { ...data.hp, value: out.sheet.hp.current ?? out.sheet.hp.max, ...(m.kind === 'long' ? { temp: 0 } : {}) }
+      if (m.kind === 'long' && Array.isArray(data.conditions)) data.conditions = data.conditions.filter((x: string) => x !== 'Unconscious')
+      db.prepare('UPDATE tokens SET data = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(data), now(), m.id)
+      postChat(ws, c.user.id, before.name, 'emote', [], [{ t: 'text', text: out.lines.join(', ') }])
+      return emitToken(ws, before, tokenRow(m.id, ws)!)
+    }
+    case 'token.deathsave': {
+      const before = tokenRow(m.id, ws)
+      if (!before) return nack(c, m, 'no such token')
+      if (!canEditStats(c.role, c.user.id, before, settings)) return nack(c, m, 'not allowed')
+      const pg = readSheet(ws, before.pageId)
+      if (!pg || pg.sheet.kind !== 'character') return nack(c, m, 'Only a token with a character sheet makes death saves.')
+      if ((pg.sheet.hp.current ?? pg.sheet.hp.max) > 0) return nack(c, m, 'Death saves are for someone at 0 hit points.')
+      const roll = parseRoll('1d20 Death saving throw')!
+      const first = roll.terms[0]
+      const d20 = first.kind === 'dice' ? first.dice[0].v : roll.total
+      const res = deathSave(d20, pg.sheet.deathSaves)
+      const sheet: Sheet = { ...pg.sheet, deathSaves: res.saves }
+      const data: Record<string, any> = { ...before.data }
+      let conditions = (data.conditions as string[] | undefined) ?? []
+      if (res.outcome === 'revived') {
+        sheet.hp = { ...sheet.hp, current: 1 }
+        data.hp = { ...(data.hp ?? {}), value: 1 }
+        conditions = conditions.filter((x) => x !== 'Unconscious')
+      }
+      if (conditions.length || data.conditions) data.conditions = conditions
+      writeSheet(ws, before.pageId!, pg.props, sheet)
+      db.prepare('UPDATE tokens SET data = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(data), now(), m.id)
+      const said = { revived: 'rolls a natural 20 and is back with 1 hit point', stable: 'is stable', dead: 'has died', success: 'succeeds', failure: 'fails', 'critical failure': 'fails twice' }[res.outcome]
+      postChat(ws, c.user.id, before.name, 'roll', [], [{ t: 'roll', roll }])
+      postChat(ws, c.user.id, before.name, 'emote', [], [{ t: 'text', text: `${said} (${res.saves.ok} successes, ${res.saves.fail} failures)` }])
       return emitToken(ws, before, tokenRow(m.id, ws)!)
     }
     case 'chat': {

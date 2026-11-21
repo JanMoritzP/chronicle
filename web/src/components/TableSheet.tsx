@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '../api'
-import { ABILITIES, FEATURE_GROUPS, PF_SKILLS, multipleAttack, pfLore, pfPerception, pfSave, pfSkill, pfStrike, SKILLS, abilityMod, crText, initiativeBonus, isCharacter, passivePerception, rollsIn, saveBonus, sheetOf, signed, skillBonus, speedText, type Sheet } from '../lib/sheet'
+import { ABILITIES, FEATURE_GROUPS, PF_SKILLS, multipleAttack, pfLore, pfPerception, pfSave, pfSkill, pfStrike, SKILLS, abilityMod, crText, initiativeBonus, isCharacter, passivePerception, rollsIn, saveBonus, sheetOf, signed, skillBonus, speedText, usesLeft, type Sheet } from '../lib/sheet'
 
 // The sheet of a creature as a table card: every number that can be rolled is a button.
 // Click rolls it, Shift-click with advantage, Ctrl-click with disadvantage. The roll goes to the table chat.
@@ -10,25 +10,29 @@ export type RollFn = (expr: string, label: string) => void
 const cache = new Map<string, Promise<{ sheet: Sheet | null; type: string | null; portrait: string | null }>>()
 
 /** The sheet of a page, read once. A page that is not a creature has none. */
-export function loadSheet(pageId: string) {
+export function loadSheet(pageId: string, fresh = false) {
+  if (fresh) cache.delete(pageId)
   let p = cache.get(pageId)
   if (!p) {
-    p = api.getPage(pageId).then((pg) => ({ sheet: sheetOf(pg.props), type: (pg.props?.type as string) ?? null, portrait: (pg.props?.portrait as string) ?? null })).catch(() => ({ sheet: null, type: null, portrait: null }))
+    p = api.getPage(pageId, fresh).then((pg) => ({ sheet: sheetOf(pg.props), type: (pg.props?.type as string) ?? null, portrait: (pg.props?.portrait as string) ?? null })).catch(() => ({ sheet: null, type: null, portrait: null }))
     cache.set(pageId, p)
   }
   return p
 }
 
-export function useSheet(pageId: string | null) {
+/** The sheet of a page. `watch` is anything that changes when the sheet may have (the token's hit points): the sheet is read again then. */
+export function useSheet(pageId: string | null, watch = '') {
   const [state, setState] = useState<{ sheet: Sheet | null; loading: boolean }>({ sheet: null, loading: !!pageId })
+  const [tick, setTick] = useState(0)
+  const first = useRef(true)
   useEffect(() => {
     if (!pageId) { setState({ sheet: null, loading: false }); return }
     let live = true
-    setState((s) => ({ ...s, loading: true }))
-    loadSheet(pageId).then((r) => { if (live) setState({ sheet: r.sheet, loading: false }) })
+    if (first.current) setState((s) => ({ ...s, loading: true }))
+    loadSheet(pageId, !first.current).then((r) => { if (live) { first.current = false; setState({ sheet: r.sheet, loading: false }) } })
     return () => { live = false }
-  }, [pageId])
-  return state
+  }, [pageId, watch, tick])
+  return { ...state, reload: () => setTick((t) => t + 1) }
 }
 
 const mode = (e: React.MouseEvent) => (e.shiftKey ? ' adv' : e.ctrlKey || e.metaKey ? ' dis' : '')
@@ -96,8 +100,9 @@ function Pf2eCard({ sheet, roll }: { sheet: Sheet; roll: RollFn }) {
   )
 }
 
-export function SheetCard({ sheet, roll }: { sheet: Sheet; roll: RollFn }) {
+export function SheetCard({ sheet, roll, onPatch }: { sheet: Sheet; roll: RollFn; /** changes a field of the sheet by path (only given where the person may edit it) */ onPatch?: (patch: Record<string, unknown>) => void }) {
   if (sheet.ruleset === 'pf2e' && sheet.pf2e) return <Pf2eCard sheet={sheet} roll={roll} />
+  const slots = sheet.spellcasting?.slots ?? []
   const bonus = (n: number) => `${n >= 0 ? '+' : '-'}${Math.abs(n)}`
   const check = (e: React.MouseEvent, n: number, label: string) => roll(`1d20${bonus(n)}${mode(e)}`, label)
   return (
@@ -126,6 +131,18 @@ export function SheetCard({ sheet, roll }: { sheet: Sheet; roll: RollFn }) {
           {(isCharacter(sheet) ? Object.keys(SKILLS).map((k): [string, number] => [k, skillBonus(sheet, k)]) : Object.entries(sheet.skills)).map(([k, v]) => <button key={k} className={`tt-roll${isCharacter(sheet) && !sheet.profs?.skills[k] ? '' : ' prof'}`} onClick={(e) => check(e, v, `${title(k)} check`)}>{title(k)} {signed(v)}</button>)}
         </div>
       )}
+      {slots.some((sl) => sl.total > 0) && (
+        <div className="tt-chips" role="group" aria-label="Spell slots">
+          {slots.map((sl, i) => sl.total > 0 && (
+            <span key={i} className="tt-slot"><b>{i + 1}</b>
+              {Array.from({ length: sl.total }, (_, j) => (
+                <button key={j} className={`tt-pip${j < sl.total - sl.used ? ' on' : ''}`} disabled={!onPatch} aria-label={`Level ${i + 1} slot ${j + 1}, ${j < sl.total - sl.used ? 'ready' : 'spent'}`}
+                  onClick={() => onPatch?.({ 'spellcasting.slots': slots.map((x, k) => (k === i ? { ...x, used: j < sl.total - sl.used ? Math.min(sl.total, sl.used + 1) : Math.max(0, sl.used - 1) } : x)) })} />
+              ))}
+            </span>
+          ))}
+        </div>
+      )}
       {(sheet.vulnerabilities || sheet.resistances || sheet.immunities || sheet.conditionImmunities) && (
         <div className="tt-sheet-facts">
           {sheet.vulnerabilities && <span><b>Vulnerable</b> {sheet.vulnerabilities}</span>}
@@ -144,7 +161,12 @@ export function SheetCard({ sheet, roll }: { sheet: Sheet; roll: RollFn }) {
                 <summary>
                   <b>{f.name}</b>
                   {f.usage?.type === 'recharge' && <small> (Recharge {f.usage.min}{f.usage.min < 6 ? '-6' : ''})</small>}
-                  {f.usage?.type === 'perDay' && <small> ({f.usage.times}/Day)</small>}
+                  {f.usage?.type === 'perDay' && (
+                    <small> ({usesLeft(f)}/{f.usage.times} left)</small>
+                  )}
+                  {f.usage?.type === 'perDay' && onPatch && (
+                    <button className="btn sm" aria-label={`Use ${f.name}`} disabled={(usesLeft(f) ?? 0) <= 0} onClick={(e) => { e.preventDefault(); onPatch({ [`features.${g}`]: sheet.features[g].map((x, k) => (k === i ? { ...x, used: (x.used ?? 0) + 1 } : x)) }) }}>Use</button>
+                  )}
                   {f.cost ? <small> (Costs {f.cost})</small> : null}
                 </summary>
                 <p>{f.text}</p>

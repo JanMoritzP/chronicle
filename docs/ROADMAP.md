@@ -305,6 +305,15 @@ What it does: the GM and the players share a battle scene. The GM makes scenes a
 - **Tests.** `scripts/smoke-table.mjs` (who sees and may do what), `scripts/test-grid.ts` (snapping and distances), `e2e/tests/tabletop.spec.ts`.
 - **Not done yet.** Occlusion of a token that walks under an overhead tile, covered-cell highlighting for spell areas, user-defined layers, live strokes while someone is still drawing, undo, conditions that end on their own at the turn, 2024 XP budgets, loot and XP summary after a fight.
 
+## Rules automation (5e, first step, built)
+The GM can let the table apply some rules. They are on the Table panel under "Rules the table applies for you", all off until chosen, and work on tokens linked to a sheet.
+- **Damage types.** Damage can carry a type. Resistance halves (rounded down), vulnerability doubles, immunity stops it, and resistance with vulnerability to the same type cancel out. An entry with a condition ("slashing from nonmagical attacks") is not applied, because the table cannot tell if a weapon is magical. What happened is said in chat; for a hidden token or one with private hit points only the GM sees it.
+- **Concentration.** A token with the Concentrating condition that is hurt makes a Constitution save against DC 10 or half the damage; failing, or dropping to 0, ends the condition. The roll is shown in chat.
+- **Death saves.** A character at 0 hit points becomes Unconscious, gets a Death save button (a natural 20 brings them back with 1 hit point, a natural 1 counts twice, three failures kill, three successes make them stable), and is back on their feet when healed.
+- **Rests**, always available on a linked character: a short rest spends hit dice (largest first) and readies "after a rest" features, a long rest restores hit points, spell slots, uses, half the hit dice and clears death saves.
+- **Spell slots and uses** show on the table card as pips and a Use button, written back to the sheet. Pure rules: `server/src/rules5e.ts`, test `scripts/test-rules5e.ts`.
+Not yet: attack rolls that target and hit automatically, saves rolled for targets, effects with durations, inventory weight, a level-up flow, death saves from damage taken at 0.
+
 ## Invite links (built)
 
 What it does: the owner makes a link for a world and sends it to the players. Whoever opens it can make an account (or sign in with one they have) and is let into that one world as a player or a spectator. Accounts made by the admin dashboard and the owner's Accounts list keep working as before.

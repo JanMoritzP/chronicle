@@ -6,6 +6,7 @@ Goal: run a complete D&D 5e game inside Chronicle (maps, tokens, vision, combat,
 
 ## Progress
 
+- **Phase 6, rules automation (first step): done.** Damage types with resistance and immunity, concentration saves, falling unconscious and death saves, short and long rests, spell slot pips and per-day uses on the table card, each rule switched on by the GM. Not built: targeting and automatic attack and damage, saves rolled for targets, active effects with durations, attunement and encumbrance, the level-up flow, class features from the library.
 - **Invite links: done.** Per-world switch, links with a role, a time limit and a limit on people, a join page that makes an account or signs in, and closing links. Named links and e-mail are not built.
 - **Mobile player view: first version done** (bottom bar, sheets, a hit point strip, bigger buttons). A dedicated phone sheet for characters, haptics, offline caching of the table and installable icons are not.
 - **Phase 8, Pathfinder 2e (first step): done.** Per-world setting, creature sheet with action costs, threat rating by level, initiative from Perception, multiple attack penalty buttons, Pathfinder conditions with values and degrees of success. Player characters (ranks, derived numbers, strikes, spell slots) are done too. The three-action tracker, spell lists, importing and the pack format are not built.

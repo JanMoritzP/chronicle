@@ -546,3 +546,51 @@ test('a token linked to a creature page gets its sheet card with a roll on every
   await prone.click()
   await expect(prone).toHaveAttribute('aria-pressed', 'false')
 })
+
+test('the GM switches on damage types: resistance halves a hit and it is said in chat; rests and death saves work', { tag: '@feature:table.automation' }, async ({ app, makePage }) => {
+  const sheet = {
+    v: 1, kind: 'character', ruleset: '5e', name: 'Sister Vey', size: '', type: '', alignment: '',
+    abilities: { str: 10, dex: 10, con: 14, int: 10, wis: 14, cha: 10 }, ac: { value: 15, note: '' }, hp: { max: 20, formula: '', current: 20, temp: 0 },
+    speed: { walk: 30 }, saves: {}, skills: {}, senses: {}, vulnerabilities: '', resistances: 'fire', immunities: '', conditionImmunities: '', languages: '',
+    hitDice: [{ sides: 8, total: 3, used: 2 }], deathSaves: { ok: 0, fail: 0 }, spellcasting: { ability: 'wis', slots: [{ total: 3, used: 2 }] },
+    features: { traits: [], actions: [], bonus: [], reactions: [], legendary: [] },
+  }
+  await makePage('Sister Vey', { props: { type: 'person', sheet } })
+  await app.reload()
+  await openTable(app)
+  await makeScene(app, 'Chapel')
+  await makeToken(app, 'Vey')
+  await app.getByRole('button', { name: 'Link a page' }).click()
+  await app.getByPlaceholder('Find a monster or character…').fill('Sister Vey')
+  await app.getByPlaceholder('Find a monster or character…').press('Enter')
+  await expect(app.getByLabel('Hit points', { exact: true })).toHaveValue('20')
+
+  // off by default: no damage type to choose
+  await expect(app.getByRole('button', { name: 'Select Damage type' })).toHaveCount(0)
+  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Table', exact: true }).click()
+  await app.getByLabel('Damage types: resistance, vulnerability and immunity').check()
+  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Token', exact: true }).click()
+  await app.getByLabel('Amount of damage or healing').fill('10')
+  await app.getByTitle('Damage type').click()
+  await app.getByRole('option', { name: 'Fire' }).click()
+  await app.getByRole('button', { name: 'Damage', exact: true }).click()
+  await expect(app.getByLabel('Hit points', { exact: true })).toHaveValue('15')
+  await app.locator('.tt-panel .seg').getByRole('button', { name: /Chat/ }).click()
+  await expect(app.getByRole('list', { name: 'Chat' })).toContainText('takes 5 fire damage (resistant)')
+
+  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Token', exact: true }).click()
+  const ready = app.getByRole('group', { name: 'Spell slots' }).getByRole('button', { name: /ready/ })
+  await expect(ready).toHaveCount(1)
+  // a long rest brings the hit points back
+  await app.getByRole('button', { name: 'Long rest' }).click()
+  await expect(app.getByLabel('Hit points', { exact: true })).toHaveValue('20')
+  await expect(ready).toHaveCount(3)
+
+  // at 0 hit points a death save is offered
+  await app.getByLabel('Amount of damage or healing').fill('99')
+  await app.getByRole('button', { name: 'Damage', exact: true }).click()
+  await expect(app.getByLabel('Hit points', { exact: true })).toHaveValue('0')
+  await app.getByRole('button', { name: 'Death save' }).click()
+  await app.locator('.tt-panel .seg').getByRole('button', { name: /Chat/ }).click()
+  await expect(app.getByRole('list', { name: 'Chat' })).toContainText('Death saving throw')
+})

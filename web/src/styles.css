@@ -771,6 +771,11 @@ input[type=color] { width: 34px; height: 24px; padding: 0; border: 1px solid var
 .tt-chips { display: flex; flex-wrap: wrap; gap: 4px; }
 .tt-chip, .tt-roll { border: 1px solid var(--border); background: var(--bg); color: var(--text); border-radius: 12px; padding: 2px 8px; font-size: 12px; cursor: pointer; }
 .tt-chip:hover:not(:disabled), .tt-roll:hover { background: var(--bg-hover); }
+.tt-slot { display: inline-flex; align-items: center; gap: 3px; margin-right: 8px; font-size: 12px; }
+.tt-pip { width: 14px; height: 14px; padding: 0; border-radius: 50%; border: 1.5px solid var(--accent, #7c5cff); background: transparent; cursor: pointer; }
+.tt-pip.on { background: var(--accent, #7c5cff); }
+.tt-pip:disabled { cursor: default; }
+.tt-type { min-width: 96px; }
 .tt-chip.on { background: var(--accent); color: var(--accent-fg); border-color: transparent; }
 .tt-chip:disabled { cursor: default; }
 .tt-roll.prof { border-color: var(--accent); }

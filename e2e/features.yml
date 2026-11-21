@@ -430,6 +430,9 @@ areas:
       - id: table.stats
         name: "Hit points, damage, healing and conditions on a token, with a linked page's sheet"
         files: [web/src/components/TableParts.tsx, web/src/components/TableSheet.tsx]
+      - id: table.automation
+        name: "Rules the GM switches on: damage types with resistance, concentration saves, death saves and rests"
+        files: [web/src/components/TableParts.tsx, server/src/rules5e.ts, server/src/table.ts]
       - id: table.fog
         name: "Fog of war and darkness are switched on per scene and kept"
         files: [web/src/components/Tabletop.tsx]

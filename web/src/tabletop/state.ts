@@ -13,6 +13,8 @@ export interface Token {
 }
 export interface Settings {
   gms: string[]; playersMoveOwn: boolean; playersCreateTokens: boolean; playersEditOwnStats: boolean; playersOpenDoors: boolean; playersDraw: boolean; playersPing: boolean; playersRuler: boolean; showCursors: boolean
+  /** Rules the table applies for the GM (all off by default). */
+  automation: { damage: boolean; concentration: boolean; deathSaves: boolean }
 }
 export interface Who { id: string; username: string; role: string }
 export interface Cursor { user: string; name: string; x: number; y: number; at: number }
@@ -31,7 +33,7 @@ export interface RollJson { expr: string; label: string; total: number; terms: R
 export type ChatPart = { t: 'text'; text: string } | { t: 'roll'; roll: RollJson }
 export interface ChatMsg { id: string; ts: number; userId: string; name: string; kind: 'say' | 'roll' | 'gmroll' | 'emote' | 'whisper'; to: string[]; parts: ChatPart[] }
 
-export const DEFAULT_SETTINGS: Settings = { gms: [], playersMoveOwn: true, playersCreateTokens: false, playersEditOwnStats: true, playersOpenDoors: false, playersDraw: true, playersPing: true, playersRuler: true, showCursors: true }
+export const DEFAULT_SETTINGS: Settings = { gms: [], playersMoveOwn: true, playersCreateTokens: false, playersEditOwnStats: true, playersOpenDoors: false, playersDraw: true, playersPing: true, playersRuler: true, showCursors: true, automation: { damage: false, concentration: false, deathSaves: false } }
 
 interface TableState {
   conn: Conn

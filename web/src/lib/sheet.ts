@@ -18,6 +18,9 @@ export type Usage =
   | { type: 'perDay'; times: number }
   | { type: 'rest' }
 
+/** How many of a feature's uses are spent (a per-day or after-a-rest feature). Kept on the feature itself. */
+export const usesLeft = (f: { usage?: Usage; used?: number }) => (f.usage?.type === 'perDay' ? Math.max(0, f.usage.times - (f.used ?? 0)) : null)
+
 export type ActionCost = 'one' | 'two' | 'three' | 'reaction' | 'free'
 /** What only a Pathfinder 2e creature has. Ability scores do not exist there: `mods` holds the modifiers themselves. */
 /** Proficiency rank: 0 untrained, 1 trained, 2 expert, 3 master, 4 legendary. */
@@ -54,6 +57,8 @@ export interface Pf2ePart {
 export interface Feature {
   name: string
   text: string
+  /** uses spent since the last rest */
+  used?: number
   /** Pathfinder 2e: what it costs to use, its attack bonus and damage, and whether a strike is agile (a smaller penalty for later attacks) */
   actions?: ActionCost
   bonus?: number

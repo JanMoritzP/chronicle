@@ -1,8 +1,11 @@
 import { Heart, Link2, Shield, Swords, Unlink } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { api } from '../api'
 import { useStore } from '../store'
 import { sendTable, useTable, type ChatMsg, type RollJson, type Token } from '../tabletop/state'
+import { askText } from '../lib/dialog'
 import { PagePicker } from './PagePicker'
+import { Select } from './Select'
 import { SheetCard, loadSheet, useSheet } from './TableSheet'
 
 export const CONDITIONS = ['Blinded', 'Charmed', 'Concentrating', 'Deafened', 'Exhaustion', 'Frightened', 'Grappled', 'Incapacitated', 'Invisible', 'Paralyzed', 'Petrified', 'Poisoned', 'Prone', 'Restrained', 'Stunned', 'Unconscious']
@@ -10,6 +13,7 @@ export const CONDITIONS = ['Blinded', 'Charmed', 'Concentrating', 'Deafened', 'E
 /** Pathfinder 2e conditions. The ones with a value (Frightened 2) go up by one on each click and clear after 4. */
 export const PF2E_CONDITIONS = ['Blinded', 'Clumsy', 'Concealed', 'Confused', 'Dazzled', 'Deafened', 'Doomed', 'Drained', 'Dying', 'Enfeebled', 'Fascinated', 'Fatigued', 'Fleeing', 'Frightened', 'Grabbed', 'Hidden', 'Immobilized', 'Invisible', 'Off-guard', 'Paralyzed', 'Petrified', 'Prone', 'Quickened', 'Restrained', 'Sickened', 'Slowed', 'Stunned', 'Stupefied', 'Unconscious', 'Wounded']
 const VALUED = new Set(['Clumsy', 'Doomed', 'Drained', 'Dying', 'Enfeebled', 'Frightened', 'Sickened', 'Slowed', 'Stunned', 'Stupefied', 'Wounded'])
+const DAMAGE_TYPES = ['acid', 'bludgeoning', 'cold', 'fire', 'force', 'lightning', 'necrotic', 'piercing', 'poison', 'psychic', 'radiant', 'slashing', 'thunder']
 const baseOf = (c: string) => c.replace(/\s+\d+$/, '')
 
 export const rollText = (expr: string, label: string) => sendTable({ t: 'chat', text: `/roll ${expr} ${label}` })
@@ -32,6 +36,8 @@ export function TokenStats({ token }: { token: Token }) {
   const can = useCanEdit(token)
   const gm = useTable((s) => s.role === 'gm')
   const [amount, setAmount] = useState('')
+  const [kind, setKind] = useState('')
+  const auto = useTable((s) => s.settings.automation)
   const hp = token.data.hp as { value?: number; max?: number; temp?: number } | undefined
   const ac = token.data.ac as number | undefined
   const conditions = (token.data.conditions ?? []) as string[]
@@ -42,7 +48,7 @@ export function TokenStats({ token }: { token: Token }) {
   const apply = (sign: 1 | -1) => {
     const n = Math.abs(parseInt(amount, 10))
     if (!n) return
-    sendTable({ t: 'token.stat', id: token.id, damage: sign * n })
+    sendTable({ t: 'token.stat', id: token.id, damage: sign * n, ...(sign === 1 && auto?.damage && kind ? { type: kind } : {}) })
     setAmount('')
   }
   const current = (c: string) => conditions.find((x) => baseOf(x) === c)
@@ -76,6 +82,23 @@ export function TokenStats({ token }: { token: Token }) {
                 onKeyDown={(e) => e.key === 'Enter' && apply(1)} />
               <button className="btn sm" onClick={() => apply(1)}>Damage</button>
               <button className="btn sm" onClick={() => apply(-1)}>Heal</button>
+              {auto?.damage && (
+                <Select className="input tt-type" value={kind} onChange={setKind} title="Damage type">
+                  <option value="">Any type</option>
+                  {DAMAGE_TYPES.map((t) => <option key={t} value={t}>{t[0].toUpperCase() + t.slice(1)}</option>)}
+                </Select>
+              )}
+            </div>
+          )}
+          {can && token.pageId && (
+            <div className="tt-row" role="group" aria-label="Rests and death saves">
+              <button className="btn sm" onClick={async () => {
+                const raw = await askText('Short rest', { label: 'Hit dice to spend', placeholder: '0', okLabel: 'Rest' })
+                if (raw === null) return
+                sendTable({ t: 'token.rest', id: token.id, kind: 'short', dice: Math.max(0, Math.min(40, parseInt(raw, 10) || 0)) })
+              }}>Short rest</button>
+              <button className="btn sm" onClick={() => sendTable({ t: 'token.rest', id: token.id, kind: 'long' })}>Long rest</button>
+              {(hp?.value ?? 1) <= 0 && <button className="btn sm primary" onClick={() => sendTable({ t: 'token.deathsave', id: token.id })}>Death save</button>}
             </div>
           )}
         </div>
@@ -115,12 +138,14 @@ export function LinkPage({ token }: { token: Token }) {
 }
 
 export function TokenSheet({ token }: { token: Token }) {
-  const { sheet, loading } = useSheet(token.pageId)
+  const { sheet, loading, reload } = useSheet(token.pageId, JSON.stringify(token.data.hp ?? null) + JSON.stringify(token.data.conditions ?? null))
+  const can = useCanEdit(token)
   const nameOf = token.name || 'Token'
   if (!token.pageId) return null
   if (loading) return <p className="muted tt-hint">Loading the sheet…</p>
   if (!sheet) return <p className="muted tt-hint">This page has no stat block.</p>
-  return <SheetCard sheet={sheet} roll={(expr, label) => rollText(expr, `${nameOf}: ${label}`)} />
+  const patch = (p: Record<string, unknown>) => { if (token.pageId) void api.patchPage(token.pageId, { propsPatch: { sheet: p } }).then(reload).catch(() => reload()) }
+  return <SheetCard sheet={sheet} roll={(expr, label) => rollText(expr, `${nameOf}: ${label}`)} onPatch={can && sheet.kind === 'character' ? patch : undefined} />
 }
 
 // ---------- chat ----------
