@@ -77,6 +77,8 @@ export type Proficiency = 'p' | 'e'
 
 /** What only a player character has. Everything is optional so a creature's sheet is unchanged. */
 export interface CharacterPart {
+  /** values of the extra fields a system pack adds to the sheet, by field id */
+  custom?: Record<string, string | number | boolean>
   player?: string
   species?: string
   background?: string

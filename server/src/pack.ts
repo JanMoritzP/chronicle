@@ -25,6 +25,8 @@ export const packSchema = z.object({
   damageTypes: z.array(word).max(40).optional(),
   /** how a token without a sheet rolls initiative, as dice: 1d20, 1d10, 2d6 */
   initiative: z.string().regex(/^\d{0,2}d\d{1,3}([+-]\d{1,3})?$/i).optional(),
+  /** extra fields a character sheet of this system carries (a sanity score, a faith, a rank) */
+  sheetFields: z.array(z.object({ id: z.string().regex(/^[a-z][a-z0-9-]{0,19}$/), label: z.string().trim().min(1).max(30), kind: z.enum(['number', 'text', 'check']) }).strict()).max(24).optional(),
   grid: z.object({ unit: z.string().trim().min(1).max(8), dist: z.number().min(0.1).max(1000), type: z.enum(['square', 'hex-row', 'hex-col', 'none']) }).optional(),
   content: z.object({
     rollTables: z.array(z.object({ name: z.string().trim().min(1).max(60), entries: z.string().max(20000), secret: z.boolean().optional() })).max(30).optional(),

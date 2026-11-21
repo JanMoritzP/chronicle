@@ -34,6 +34,7 @@ const character = {
   deathSaves: z.object({ ok: int(0, 3), fail: int(0, 3) }).optional(),
   spellcasting: z.object({ ability: z.union([abilityKey, z.literal('')]), slots: z.array(z.object({ total: count(20), used: count(20) })).max(10) }).optional(),
   spells: text(8000).optional(),
+  custom: z.record(z.string().regex(/^[a-z][a-z0-9-]{0,19}$/), z.union([text(300), z.number().min(-1e9).max(1e9), z.boolean()])).refine((o) => Object.keys(o).length <= 24, 'too many fields').optional(),
   inventory: z.array(z.object({ name: text(120), qty: count(99999), equipped: z.boolean(), note: text(300), weight: z.number().min(0).max(100000).optional(), attuned: z.boolean().optional(), charges: z.object({ used: int(0, 999), max: int(0, 999) }).optional(), acBonus: int(-5, 10).optional(), in: text(120).optional(), weightless: z.boolean().optional(), saveBonus: int(-5, 10).optional(), spellBonus: int(-5, 10).optional() })).max(200).optional(),
   currency: z.object({ cp: count(10_000_000), sp: count(10_000_000), ep: count(10_000_000), gp: count(10_000_000), pp: count(10_000_000) }).optional(),
 }

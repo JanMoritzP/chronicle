@@ -19,5 +19,7 @@ check('the pack\'s engine decides which built-in lists are the base', resolveRul
 for (const k of ['5e', '5e-2024', 'pf2e'] as const) check(`the built-in ${k} system is a pack the server accepts`, 'pack' in (parsePack(BUILTIN[k]) as any), JSON.stringify((parsePack(BUILTIN[k]) as any).error ?? ''))
 check('names become ids', slugOf('Dark Fantasy!') === 'dark-fantasy' && slugOf('  ') === 'pack-pack' && slugOf('A') === 'a-pack' && slugOf('x'.repeat(80)).length === 40)
 
+check('a pack adds fields to the character sheet', resolveRules('5e', { ...pack, sheetFields: [{ id: 'doom', label: 'Doom', kind: 'number' }] }).sheetFields[0].id === 'doom' && resolveRules('5e', null).sheetFields.length === 0)
+check('and the server accepts them', 'pack' in (parsePack({ ...pack, sheetFields: [{ id: 'doom', label: 'Doom', kind: 'number' }, { id: 'faith', label: 'Faith', kind: 'text' }] }) as any) && 'error' in (parsePack({ ...pack, sheetFields: [{ id: 'Bad Id', label: 'x', kind: 'number' }] }) as any) && 'error' in (parsePack({ ...pack, sheetFields: [{ id: 'a', label: 'x', kind: 'dice' }] }) as any))
 console.log(failed ? `\n${failed} failed` : '\nall passed')
 process.exit(failed ? 1 : 0)

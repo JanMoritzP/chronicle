@@ -1,5 +1,5 @@
 import { expect, grantAccess, test, unique } from '../fixtures'
-import { answerPrompt, confirmDialog, dialog, openSettings, openView } from '../lib/ui'
+import { answerPrompt, confirmDialog, dialog, openPage, openSettings, openView } from '../lib/ui'
 
 const THEMES = ['Parchment', 'Linen', 'Sage', 'Tide', 'Rosewood', 'Tavern', 'Ink', 'Forest', 'Dusk', 'Slate']
 
@@ -242,4 +242,27 @@ test('a system pack changes what the table shows, brings its content, and can be
   await app.getByRole('button', { name: 'Remove Grim tales' }).click()
   await confirmDialog(app)
   await expect(app.getByRole('list', { name: 'Installed packs' })).toContainText('No packs installed')
+})
+
+test('a system pack can add its own fields to a character sheet', { tag: '@feature:packs.sheet' }, async ({ app, makePage }) => {
+  await openSettings(app, 'Worlds')
+  const pack = { format: 'chronicle-system', v: 1, id: 'doomed', name: 'Doomed', base: '5e', sheetFields: [{ id: 'doom', label: 'Doom', kind: 'number' }, { id: 'patron', label: 'Patron', kind: 'text' }] }
+  const chooser = app.waitForEvent('filechooser')
+  await app.getByRole('button', { name: 'Install a pack from a file' }).click()
+  await (await chooser).setFiles({ name: 'doomed.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(pack)) })
+  await confirmDialog(app)
+  await confirmDialog(app)
+  await app.getByRole('button', { name: 'Use Doomed' }).click()
+  await expect(app.getByRole('list', { name: 'Installed packs' })).toContainText('in use')
+  await makePage('Brann', { props: { type: 'person' } })
+  await app.reload()
+  await openPage(app, 'Brann')
+  await app.getByRole('button', { name: 'Add a character sheet' }).click()
+  await app.getByLabel('Doom', { exact: true }).fill('3')
+  await app.getByLabel('Patron', { exact: true }).fill('The Hollow King')
+  await expect(app.getByRole('region', { name: 'Extras of Doomed' })).toBeVisible()
+  await app.reload()
+  await openPage(app, 'Brann')
+  await expect(app.getByLabel('Doom', { exact: true })).toHaveValue('3')
+  await expect(app.getByLabel('Patron', { exact: true })).toHaveValue('The Hollow King')
 })

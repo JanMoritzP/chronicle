@@ -45,7 +45,8 @@ const next = (p: Proficiency | undefined): Proficiency | null => (p === undefine
 export type RollFn = (expr: string, label: string) => void
 
 export function CharacterSheet({ sheet, set, roll }: { sheet: Sheet; set?: (patch: SheetPatch) => void; roll?: RollFn }) {
-  const an = useRules().abilities
+  const rules = useRules()
+  const an = rules.abilities
   const edit = !!set
   const pb = proficiency(sheet)
   const level = characterLevel(sheet)
@@ -202,6 +203,23 @@ export function CharacterSheet({ sheet, set, roll }: { sheet: Sheet; set?: (patc
           : features('traits').map((f, i) => <p key={i}><b><i>{f.name}.</i></b> {f.text}</p>)}
       </section>
 
+      {rules.sheetFields.length > 0 && (
+        <section className="cs-extra" aria-label={`Extras of ${rules.name}`}>
+          <h4>{rules.name}</h4>
+          <div className="cs-line">
+            {rules.sheetFields.map((f) => {
+              const v = sheet.custom?.[f.id]
+              return (
+                <label key={f.id} className="sv-mini">{f.label}
+                  {f.kind === 'check' ? <input type="checkbox" aria-label={f.label} disabled={!edit} checked={v === true} onChange={(e) => act({ [`custom.${f.id}`]: e.target.checked })} />
+                    : f.kind === 'number' ? (edit ? <Num label={f.label} value={typeof v === 'number' ? v : 0} min={-9999} max={99999} width={64} onChange={(n) => act({ [`custom.${f.id}`]: n })} /> : <b>{typeof v === 'number' ? v : 0}</b>)
+                    : (edit ? <Txt value={typeof v === 'string' ? v : ''} label={f.label} placeholder={f.label} onChange={(t) => act({ [`custom.${f.id}`]: t })} /> : <b>{typeof v === 'string' ? v : ''}</b>)}
+                </label>
+              )
+            })}
+          </div>
+        </section>
+      )}
       <section className="cs-gear" aria-label="Equipment">
         <h4>Equipment</h4>
         <ul className="cs-items">

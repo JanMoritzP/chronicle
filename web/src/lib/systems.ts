@@ -6,6 +6,7 @@ import type { RuleSystem } from '../types'
 
 export type AbilityKey = 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha'
 export const ABILITY_KEYS: AbilityKey[] = ['str', 'dex', 'con', 'int', 'wis', 'cha']
+export interface SheetField { id: string; label: string; kind: 'number' | 'text' | 'check' }
 export interface AbilityName { name: string; short: string }
 
 export interface PackData {
@@ -16,6 +17,7 @@ export interface PackData {
   damageTypes?: string[]
   initiative?: string
   grid?: { unit: string; dist: number; type: 'square' | 'hex-row' | 'hex-col' | 'none' }
+  sheetFields?: SheetField[]
   content?: { rollTables?: { name: string; entries: string; secret?: boolean }[]; decks?: { name: string; cards: string }[]; macros?: { name: string; text: string }[] }
 }
 
@@ -42,6 +44,8 @@ export interface Rules {
   abilities: Record<AbilityKey, AbilityName>
   conditions: string[]; damageTypes: string[]; initiative: string
   grid: NonNullable<PackData['grid']>
+  /** extra fields the pack adds to a character sheet */
+  sheetFields: SheetField[]
   /** the installed pack in use, if any */
   pack: PackData | null
 }
@@ -56,6 +60,7 @@ export function resolveRules(system: RuleSystem, pack: PackData | null): Rules {
     damageTypes: pack?.damageTypes?.length ? pack.damageTypes.map((t) => t.toLowerCase()) : b.damageTypes!,
     initiative: pack?.initiative ?? b.initiative!,
     grid: pack?.grid ?? b.grid!,
+    sheetFields: pack?.sheetFields ?? [],
   }
 }
 
