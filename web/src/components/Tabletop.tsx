@@ -99,7 +99,7 @@ export function TableView() {
       }
       const viewer = () => {
         const s = useTable.getState()
-        e.setViewer({ id: s.you?.id ?? '', gm: s.role === 'gm', spectator: s.role === 'spectator', canDoors: s.role === 'player' && s.settings.playersOpenDoors })
+        e.setViewer({ shared: s.settings.sharedVision, id: s.you?.id ?? '', gm: s.role === 'gm', spectator: s.role === 'spectator', canDoors: s.role === 'player' && s.settings.playersOpenDoors })
       }
       viewer()
       push()
@@ -115,7 +115,7 @@ export function TableView() {
       const turn = () => { const s = useTable.getState(); e.setTurn(s.combat.active ? s.combat.list.find((x) => x.id === s.combat.turn)?.tokenId ?? null : null) }
       turn()
       const unsub = useTable.subscribe((s, prev) => {
-        if (s.role !== prev.role || s.you !== prev.you || s.settings.playersOpenDoors !== prev.settings.playersOpenDoors) viewer()
+        if (s.role !== prev.role || s.you !== prev.you || s.settings.playersOpenDoors !== prev.settings.playersOpenDoors || s.settings.sharedVision !== prev.settings.sharedVision) viewer()
         if (s.scenes !== prev.scenes || s.sceneId !== prev.sceneId) push()
         if (s.combat !== prev.combat || s.tokens !== prev.tokens) turn()
         if (s.drawings !== prev.drawings) e.setDrawings(s.drawings)
@@ -128,7 +128,7 @@ export function TableView() {
         if (s.selected !== prev.selected) e.setSelected(s.selected)
         if (s.cursors !== prev.cursors || s.rulers !== prev.rulers) e.setOthers(s.cursors, s.rulers)
       })
-      const unmsg = onTableMessage((m) => { if (m.t === 'ping') e.ping({ x: m.x, y: m.y }, m.user); if (m.t === 'fog.reset') e.setExplored(null) })
+      const unmsg = onTableMessage((m) => { if (m.t === 'ping') e.ping({ x: m.x, y: m.y }, m.user); if (m.t === 'camera') e.setView({ x: m.x, y: m.y, w: m.w, h: m.h }); if (m.t === 'fog.reset') e.setExplored(null) })
       off = () => { unsub(); unmsg() }
     })
     return () => { off(); e.destroy(); engine.current = null }
@@ -145,6 +145,11 @@ export function TableView() {
   const [wallKind, setWallKind] = useState<'wall' | 'door' | 'secret' | 'window'>('wall')
   // the GM can look at the scene as a player (or one token) sees it: fog, darkness, secret doors and hidden tokens, without a decoy account
   const [previewKey, setPreviewKey] = useState('')
+  // views the GM wants to come back to (a room, the stairs): kept in this browser, per scene
+  const viewsKey = `tt-views:${sceneId ?? ''}`
+  const [views, setViews] = useState<{ name: string; x: number; y: number; w: number; h: number }[]>([])
+  useEffect(() => { try { setViews(JSON.parse(localStorage.getItem(viewsKey) ?? '[]')) } catch { setViews([]) } }, [viewsKey])
+  const keepViews = (v: typeof views) => { setViews(v); try { localStorage.setItem(viewsKey, JSON.stringify(v)) } catch { /* private window */ } }
   const people = useTable((s) => s.members)
   const sceneTokens = useTable((s) => s.tokens)
   const previewOptions = useMemo(() => {
@@ -172,6 +177,7 @@ export function TableView() {
     const sel = st.tokens.filter((t) => st.selected.includes(t.id))
     if (e.key === 'Enter' && tool === 'wall') engine.current?.finishWalls()
     else if (e.key === 'Escape') { engine.current?.finishWalls(); useTable.setState({ selected: [] }); setTool('select') }
+    else if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z') && !e.shiftKey) { e.preventDefault(); engine.current?.undoMove() }
     else if (e.key === 'f' || e.key === 'F') engine.current?.fit()
     else if (e.key === 'r' && !e.ctrlKey && sel.length) for (const t of sel) sendTable({ t: 'token.update', id: t.id, patch: { rotation: (t.rotation + 45) % 360 } })
     else if (gm && (e.key === 'Delete' || e.key === 'Backspace') && st.selectedTile && !sel.length) { e.preventDefault(); sendTable({ t: 'tile.delete', ids: [st.selectedTile] }) }
@@ -245,6 +251,24 @@ export function TableView() {
             {previewOptions.players.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
             {previewOptions.tokens.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
           </Select>
+        )}
+        {role === 'gm' && scene && (
+          <>
+            <button className="btn sm" title="Show everyone on this scene the part of it you are looking at" onClick={() => { const v = engine.current?.getView(); if (v) sendTable({ t: 'camera.pull', x: v.x, y: v.y, w: v.w, h: v.h }) }}>Bring everyone here</button>
+            <Select className="input tt-preview" value="" title="Saved views" onChange={async (v) => {
+              if (v === '*save') {
+                const name = await askText('Save this view', { label: 'Name', placeholder: 'The stairs', okLabel: 'Save' })
+                const view = engine.current?.getView()
+                if (name?.trim() && view) keepViews([...views.filter((x) => x.name !== name.trim()), { name: name.trim(), ...view }])
+              } else if (v.startsWith('x:')) keepViews(views.filter((x) => x.name !== v.slice(2)))
+              else { const hit = views.find((x) => x.name === v); if (hit) engine.current?.setView(hit) }
+            }}>
+              <option value="">Views</option>
+              {views.map((x) => <option key={x.name} value={x.name}>{x.name}</option>)}
+              <option value="*save">Save this view…</option>
+              {views.map((x) => <option key={`x${x.name}`} value={`x:${x.name}`}>Forget {x.name}</option>)}
+            </Select>
+          </>
         )}
         {previewing && <button className="btn sm primary" aria-label="Leave the preview" onClick={() => setPreviewKey('')}><Eye size={13} /> Preview: {previewing.label.replace(/^(As|Through) /, '')}</button>}
         {scene && canAdd && <button className="btn sm" onClick={addToken}><UserPlus size={13} /> Token</button>}
@@ -448,6 +472,7 @@ function TablePanel() {
     ['playersPing', 'Players ping the map'],
     ['playersRuler', 'Players share their ruler'],
     ['showCursors', 'Show everyone’s pointer'],
+    ['sharedVision', 'Players see through each other’s tokens'],
   ] as const, [])
   return (
     <div className="tt-form">

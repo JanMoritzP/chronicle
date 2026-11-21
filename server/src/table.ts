@@ -107,7 +107,7 @@ function sightFor(c: Conn, sceneId: string | null): Sight | null {
     .filter((w) => w.kind === 'wall' || w.kind === 'secret' || (w.kind === 'door' && !w.open))
   const tokens = (db.prepare('SELECT id, x, y, owners, data FROM tokens WHERE scene_id = ?').all(sceneId) as { id: string; x: number; y: number; owners: string; data: string }[])
     .map((t): SightToken => ({ id: t.id, x: t.x, y: t.y, owners: parse<string[]>(t.owners, []), data: parse<SightToken['data']>(t.data, {}) }))
-  return buildSight({ width: sc.width, height: sc.height, gridSize: sc.grid_size, dist: sc.dist, fog: !!sc.fog, darkness: sc.darkness }, walls, tokens, c.user.id)
+  return buildSight({ width: sc.width, height: sc.height, gridSize: sc.grid_size, dist: sc.dist, fog: !!sc.fog, darkness: sc.darkness }, walls, tokens, c.user.id, stateOf(c.ws).settings.sharedVision)
 }
 
 /** May this connection be told about the token: allowed to see it at all (hidden ones), and in sight where there is fog. */
@@ -1106,6 +1106,8 @@ async function handle(c: Conn, m: ClientMessage) {
         send(x, { t: 'settings', settings: next, you: { id: x.user.id, username: x.user.username, role: x.role } })
         // someone who stopped running the table goes back to the table's scene
         if (x.role !== 'gm' && x.scene !== stateOf(ws).active) { viewFor(x, null); sendView(x) }
+        // what people see may have changed with shared vision
+        if (x.role === 'player' && x.scene) scheduleSight(ws, x.scene)
         // a person who became a player (or stopped being one) is told again what they may see
         else if (x.role !== was) sendView(x)
       }
@@ -1118,6 +1120,10 @@ async function handle(c: Conn, m: ClientMessage) {
     case 'ping': {
       if (!canPing(c.role, settings)) return
       return sameScene(c, () => true, { t: 'ping', user: c.user.id, name: c.user.username, x: m.x, y: m.y })
+    }
+    case 'camera.pull': {
+      if (!gm) return nack(c, m, 'only the GM can do that')
+      return sameScene(c, (x) => x !== c, { t: 'camera', x: m.x, y: m.y, w: m.w, h: m.h })
     }
     case 'ruler': {
       if (!canRuler(c.role, settings)) return

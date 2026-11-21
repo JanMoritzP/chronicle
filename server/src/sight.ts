@@ -17,11 +17,12 @@ export interface Sight { mine: Set<string>; seen: Pt[][]; lit: Pt[][]; dark: boo
 export const foggy = (s: Pick<SightScene, 'fog' | 'darkness'>) => s.fog || s.darkness > 0
 
 /** The view of the person with this account, or null when nothing needs hiding (no fog and no darkness). */
-export function buildSight(scene: SightScene, walls: Seg[], tokens: SightToken[], userId: string): Sight | null {
+export function buildSight(scene: SightScene, walls: Seg[], tokens: SightToken[], userId: string, shared = false): Sight | null {
   if (!foggy(scene)) return null
   const px = (units: number) => (units / scene.dist) * scene.gridSize
   const bounds = { x: 0, y: 0, w: scene.width, h: scene.height }
-  const mine = tokens.filter((t) => t.owners.includes(userId))
+  // with shared vision the party sees through every token that belongs to a player
+  const mine = tokens.filter((t) => (shared ? t.owners.length > 0 : t.owners.includes(userId)))
   const seen = mine.map((t) => visibility(t, walls, bounds, t.data.vision?.sight == null ? Infinity : px(t.data.vision.sight)))
   const lit: Pt[][] = []
   const dark = scene.darkness > 0.02
@@ -47,7 +48,7 @@ export function canSee(sight: Sight | null, t: Pick<SightToken, 'id' | 'x' | 'y'
 }
 
 /** The ids of the tokens a player may be told about, or null when everything may be sent. */
-export function visibleTokens(scene: SightScene, walls: Seg[], tokens: SightToken[], userId: string): Set<string> | null {
-  const sight = buildSight(scene, walls, tokens, userId)
+export function visibleTokens(scene: SightScene, walls: Seg[], tokens: SightToken[], userId: string, shared = false): Set<string> | null {
+  const sight = buildSight(scene, walls, tokens, userId, shared)
   return sight ? new Set(tokens.filter((t) => canSee(sight, t)).map((t) => t.id)) : null
 }

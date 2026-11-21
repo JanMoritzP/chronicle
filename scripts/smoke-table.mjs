@@ -701,6 +701,14 @@ gm.send({ t: 'deck.delete', id: fate.id })
 await sleep(250)
 check('a deck can be deleted', decksOf(pa).length === 0)
 
+// the GM brings everyone to look at one place
+n = pa.mark()
+gm.send({ t: 'camera.pull', x: 100, y: 200, w: 800, h: 600 })
+await sleep(250)
+check('the GM can bring the players to a part of the scene', pa.since(n, (m) => m.t === 'camera' && m.x === 100 && m.w === 800).length === 1)
+pa.send({ t: 'camera.pull', x: 0, y: 0, w: 10, h: 10, op: 'cam' })
+check('a player cannot', !!(await pa.until((m) => m.t === 'nack' && m.op === 'cam')))
+
 // tiles and templates
 const tilePng = await sharp({ create: { width: 300, height: 150, channels: 3, background: '#a52' } }).png().toBuffer()
 const tileUpload = async (cookie, world) => {

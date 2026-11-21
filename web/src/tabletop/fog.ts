@@ -31,6 +31,8 @@ export class FogLayer {
   private e?: RenderTexture
   private o?: RenderTexture
   private out?: Sprite
+  /** the colour of coloured lights, under the darkness so unseen places stay dark */
+  private tint = new Graphics()
   private queued = false
   private seen: Pt[][] = []
   private lit: Pt[][] = []
@@ -60,6 +62,7 @@ export class FogLayer {
     this.out?.destroy()
     this.out = undefined
     this.view.removeChildren()
+    this.tint.clear()
   }
 
   private rebuild() {
@@ -73,7 +76,7 @@ export class FogLayer {
     this.v = make(); this.d = make(); this.r = make(); this.e = make(); this.o = make()
     this.out = new Sprite(this.o)
     this.out.scale.set(1 / this.k)
-    this.view.addChild(this.out)
+    this.view.addChild(this.tint, this.out)
   }
 
   setWalls(walls: Wall[]) { this.walls = walls; this.update() }
@@ -123,6 +126,16 @@ export class FogLayer {
     const segs: Seg[] = this.walls.filter(blocksSight)
     const flat = (poly: Pt[]) => poly.flatMap((p) => [p.x * k, p.y * k])
     const clear = { r: 0, g: 0, b: 0, a: 0 }
+
+    // coloured lights tint what they reach
+    this.tint.clear()
+    for (const l of this.lights) {
+      if (!l.color) continue
+      const reach = this.px(Math.max(l.dim ?? 0, l.bright ?? 0))
+      if (reach <= 0) continue
+      const poly = visibility(l, segs, bounds, reach)
+      if (poly.length > 2) this.tint.poly(poly.flatMap((p) => [p.x, p.y])).fill({ color: Number.parseInt(l.color.length === 4 ? l.color.slice(1).replace(/./g, (c) => c + c) : l.color.slice(1, 7), 16) || 0xffffff, alpha: 0.22 })
+    }
 
     // what the players' tokens see
     this.seen = this.viewers.map((vw) => visibility(vw, segs, bounds, vw.sight == null ? Infinity : this.px(vw.sight)))

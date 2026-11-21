@@ -460,6 +460,12 @@ areas:
       - id: pf2e.actions
         name: "Pathfinder 2e: three actions a turn, back at the start of the turn"
         files: [web/src/components/TableParts.tsx, server/src/combat.ts]
+      - id: table.views
+        name: "Saved views of the map, and bringing everyone to look at a place"
+        files: [web/src/components/Tabletop.tsx, web/src/tabletop/engine.ts]
+      - id: table.light-colour
+        name: "Coloured lights, roofs that fade over the viewer, and shared vision"
+        files: [web/src/tabletop/fog.ts, web/src/tabletop/engine.ts, server/src/sight.ts]
       - id: table.fog
         name: "Fog of war and darkness are switched on per scene and kept"
         files: [web/src/components/Tabletop.tsx]

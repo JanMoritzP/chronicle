@@ -312,6 +312,10 @@ export function SightLight({ token }: { token: Token }) {
       <div className="tt-row">
         {field('Bright light', light.bright ?? 0, (n) => save('light', { ...light, bright: n ?? 0 }))}
         {field('Dim light', light.dim ?? 0, (n) => save('light', { ...light, dim: n ?? 0 }))}
+        <label>Colour
+          <input className="tt-color" type="color" aria-label="Light colour" value={/^#[0-9a-fA-F]{6}$/.test(light.color ?? '') ? light.color : '#ffd9a0'} onChange={(e) => save('light', { ...light, color: e.target.value })} />
+        </label>
+        {light.color && <button className="btn sm" onClick={() => { const { color: _c, ...rest } = light; save('light', rest) }}>No colour</button>}
       </div>
     </div>
   )

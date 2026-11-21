@@ -90,7 +90,8 @@ export class TableEngine {
   private explored: string | null = null
   /** Does this person see everything? False for players, and for a GM who is previewing. */
   private get gmView() { return this.me.gm && !this.preview }
-  private isViewer(t: Token) { const p = this.preview; return p ? p.tokens.includes(t.id) || t.owners.some((o) => p.users.includes(o)) : t.owners.includes(this.me.id) }
+  private shared = false
+  private isViewer(t: Token) { const p = this.preview; return p ? p.tokens.includes(t.id) || t.owners.some((o) => p.users.includes(o)) : this.shared ? t.owners.length > 0 : t.owners.includes(this.me.id) }
   private drag: null | { kind: 'pan' | 'tokens' | 'ruler' | 'marquee' | 'draw' | 'tile' | 'wallend'; start: Pt; screen: Pt; origins?: Map<string, Pt>; lead?: string; moved: boolean; sent: number; /** wall ends that move together, and where they went */ ends?: { id: string; end: 1 | 2 }[]; to?: Pt } = null
   private pointers = new Map<number, Pt>()
   private pinch: null | { dist: number; scale: number } = null
@@ -310,9 +311,27 @@ export class TableEngine {
     v.box.addChild(g)
   }
 
+  /** A roof (an overhead tile) fades away over the tokens of the person looking, so they can see what is inside. The GM's own view keeps it. */
+  private updateRoofs() {
+    if (!this.ready) return
+    const viewers = this.gmView ? [] : [...this.tokens.values()].filter((t) => this.isViewer(t))
+    for (const t of this.tiles) {
+      if (t.layer !== 'overhead') continue
+      const box = this.tileBoxes.get(t.id)
+      if (!box) continue
+      const a = (t.rotation * Math.PI) / 180, cos = Math.cos(-a), sin = Math.sin(-a)
+      const under = viewers.some((v) => {
+        const dx = v.x - t.x, dy = v.y - t.y
+        return Math.abs(dx * cos - dy * sin) <= t.w / 2 && Math.abs(dx * sin + dy * cos) <= t.h / 2
+      })
+      box.alpha = under ? 0.12 : t.hidden ? 0.5 : 1
+    }
+  }
+
   private layout(v: TokenView) {
     const t = v.token
     v.box.position.set(t.x, t.y)
+    queueMicrotask(() => this.updateRoofs())
     v.box.rotation = 0
     v.box.alpha = t.hidden ? 0.45 : 1
     // the picture turns with the token; the name stays upright
@@ -331,7 +350,8 @@ export class TableEngine {
   }
 
   /** Who is looking: the GM sees everything, a player sees what their own tokens see. */
-  setViewer(me: { id: string; gm: boolean; spectator: boolean; canDoors: boolean }) { this.poke();
+  setViewer(me: { id: string; gm: boolean; spectator: boolean; canDoors: boolean; shared?: boolean }) { this.poke();
+    this.shared = !!me.shared
     this.me = { id: me.id, gm: me.gm || me.spectator, canDoors: me.canDoors || me.gm }
     if (!this.ready) return
     this.fog.configure(this.scene, !this.gmView)
@@ -380,6 +400,7 @@ export class TableEngine {
       this.tileBoxes.set(t.id, box)
     }
     this.drawTileSel()
+    this.updateRoofs()
   }
 
   setSelectedTile(id: string | null) { this.poke(); this.selectedTile = id; this.drawTileSel() }
@@ -507,6 +528,7 @@ export class TableEngine {
 
   /** Tokens that give their owner sight, and who is hidden by the dark. */
   private refreshVision() {
+    this.updateRoofs()
     if (!this.ready || this.gmView) {
       for (const v of this.views.values()) v.box.visible = true
       return
@@ -533,6 +555,9 @@ export class TableEngine {
     if (p.length < 2) return
     this.hooks.onWallAdd(p.slice(1).map((q, i) => ({ x1: p[i].x, y1: p[i].y, x2: q.x, y2: q.y, kind: this.wallKind })))
   }
+
+  /** The corners of a ruler that is being carried around corners (Shift). */
+  private rulerBase: Pt[] = []
 
   private snapWall(p: Pt): Pt {
     const k = this.world.scale.x
@@ -578,7 +603,7 @@ export class TableEngine {
     }
   }
 
-  setTool(tool: Tool) { this.poke(); this.tool = tool; this.wallPoly = []; this.wallPreview.clear(); this.drawWalls(); if (this.ready) this.app.canvas.style.cursor = tool === 'ruler' ? 'crosshair' : '' }
+  setTool(tool: Tool) { this.poke(); this.tool = tool; this.rulerBase = []; this.wallPoly = []; this.wallPreview.clear(); this.drawWalls(); if (this.ready) this.app.canvas.style.cursor = tool === 'ruler' ? 'crosshair' : '' }
 
   setOthers(cursors: Record<string, Cursor>, rulers: Record<string, Ruler>) { this.poke();
     if (!this.ready) return
@@ -619,6 +644,21 @@ export class TableEngine {
 
   centre(): Pt {
     return this.toWorld({ x: (this.host.clientWidth || 0) / 2, y: (this.host.clientHeight || 0) / 2 })
+  }
+
+  /** The part of the scene on screen, as a rectangle in scene coordinates. */
+  getView(): { x: number; y: number; w: number; h: number } {
+    const a = this.toWorld({ x: 0, y: 0 }), b = this.toWorld({ x: this.host.clientWidth || 0, y: this.host.clientHeight || 0 })
+    return { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y }
+  }
+
+  /** Shows this rectangle of the scene, as large as it fits. */
+  setView(v: { x: number; y: number; w: number; h: number }) { this.poke();
+    const W = this.host.clientWidth, H = this.host.clientHeight
+    if (!this.ready || !W || !H || v.w <= 0 || v.h <= 0) return
+    const k = Math.min(4, Math.max(0.05, Math.min(W / v.w, H / v.h)))
+    this.world.scale.set(k)
+    this.world.position.set(W / 2 - (v.x + v.w / 2) * k, H / 2 - (v.y + v.h / 2) * k)
   }
 
   centreOn(p: Pt) { this.poke();
@@ -722,7 +762,10 @@ export class TableEngine {
       if (door) { this.hooks.onDoor(door.id); return }
     }
     if (this.tool === 'ruler' && !pan) {
-      this.drag = { kind: 'ruler', start: world, screen, moved: false, sent: 0 }
+      // holding Shift keeps the measured part and carries on from where it ended, around corners
+      const from = e.shiftKey && this.rulerBase.length ? this.rulerBase[this.rulerBase.length - 1] : this.scene ? snapPoint(world, this.scene) : world
+      if (!(e.shiftKey && this.rulerBase.length)) this.rulerBase = [from]
+      this.drag = { kind: 'ruler', start: from, screen, moved: false, sent: 0 }
       return
     }
     if (tok) {
@@ -797,7 +840,7 @@ export class TableEngine {
         break
       }
       case 'ruler': {
-        const path = [d.start, this.scene ? snapPoint(world, this.scene) : world]
+        const path = [...this.rulerBase.slice(0, -1), d.start, this.scene ? snapPoint(world, this.scene) : world]
         this.drawRuler(path, 0xffd23f, null)
         if (now - d.sent > 70) { d.sent = now; this.hooks.onRuler(path) }
         break
@@ -840,6 +883,18 @@ export class TableEngine {
     }
   }
 
+  /** What a person's own last drags moved, newest last, so Ctrl+Z can put them back. */
+  private undo: { id: string; x: number; y: number }[][] = []
+
+  /** Puts the tokens of the last move back where they were. Returns false when there is nothing to undo. */
+  undoMove(): boolean {
+    const last = this.undo.pop()
+    if (!last) return false
+    const back = last.filter((m) => this.hooks.canMove(this.tokens.get(m.id)!))
+    if (back.length) this.hooks.onMove(back)
+    return back.length > 0
+  }
+
   private flushMove(d: NonNullable<TableEngine['drag']>, final: boolean) {
     const moves: { id: string; x: number; y: number }[] = []
     for (const id of d.origins!.keys()) {
@@ -857,8 +912,16 @@ export class TableEngine {
     if (this.pointers.size < 2) this.pinch = null
     const d = this.drag
     if (!d) return
-    if (d.kind === 'tokens' && d.moved) this.flushMove(d, true)
-    if (d.kind === 'tokens' || d.kind === 'ruler') { this.ruleG.clear(); this.ruleLabel.visible = false; if (d.moved) this.hooks.onRuler(null) }
+    if (d.kind === 'tokens' && d.moved) {
+      this.undo.push([...d.origins!].map(([id, o]) => ({ id, x: o.x, y: o.y })))
+      if (this.undo.length > 30) this.undo.shift()
+      this.flushMove(d, true)
+    }
+    if (d.kind === 'ruler' && d.moved && e.shiftKey) {
+      // keep what was measured on screen and wait for the next leg
+      const end = this.scene ? snapPoint(this.toWorld(this.local(e)), this.scene) : this.toWorld(this.local(e))
+      this.rulerBase = [...this.rulerBase, end]
+    } else if (d.kind === 'tokens' || d.kind === 'ruler') { if (d.kind === 'ruler') this.rulerBase = []; this.ruleG.clear(); this.ruleLabel.visible = false; if (d.moved) this.hooks.onRuler(null) }
     // a click on the end of a wall, without dragging, starts a new wall from that point as before
     if (d.kind === 'wallend' && !d.moved) this.wallPoly.push(d.start)
     if (d.kind === 'wallend' && d.moved && d.to) {

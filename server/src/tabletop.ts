@@ -19,13 +19,15 @@ export const settingsSchema = z.object({
   playersRuler: z.boolean().default(true),
   /** Players see each other's cursors. */
   showCursors: z.boolean().default(true),
+  /** Players see through each other's tokens (a party that looks out for each other). */
+  sharedVision: z.boolean().default(false),
   /** Rules the table applies for the GM. All off until switched on, so a table plays fully by hand out of the box. */
   automation: z.object({ damage: z.boolean().default(false), concentration: z.boolean().default(false), deathSaves: z.boolean().default(false), attacks: z.boolean().default(false) }).default({ damage: false, concentration: false, deathSaves: false, attacks: false }),
 })
 /** A change to the settings: only the keys that are present (a partial of the schema above would fill the defaults back in). */
 export const settingsPatch = z.object({
   gms: z.array(z.string().max(64)).max(20),
-  playersMoveOwn: z.boolean(), playersCreateTokens: z.boolean(), playersEditOwnStats: z.boolean(), playersOpenDoors: z.boolean(), playersDraw: z.boolean(), playersPing: z.boolean(), playersRuler: z.boolean(), showCursors: z.boolean(),
+  playersMoveOwn: z.boolean(), playersCreateTokens: z.boolean(), playersEditOwnStats: z.boolean(), playersOpenDoors: z.boolean(), playersDraw: z.boolean(), playersPing: z.boolean(), playersRuler: z.boolean(), showCursors: z.boolean(), sharedVision: z.boolean(),
   automation: z.object({ damage: z.boolean(), concentration: z.boolean(), deathSaves: z.boolean(), attacks: z.boolean() }),
 }).partial().strict()
 export type TableSettings = z.infer<typeof settingsSchema>
@@ -203,6 +205,8 @@ export const clientMessage = z.discriminatedUnion('t', [
   z.object({ t: z.literal('tile.delete'), ids: z.array(id).min(1).max(100) }),
   z.object({ t: z.literal('cursor'), x: coord, y: coord }),
   z.object({ t: z.literal('ping'), x: coord, y: coord }),
+  /** the GM brings everyone on the scene to look at this part of it */
+  z.object({ t: z.literal('camera.pull'), x: coord, y: coord, w: z.number().min(1).max(100000), h: z.number().min(1).max(100000) }),
   z.object({ t: z.literal('ruler'), points: z.array(point).max(50).nullable() }),
 ]).and(z.object({ op: id.optional() }))
 export type ClientMessage = z.infer<typeof clientMessage>
