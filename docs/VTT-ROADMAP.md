@@ -285,7 +285,7 @@ Rules that apply: migrations append only; backup restore, export and copy get up
 
 Spatial sound (sound that fades with distance) is cut. Arbitrary GM scripts stay out on purpose. Everything else not built yet is numbered here and done in this order.
 
-1. **Rules at the table.** Opportunity attacks (done). Drag ruler with movement cost (done) and difficult terrain (not yet). Roll templates (attack and spell cards). Subclass and feat choices on level up.
+1. **Rules at the table.** Opportunity attacks (done). Drag ruler with movement cost (done). Roll templates (done). Subclass and feat choices on level up.
 2. **Map and light.** User-defined layers. Light angle (cones). Light through windows. Night vision tint. Terrain walls.
 3. **Sheets.** Sheet designer and custom-sheet packs. Compendium drag onto a sheet. Containers for inventory. Magic item effects beyond armor class. Light sources as inventory items.
 4. **More systems.** Further rule systems after D&D 5e, 2024 and Pathfinder 2e. Pathfinder spell lists and importing. 2024 species and backgrounds.
@@ -293,3 +293,4 @@ Spatial sound (sound that fades with distance) is cut. Arbitrary GM scripts stay
 6. **Time and places.** Time of day tied to the calendar. Levels and stairs. Animated backgrounds.
 7. **Map editor extras.** Freehand caves, diagonal walls, windows and secret doors, picture props, procedural dungeons.
 8. **People.** Voice and video. E-mail invites. 3D dice.
+9. **Far back.** Difficult terrain that costs double movement on the drag ruler.
