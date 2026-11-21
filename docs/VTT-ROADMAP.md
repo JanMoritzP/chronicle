@@ -289,7 +289,7 @@ Spatial sound (sound that fades with distance) is cut. Arbitrary GM scripts stay
 2. **Map and light.** User-defined layers (done, for tiles). Light angle (cones, done). Light through windows (already worked). Night vision tint (done). Terrain walls (done).
 3. **Sheets.** Custom sheet fields from packs (done; a layout designer is not). Compendium onto a sheet (done, as a search box). Containers for inventory (done). Magic item effects beyond armor class (done: saves and spells). Light sources as inventory items (done).
 4. **More systems.** Further rule systems after D&D 5e, 2024 and Pathfinder 2e. Pathfinder importing (done, from Pathbuilder; spell lists come across as text). 2024 species and backgrounds (done, from the library).
-5. **Table comfort.** Rebindable table shortcuts (done, for the single keys). Dragging macros from chat and sheets. Linking chat to session notes. Playlists. "See through" tokens (done, as shared sight per token). Fog update on drop and performance modes. Performance measurement.
+5. **Table comfort.** Rebindable table shortcuts (done, for the single keys). Macros from chat (done, as a Save as macro button; sheets not). Linking chat to session notes. Playlists (done). "See through" tokens (done, as shared sight per token). Fog update on drop and performance modes. Performance measurement.
 6. **Time and places.** Time of day tied to the calendar. Levels and stairs. Animated backgrounds.
 7. **Map editor extras.** Freehand caves, diagonal walls, windows and secret doors, picture props, procedural dungeons.
 8. **People.** Voice and video. E-mail invites. 3D dice.

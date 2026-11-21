@@ -251,6 +251,9 @@ export const clientMessage = z.discriminatedUnion('t', [
   z.object({ t: z.literal('jukebox.scene'), id, scene: id.nullable() }),
   z.object({ t: z.literal('jukebox.remove'), id }),
   z.object({ t: z.literal('jukebox.play'), id }),
+  /** play a playlist from its first track, and the next track when one ends */
+  z.object({ t: z.literal('jukebox.playlist'), name: z.string().min(1).max(60) }),
+  z.object({ t: z.literal('jukebox.next'), id }),
   z.object({ t: z.literal('jukebox.stop'), id: z.union([id, z.literal('all')]) }),
   z.object({
     t: z.literal('trigger.save'), id: id.optional(), name: z.string().trim().min(1).max(60), scene: id.nullable(),

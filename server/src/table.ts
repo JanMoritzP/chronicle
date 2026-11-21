@@ -355,6 +355,10 @@ const readyChecks = new Map<string, Map<string, boolean>>()
 const readyState = (ws: string) => { const r = readyChecks.get(ws); return r ? { answers: Object.fromEntries(r) } : null }
 function sendReady(ws: string) { const check = readyState(ws); for (const c of inWorld(ws)) send(c, { t: 'ready', check }) }
 
+/** The tracks of a playlist in the order they were added: a track named "Tavern/Fiddle" is in the playlist Tavern. */
+function playlistOf(ws: string, name: string) {
+  return (db.prepare('SELECT id, name FROM tracks WHERE workspace_id = ? ORDER BY created_at').all(ws) as { id: string; name: string }[]).filter((t) => t.name.includes('/') && t.name.split('/')[0].trim().toLowerCase() === name.trim().toLowerCase())
+}
 interface TrackDb { id: string; name: string; upload_id: string; loop: number; scene_id: string | null }
 function jukeboxFor(ws: string) {
   const rows = db.prepare('SELECT id, name, upload_id, loop, scene_id FROM tracks WHERE workspace_id = ? ORDER BY created_at').all(ws) as TrackDb[]
@@ -1038,6 +1042,29 @@ async function handle(c: Conn, m: ClientMessage) {
       if (!db.prepare('SELECT 1 FROM tracks WHERE id = ? AND workspace_id = ?').get(m.id, ws)) return nack(c, m, 'no such track')
       if (!playing.has(ws)) playing.set(ws, new Set())
       playing.get(ws)!.add(m.id)
+      return sendJukebox(ws)
+    }
+    case 'jukebox.playlist': {
+      if (!gm) return nack(c, m, 'only the GM can do that')
+      const list = playlistOf(ws, m.name)
+      if (!list.length) return nack(c, m, 'no such playlist')
+      const on = playing.get(ws) ?? new Set<string>()
+      for (const t of list) on.delete(t.id)
+      on.add(list[0].id)
+      playing.set(ws, on)
+      return sendJukebox(ws)
+    }
+    case 'jukebox.next': {
+      if (!gm) return nack(c, m, 'only the GM can do that')
+      const t = db.prepare('SELECT name FROM tracks WHERE id = ? AND workspace_id = ?').get(m.id, ws) as { name: string } | undefined
+      if (!t || !t.name.includes('/')) return
+      const list = playlistOf(ws, t.name.split('/')[0].trim())
+      const at = list.findIndex((x) => x.id === m.id)
+      const on = playing.get(ws)
+      // the next track of the playlist plays when one ends, and the first comes round again after the last; only while that track was playing
+      if (!on?.has(m.id) || list.length < 2) return
+      on.delete(m.id)
+      on.add(list[(at + 1) % list.length].id)
       return sendJukebox(ws)
     }
     case 'jukebox.stop': {

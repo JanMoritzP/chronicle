@@ -29,7 +29,7 @@ export function AudioPlayer() {
       const el = new Audio(t.url)
       el.loop = t.loop
       el.volume = muted ? 0 : volume
-      el.onended = () => map.delete(id)
+      el.onended = () => { map.delete(id); if (useTable.getState().role === 'gm' && t.name.includes('/')) sendTable({ t: 'jukebox.next', id }) }
       map.set(id, el)
       el.play().then(() => setBlocked(false)).catch(() => setBlocked(true))
     }
@@ -65,39 +65,53 @@ export function Jukebox() {
     const url = await askText('Play a stream', { label: 'Address of the sound (https)', placeholder: 'https://example.com/tavern.ogg', okLabel: 'Next' })
     if (!url?.trim()) return
     if (!/^https:\/\/[^\s]{4,280}$/.test(url.trim())) { await alertDialog('The address must start with https:// and point at a sound file or stream.'); return }
-    const name = await askText('Name this track', { label: 'Name', okLabel: 'Add' })
+    const name = await askText('Name this track', { label: 'Name (Playlist/Track puts it in a playlist)', okLabel: 'Add' })
     if (name?.trim()) sendTable({ t: 'jukebox.add', name: name.trim(), url: url.trim(), loop: false })
   }
   const add = async () => {
     const f = await pickSound()
     if (!f || !wsId) return
-    const name = await askText('Name this track', { label: 'Name', initial: f.name.replace(/\.[a-z0-9]+$/i, ''), okLabel: 'Add' })
+    const name = await askText('Name this track', { label: 'Name (Playlist/Track puts it in a playlist)', initial: f.name.replace(/\.[a-z0-9]+$/i, ''), okLabel: 'Add' })
     if (!name?.trim()) return
     const url = await uploadSound(wsId, f)
     if (url) sendTable({ t: 'jukebox.add', name: name.trim(), url, loop: /loop|ambient|rain|wind|tavern|forest|cave/i.test(name) })
+  }
+  const playlists = [...new Set(tracks.filter((t) => t.name.includes('/')).map((t) => t.name.split('/')[0].trim()))].filter(Boolean)
+  const track = (t: (typeof tracks)[number], shown: string) => {
+    const on = playing.includes(t.id)
+    return (
+      <li key={t.id}>
+        <span className="grow">{shown}{t.loop ? <small className="muted"> loops</small> : null}{on ? <small className="muted"> playing</small> : null}</span>
+        {gm && (
+          <Select className="input tt-type" value={t.scene ?? ''} title={`Scene for ${t.name}`} onChange={(v) => sendTable({ t: 'jukebox.scene', id: t.id, scene: v || null })}>
+            <option value="">Any scene</option>
+            {scenes.map((sc) => <option key={sc.id} value={sc.id}>{sc.name}</option>)}
+          </Select>
+        )}
+        {gm && (on
+          ? <button className="btn sm" aria-label={`Stop ${t.name}`} onClick={() => sendTable({ t: 'jukebox.stop', id: t.id })}><Square size={12} /></button>
+          : <button className="btn sm" aria-label={`Play ${t.name}`} onClick={() => sendTable({ t: 'jukebox.play', id: t.id })}><Play size={12} /></button>)}
+        {gm && <button className="btn ghost sm" aria-label={`Remove ${t.name}`} onClick={() => sendTable({ t: 'jukebox.remove', id: t.id })}><Trash2 size={12} /></button>}
+      </li>
+    )
   }
   return (
     <section aria-label="Jukebox">
       <b>Jukebox</b>
       <ul className="tt-people" aria-label="Tracks">
-        {tracks.map((t) => {
-          const on = playing.includes(t.id)
+        {tracks.filter((t) => !t.name.includes('/')).map((t) => track(t, t.name))}
+        {playlists.map((p) => {
+          const mine = tracks.filter((t) => t.name.includes('/') && t.name.split('/')[0].trim().toLowerCase() === p.toLowerCase())
+          const any = mine.some((t) => playing.includes(t.id))
           return (
-            <li key={t.id}>
-              <span className="grow">{t.name}{t.loop ? <small className="muted"> loops</small> : null}{on ? <small className="muted"> playing</small> : null}</span>
-              {gm && (
-                <Select className="input tt-type" value={t.scene ?? ''} title={`Scene for ${t.name}`} onChange={(v) => sendTable({ t: 'jukebox.scene', id: t.id, scene: v || null })}>
-                  <option value="">Any scene</option>
-                  {scenes.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </Select>
-              )}
-              {gm && (on
-                ? <button className="btn sm" aria-label={`Stop ${t.name}`} onClick={() => sendTable({ t: 'jukebox.stop', id: t.id })}><Square size={12} /></button>
-                : <button className="btn sm" aria-label={`Play ${t.name}`} onClick={() => sendTable({ t: 'jukebox.play', id: t.id })}><Play size={12} /></button>)}
-              {gm && <button className="btn ghost sm" aria-label={`Remove ${t.name}`} onClick={() => sendTable({ t: 'jukebox.remove', id: t.id })}><Trash2 size={12} /></button>}
+            <li key={`pl-${p}`} className="tt-playlist" aria-label={`Playlist ${p}`}>
+              <b className="grow">{p} <small className="muted">playlist of {mine.length}</small></b>
+              {gm && (any
+                ? <button className="btn sm" aria-label={`Stop the playlist ${p}`} onClick={() => { for (const t of mine) if (playing.includes(t.id)) sendTable({ t: 'jukebox.stop', id: t.id }) }}><Square size={12} /> Stop</button>
+                : <button className="btn sm" aria-label={`Play the playlist ${p}`} onClick={() => sendTable({ t: 'jukebox.playlist', name: p })}><Play size={12} /> Play all</button>)}
             </li>
           )
-        })}
+        }).flatMap((header, i) => [header, ...tracks.filter((t) => t.name.includes('/') && t.name.split('/')[0].trim().toLowerCase() === playlists[i].toLowerCase()).map((t) => track(t, t.name.slice(t.name.indexOf('/') + 1).trim()))])}
         {!tracks.length && <li className="muted">No tracks yet.</li>}
       </ul>
       {gm && (

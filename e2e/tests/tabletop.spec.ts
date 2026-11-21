@@ -1653,3 +1653,37 @@ test('the shortcut keys of the table can be changed', { tag: '@feature:table.key
   await app.getByRole('button', { name: /^Reset to F/ }).click()
   await expect(app.getByLabel('Fit the map to the screen')).toHaveValue('F')
 })
+
+test('a chat message can be kept as a macro', { tag: '@feature:table.chat-macro' }, async ({ app }) => {
+  await openTable(app)
+  await makeScene(app, 'Camp')
+  await app.locator('.tt-panel .seg').getByRole('button', { name: /Chat/ }).click()
+  await app.getByLabel('Chat message').fill('/roll 1d20+5 stealth')
+  await app.getByLabel('Chat message').press('Enter')
+  await expect(app.getByRole('list', { name: 'Chat' })).toContainText('stealth')
+  await app.getByRole('button', { name: 'Save this message as a macro' }).first().click()
+  await app.getByRole('dialog').getByRole('textbox').fill('Sneak')
+  await app.getByRole('dialog').locator('button[type=submit]').click()
+  await expect(app.getByRole('group', { name: 'Macros' }).getByRole('button', { name: 'Sneak', exact: true })).toBeVisible()
+  await expect(app.getByRole('group', { name: 'Macros' }).getByRole('button', { name: 'Sneak', exact: true })).toHaveAttribute('title', '/roll 1d20+5 stealth')
+})
+
+test('tracks named Playlist/Track make a playlist the GM plays all at once', { tag: '@feature:table.playlist' }, async ({ app }) => {
+  await openTable(app)
+  await makeScene(app, 'Inn')
+  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Tables and decks' }).click()
+  for (const [url, name] of [['https://example.com/fiddle.ogg', 'Tavern/Fiddle'], ['https://example.com/drum.ogg', 'Tavern/Drum']]) {
+    await app.getByRole('button', { name: 'Add a stream' }).click()
+    await app.getByRole('dialog').getByRole('textbox').fill(url)
+    await app.getByRole('dialog').locator('button[type=submit]').click()
+    await app.getByRole('dialog').getByRole('textbox').fill(name)
+    await app.getByRole('dialog').locator('button[type=submit]').click()
+  }
+  const list = app.getByRole('list', { name: 'Tracks' })
+  await expect(list.getByRole('listitem', { name: 'Playlist Tavern' })).toContainText('playlist of 2')
+  await expect(list).toContainText('Fiddle')
+  await app.getByRole('button', { name: 'Play the playlist Tavern' }).click()
+  await expect(app.getByRole('button', { name: 'Stop the playlist Tavern' })).toBeVisible()
+  await app.getByRole('button', { name: 'Stop the playlist Tavern' }).click()
+  await expect(app.getByRole('button', { name: 'Play the playlist Tavern' })).toBeVisible()
+})

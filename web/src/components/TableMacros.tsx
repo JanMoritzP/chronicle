@@ -21,6 +21,15 @@ async function selectedToken(): Promise<Selected | null> {
   return { name: t.name, hp: hp?.value, maxhp: hp?.max, ac: t.data.ac as number | undefined, sheet }
 }
 
+/** Keeps a chat message as one of the person's own macros, after asking what to call it. */
+export async function saveMessageAsMacro(line: string) {
+  const ws = useStore.getState().wsId
+  if (!ws) return
+  const name = await askText('Name of the macro', { label: 'Name', placeholder: 'Longsword attack', okLabel: 'Save' })
+  if (!name?.trim()) return
+  try { await api.createMacro(ws, { name: name.trim().slice(0, 60), text: line.slice(0, 2000), shared: false }); window.dispatchEvent(new Event('tt-macros')) } catch (e: any) { await alertDialog(e.message) }
+}
+
 export async function runMacro(text: string) {
   const answers: Record<string, string> = {}
   for (const q of queriesIn(text)) {
@@ -65,6 +74,7 @@ export function MacroBar() {
   const [shared, setShared] = useState(false)
   const load = () => { if (wsId) api.listMacros(wsId).then(setList).catch(() => setList([])) }
   useEffect(load, [wsId])
+  useEffect(() => { window.addEventListener('tt-macros', load); return () => window.removeEventListener('tt-macros', load) })
 
   const edit = (m: Macro | 'new') => { setEditing(m); setName(m === 'new' ? '' : m.name); setText(m === 'new' ? '' : m.text); setShared(m === 'new' ? false : m.shared) }
   const save = async () => {

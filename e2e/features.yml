@@ -457,6 +457,12 @@ areas:
       - id: table.keys
         name: "Rebindable shortcut keys of the table"
         files: [web/src/lib/tablekeys.ts, web/src/components/Tabletop.tsx]
+      - id: table.chat-macro
+        name: "A chat message kept as a macro"
+        files: [web/src/lib/macro.ts, web/src/components/TableParts.tsx, web/src/components/TableMacros.tsx]
+      - id: table.playlist
+        name: "Playlists in the jukebox: Playlist/Track names, play all, one after the other"
+        files: [web/src/components/TableAudio.tsx, server/src/table.ts]
       - id: table.stats
         name: "Hit points, damage, healing and conditions on a token, with a linked page's sheet"
         files: [web/src/components/TableParts.tsx, web/src/components/TableSheet.tsx]

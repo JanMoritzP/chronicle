@@ -59,3 +59,23 @@ export function resolveRefs(text: string, sel: Selected | null): { text: string;
 
 /** The lines to send: one chat message each, empty lines left out, and no more than a handful so a macro cannot flood the table. */
 export const linesOf = (text: string, max = 10): string[] => text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(0, max)
+
+// ---------- a chat message as a macro ----------
+
+interface MsgPart { t: string; text?: string; roll?: { expr?: string; label?: string }; title?: string; rows?: { label: string; parts: MsgPart[] }[] }
+const rollText = (p: MsgPart) => `[[${[p.roll?.expr, p.roll?.label].filter(Boolean).join(' ')}]]`
+const inline = (parts: MsgPart[]) => parts.map((p) => (p.t === 'roll' ? rollText(p) : p.text ?? '')).join('')
+
+/**
+ * The line that would make a message again, for saving it as a macro: a roll becomes /roll, talk stays talk with its rolls inside [[ ]], a card
+ * becomes /card. Whispers have no line (they were for one person). Null when there is nothing to save.
+ */
+export function macroLineOf(m: { kind: string; parts: MsgPart[] }): string | null {
+  if (m.kind === 'whisper') return null
+  const card = m.parts.find((p) => p.t === 'card')
+  if (card) return `/card ${card.title ?? ''}${(card.rows ?? []).map((r) => ` | ${r.label ? `${r.label}: ` : ''}${inline(r.parts)}`).join('')}`.trim()
+  if ((m.kind === 'roll' || m.kind === 'gmroll') && m.parts.length === 1 && m.parts[0].t === 'roll') return `/${m.kind === 'gmroll' ? 'gmroll' : 'roll'} ${[m.parts[0].roll?.expr, m.parts[0].roll?.label].filter(Boolean).join(' ')}`.trim()
+  const text = inline(m.parts).trim()
+  if (!text) return null
+  return m.kind === 'emote' ? `/me ${text}` : m.kind === 'ooc' ? `/ooc ${text}` : text
+}

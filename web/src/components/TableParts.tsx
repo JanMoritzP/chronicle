@@ -6,7 +6,8 @@ import { useStore } from '../store'
 import { sendTable, useTable, type ChatMsg, type RollJson, type Token } from '../tabletop/state'
 import { askText } from '../lib/dialog'
 import { PagePicker } from './PagePicker'
-import { MacroBar, draftRecap } from './TableMacros'
+import { MacroBar, draftRecap, saveMessageAsMacro } from './TableMacros'
+import { macroLineOf } from '../lib/macro'
 import { useRules } from '../lib/pack'
 import { Select } from './Select'
 import { lightItems } from '../lib/lightitems'
@@ -280,6 +281,7 @@ function Message({ m, you, names }: { m: ChatMsg; you: string | undefined; names
       ))}
     </div>
   ))
+  const line = m.userId === you ? macroLineOf(m) : null
   const to = m.kind === 'whisper' ? (m.to.includes(you ?? '') ? 'you' : m.to.map((id) => names.get(id) ?? 'someone').join(', ')) : ''
   return (
     <li className={`tt-msg ${m.kind}`}>
@@ -287,6 +289,7 @@ function Message({ m, you, names }: { m: ChatMsg; you: string | undefined; names
         <>
           <b className="tt-from">{m.name}</b>{KIND_LABEL[m.kind] && <small className="muted"> {KIND_LABEL[m.kind]}{to ? ` ${to}` : ''}</small>}
           <div className="tt-text">{parts}</div>
+          {line && <button className="btn ghost sm tt-keep" aria-label="Save this message as a macro" title="Keep this line as a macro" onClick={() => void saveMessageAsMacro(line)}>Save as macro</button>}
         </>
       )}
     </li>
