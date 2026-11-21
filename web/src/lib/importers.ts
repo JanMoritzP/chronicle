@@ -1,4 +1,4 @@
-import { ABILITIES, emptyCharacter, type Ability, type Feature, type InventoryItem, type Proficiency, type Sheet } from './sheet'
+import { ABILITIES, emptyCharacter, emptyPf2eCharacter, PF_SKILLS, type Ability, type Feature, type InventoryItem, type Proficiency, type Rank, type Sheet } from './sheet'
 
 // Characters from elsewhere: a Chronicle character file, a Foundry VTT D&D 5e actor, a D&D Beyond character (the JSON its character service gives),
 // a Roll20 character (the attributes of its D&D 5e sheet). Each is mapped onto the character sheet as far as it carries the same things;
@@ -85,6 +85,50 @@ export function fromRoll20(raw: any, ruleset: Sheet['ruleset'] = '5e'): Result {
   return { sheet: s }
 }
 
+/**
+ * A Pathfinder 2e character from Pathbuilder (the JSON its Export button gives): ability scores, hit points, ranks, skills and lores, feats, weapons as strikes,
+ * armor, gear and money, and its spells as a list. Pathbuilder writes ranks as 0, 2, 4, 6, 8.
+ */
+export function fromPathbuilder(raw: any): Result {
+  const b = raw?.build
+  if (!b?.abilities || typeof b.abilities !== 'object') return { error: 'That Pathbuilder file has no ability scores.' }
+  const s = emptyPf2eCharacter()
+  s.name = text(b.name, 300) || 'Imported character'
+  const level = num(b.level, 1, 20, 1)
+  const mod = (score: unknown) => Math.floor((num(score, 1, 60, 10) - 10) / 2)
+  const mods = Object.fromEntries(ABILITIES.map((k) => [k, mod(b.abilities[k])])) as Record<Ability, number>
+  const rank = (v: unknown): Rank => Math.min(4, Math.max(0, Math.round(Number(v) / 2) || 0)) as Rank
+  const pf = s.pf2e!
+  pf.level = level
+  pf.mods = mods
+  const c = pf.char!
+  c.ancestry = text(b.ancestry, 80); c.heritage = text(b.heritage, 80); c.background = text(b.background, 80); c.className = text(b.class, 80)
+  c.keyAbility = ABILITIES.includes(b.keyability) ? b.keyability : ''
+  const p = b.proficiencies ?? {}
+  c.ranks = { ...c.ranks, perception: rank(p.perception), fort: rank(p.fortitude), ref: rank(p.reflex), will: rank(p.will), classDc: rank(p.classDC), armor: rank(p.heavy || p.medium || p.light || p.unarmored), skills: {} }
+  for (const k of Object.keys(PF_SKILLS)) { const r = rank(p[k]); if (r > 0) c.ranks.skills[k] = r }
+  c.lores = (Array.isArray(b.lores) ? b.lores : []).slice(0, 30).map((l: any) => ({ name: text(l?.[0], 60), rank: rank(l?.[1]) }))
+  const at = b.attributes ?? {}
+  s.hp.max = Math.max(1, num(at.ancestryhp, 0, 999, 8) + (num(at.classhp, 0, 99, 8) + mods.con + num(at.bonushpPerLevel, 0, 99, 0)) * level + num(at.bonushp, 0, 9999, 0))
+  s.hp.current = s.hp.max
+  s.speed = { walk: num(num(at.speed, 0, 500, 25) + num(at.speedBonus, -100, 500, 0), 0, 500, 25) }
+  if (b.acTotal) { c.armor = { name: text((b.armor ?? []).find((a: any) => a.worn)?.name, 80), bonus: num(b.acTotal.acItemBonus, 0, 20, 0), dexCap: null } }
+  c.strikes = (Array.isArray(b.weapons) ? b.weapons : []).slice(0, 12).map((w: any) => ({ name: text(w.display || w.name, 80), ability: (/bow|sling|dagger|rapier|whip|dart/i.test(String(w.name)) ? 'dex' : 'str') as 'str' | 'dex', rank: rank(w.prof === 'unarmed' ? p.unarmed : p[String(w.prof ?? '').toLowerCase()] ?? p.simple), item: num(w.pot, 0, 3, 0), damage: /^d\d+$/.test(String(w.die)) ? `1${w.die}` : '1d4', agile: false, note: '' }))
+  const feats: Feature[] = (Array.isArray(b.feats) ? b.feats : []).slice(0, 80).map((f: any) => ({ name: text(Array.isArray(f) ? f[0] : f, 200), text: Array.isArray(f) && f[3] ? `Level ${f[3]} ${text(f[2], 40)}`.trim() : '' }))
+  s.features = { ...s.features, traits: feats.filter((f) => f.name) }
+  s.inventory = (Array.isArray(b.equipment) ? b.equipment : []).slice(0, 200).map((e: any): InventoryItem => ({ name: text(e?.[0], 120), qty: num(e?.[1], 0, 99999, 1), equipped: /invested/i.test(String(e?.[2])), note: '' })).filter((i: InventoryItem) => i.name)
+  const m = b.money ?? {}
+  s.currency = { cp: num(m.cp, 0, 1e7, 0), sp: num(m.sp, 0, 1e7, 0), ep: 0, gp: num(m.gp, 0, 1e7, 0), pp: num(m.pp, 0, 1e7, 0) }
+  const lines: string[] = []
+  for (const caster of Array.isArray(b.spellCasters) ? b.spellCasters : []) {
+    for (const lv of caster.spells ?? []) if (Array.isArray(lv.list) && lv.list.length) lines.push(`${num(lv.spellLevel, 0, 10, 0) === 0 ? 'Cantrip' : `Level ${lv.spellLevel}`}: ${lv.list.map((n: unknown) => text(n, 60)).join(', ')}`)
+    if (caster.magicTradition) c.tradition = text(caster.magicTradition, 20).toLowerCase()
+    if (ABILITIES.includes(caster.ability)) c.spellAbility = caster.ability
+  }
+  s.spells = lines.join('\n').slice(0, 8000)
+  return { sheet: s }
+}
+
 /** Reads a character from whatever file the person chose, and says what is wrong with it if it cannot. */
 export function importCharacter(raw: unknown, ruleset: Sheet['ruleset'] = '5e'): Result & { from?: string } {
   const r = raw as any
@@ -92,8 +136,9 @@ export function importCharacter(raw: unknown, ruleset: Sheet['ruleset'] = '5e'):
   if (r.format === CHARACTER_FORMAT && r.sheet && typeof r.sheet === 'object') return { sheet: { ...(r.sheet as Sheet), kind: 'character' }, from: 'Chronicle' }
   if (r.system?.abilities) return { ...fromFoundry(r, ruleset), from: 'Foundry' }
   if (Array.isArray(r.data?.stats) || Array.isArray(r.stats)) return { ...fromBeyond(r, ruleset), from: 'D&D Beyond' }
+  if (r.build && typeof r.build === 'object' && r.build.abilities) return { ...fromPathbuilder(r), from: 'Pathbuilder' }
   if (Array.isArray(r.attribs) || Array.isArray(r.character?.attribs)) return { ...fromRoll20(r, ruleset), from: 'Roll20' }
-  return { error: 'That file is not a character this can read: Chronicle, Foundry D&D 5e, D&D Beyond or Roll20.' }
+  return { error: 'That file is not a character this can read: Chronicle, Foundry D&D 5e, D&D Beyond, Roll20 or Pathbuilder.' }
 }
 
 /** A character as a file other people can import. */

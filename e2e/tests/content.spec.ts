@@ -339,3 +339,26 @@ test('an item can add to armor class while it is equipped', { tag: '@feature:she
   await app.getByLabel('Charges of Shield +1').fill('4')
   await expect(app.getByRole('group', { name: 'Shield +1 charge' })).toBeVisible()
 })
+
+test('a Pathfinder character from Pathbuilder can be imported', { tag: '@feature:sheet.import-pathbuilder' }, async ({ app, makePage }) => {
+  await makePage('Seelah', { props: { type: 'person' } })
+  await app.reload()
+  await openPage(app, 'Seelah')
+  const build = { success: true, build: {
+    name: 'Seelah', class: 'Champion', level: 3, ancestry: 'Human', heritage: 'Versatile Heritage', background: 'Warrior', keyability: 'str',
+    attributes: { ancestryhp: 8, classhp: 10, bonushp: 0, bonushpPerLevel: 0, speed: 25, speedBonus: 0 },
+    abilities: { str: 18, dex: 12, con: 14, int: 10, wis: 12, cha: 14 },
+    proficiencies: { classDC: 2, perception: 4, fortitude: 4, reflex: 2, will: 4, heavy: 4, athletics: 4 },
+    lores: [], feats: [['Shield Block', null, 'General Feat', 1]], weapons: [{ name: 'Longsword', display: 'Longsword', prof: 'martial', die: 'd8', pot: 1 }],
+    equipment: [], money: { cp: 0, sp: 0, gp: 5, pp: 0 }, acTotal: { acItemBonus: 6 }, armor: [], spellCasters: [],
+  } }
+  const chooser = app.waitForEvent('filechooser')
+  await app.getByRole('button', { name: 'Import a character' }).click()
+  await (await chooser).setFiles({ name: 'seelah.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(build)) })
+  await expect(app.getByLabel('Level', { exact: true })).toHaveValue('3')
+  await expect(app.getByLabel('Strength modifier')).toHaveValue('4')
+  await expect(app.getByRole('button', { name: /Perception \+/ })).toBeVisible()  await app.waitForTimeout(800)
+  await app.reload()
+  await openPage(app, 'Seelah')
+  await expect(app.getByLabel('Level', { exact: true })).toHaveValue('3')
+})

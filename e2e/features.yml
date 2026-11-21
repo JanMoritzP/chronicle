@@ -448,6 +448,9 @@ areas:
       - id: library.origin
         name: "A species or background from the library put on a character sheet"
         files: [web/src/lib/origin.ts, web/src/components/CharacterSheet.tsx]
+      - id: sheet.import-pathbuilder
+        name: "A Pathfinder 2e character imported from Pathbuilder"
+        files: [web/src/lib/importers.ts, web/src/components/PageView.tsx]
       - id: table.stats
         name: "Hit points, damage, healing and conditions on a token, with a linked page's sheet"
         files: [web/src/components/TableParts.tsx, web/src/components/TableSheet.tsx]

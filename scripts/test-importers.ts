@@ -1,4 +1,4 @@
-import { exportCharacter, fromBeyond, fromFoundry, fromRoll20, importCharacter } from '../web/src/lib/importers'
+import { exportCharacter, fromBeyond, fromFoundry, fromRoll20, importCharacter, fromPathbuilder } from '../web/src/lib/importers'
 import { emptyCharacter } from '../web/src/lib/sheet'
 
 let failed = 0
@@ -47,5 +47,25 @@ check('a Chronicle character goes out and comes back the same', back.from === 'C
 check('something else is refused with the formats that work', 'error' in (importCharacter({ hello: 1 }) as any) && /Foundry/.test((importCharacter({ hello: 1 }) as any).error) && 'error' in (importCharacter(null) as any))
 check('numbers are kept in bounds', (fromFoundry({ name: 'x', system: { abilities: { str: { value: 999 } }, attributes: { hp: { max: -4 } } }, items: [] }) as any).sheet.abilities.str === 60 && (fromFoundry({ name: 'x', system: { abilities: {}, attributes: { hp: { max: -4 } } }, items: [] }) as any).sheet.hp.max === 0)
 
+const pathbuilder = { success: true, build: {
+  name: 'Seelah', class: 'Champion', level: 3, ancestry: 'Human', heritage: 'Versatile Heritage', background: 'Warrior', keyability: 'str',
+  attributes: { ancestryhp: 8, classhp: 10, bonushp: 0, bonushpPerLevel: 0, speed: 25, speedBonus: 0 },
+  abilities: { str: 18, dex: 12, con: 14, int: 10, wis: 12, cha: 14 },
+  proficiencies: { classDC: 2, perception: 4, fortitude: 4, reflex: 2, will: 4, heavy: 4, athletics: 4, religion: 2, stealth: 0 },
+  lores: [['Warfare', 2]], feats: [['Shield Block', null, 'General Feat', 1], ['Reactive Shield', null, 'Class Feat', 1]],
+  weapons: [{ name: 'Longsword', display: 'Longsword', prof: 'martial', die: 'd8', pot: 1 }],
+  equipment: [['Rope', 1, 'Held'], ['Cloak', 1, 'Invested']], money: { cp: 0, sp: 4, gp: 12, pp: 0 },
+  acTotal: { acItemBonus: 6 }, armor: [{ name: 'Full plate', worn: true }],
+  spellCasters: [{ magicTradition: 'divine', ability: 'cha', spells: [{ spellLevel: 0, list: ['Shield'] }] }],
+} }
+const pb = importCharacter(pathbuilder) as any
+check('a Pathbuilder file is recognised', pb.from === 'Pathbuilder' && pb.sheet.ruleset === 'pf2e' && pb.sheet.name === 'Seelah')
+check('its level and modifiers are worked out from the scores', pb.sheet.pf2e.level === 3 && pb.sheet.pf2e.mods.str === 4 && pb.sheet.pf2e.mods.con === 2 && pb.sheet.pf2e.mods.dex === 1)
+check('ranks are read as 0 to 4', pb.sheet.pf2e.char.ranks.perception === 2 && pb.sheet.pf2e.char.ranks.skills.athletics === 2 && pb.sheet.pf2e.char.ranks.skills.religion === 1 && pb.sheet.pf2e.char.ranks.skills.stealth === undefined)
+check('hit points follow the ancestry, the class and Constitution', pb.sheet.hp.max === 8 + (10 + 2) * 3 && pb.sheet.hp.current === pb.sheet.hp.max)
+check('the class, ancestry and key ability are kept', pb.sheet.pf2e.char.className === 'Champion' && pb.sheet.pf2e.char.ancestry === 'Human' && pb.sheet.pf2e.char.keyAbility === 'str')
+check('a weapon becomes a strike', pb.sheet.pf2e.char.strikes[0].name === 'Longsword' && pb.sheet.pf2e.char.strikes[0].damage === '1d8' && pb.sheet.pf2e.char.strikes[0].item === 1)
+check('feats, lores, gear, money and spells come across', pb.sheet.features.traits.length === 2 && pb.sheet.pf2e.char.lores[0].name === 'Warfare' && pb.sheet.inventory.find((i: any) => i.name === 'Cloak').equipped === true && pb.sheet.currency.gp === 12 && pb.sheet.spells.includes('Cantrip: Shield') && pb.sheet.pf2e.char.tradition === 'divine')
+check('a Pathbuilder file without scores says so', 'error' in (fromPathbuilder({ build: {} }) as any))
 console.log(failed ? `\n${failed} failed` : '\nall passed')
 process.exit(failed ? 1 : 0)
