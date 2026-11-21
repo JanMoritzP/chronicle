@@ -25,3 +25,29 @@ export function pickImage(): Promise<File | null> {
     el.click()
   })
 }
+
+/** Sends a sound file to the world's uploads and returns its address, or null after telling the person why not. */
+export async function uploadSound(ws: string, file: File): Promise<string | null> {
+  const fd = new FormData()
+  fd.append('file', file)
+  try {
+    const r = await fetch(`/api/workspaces/${ws}/uploads`, { method: 'POST', body: fd })
+    const data = await r.json().catch(() => ({}))
+    if (!r.ok) { await alertDialog(data.error ?? 'The sound could not be uploaded. Try an MP3, OGG or WAV file under 25 MB.'); return null }
+    return data.url as string
+  } catch {
+    await alertDialog('The sound could not be uploaded. Is the server running?')
+    return null
+  }
+}
+
+export function pickSound(): Promise<File | null> {
+  return new Promise((resolve) => {
+    const el = document.createElement('input')
+    el.type = 'file'
+    el.accept = 'audio/mpeg,audio/ogg,audio/wav,audio/webm,audio/mp4,audio/aac,.mp3,.ogg,.wav,.m4a'
+    el.onchange = () => resolve(el.files?.[0] ?? null)
+    el.oncancel = () => resolve(null)
+    el.click()
+  })
+}

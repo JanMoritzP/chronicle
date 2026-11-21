@@ -6,7 +6,7 @@ import { useStore } from '../store'
 import { sendTable, useTable, type ChatMsg, type RollJson, type Token } from '../tabletop/state'
 import { askText } from '../lib/dialog'
 import { PagePicker } from './PagePicker'
-import { MacroBar } from './TableMacros'
+import { MacroBar, draftRecap } from './TableMacros'
 import { Select } from './Select'
 import { SheetCard, loadSheet, useSheet, type AttackKit } from './TableSheet'
 
@@ -271,6 +271,7 @@ export function ChatPanel() {
         <div ref={end} />
       </ul>
       {role !== 'spectator' && <MacroBar />}
+      {role === 'gm' && <button className="btn sm ghost" title="Make a page from the chat of the latest session" onClick={() => void draftRecap()}>Draft a recap page</button>}
       {role !== 'spectator' && (
         <div className="tt-dicebar" role="group" aria-label="Quick dice">
           {[4, 6, 8, 10, 12, 20, 100].map((d) => <button key={d} className="btn sm" onClick={() => sendTable({ t: 'chat', text: `/roll 1d${d}` })}>d{d}</button>)}

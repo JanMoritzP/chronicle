@@ -1,9 +1,12 @@
 import { Eye, EyeOff, ImagePlus, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { api } from '../api'
+import { docText } from '../lib/docText'
 import { confirmDialog } from '../lib/dialog'
 import { useStore } from '../store'
 import { pickImage, uploadImage } from '../tabletop/upload'
 import { sendTable, useTable, type Handout } from '../tabletop/state'
+import { PagePicker } from './PagePicker'
 
 // Handouts: a letter, a map, a riddle. The GM writes them and chooses who may read each; what is revealed opens on the players' screens and
 // stays in their list. Plain text only, so nothing a person types can run on another person's screen.
@@ -46,6 +49,7 @@ export function HandoutsPanel() {
   const [text, setText] = useState('')
   const [image, setImage] = useState('')
   const [choosing, setChoosing] = useState<string | null>(null)
+  const [fromPage, setFromPage] = useState(false)
 
   const edit = (h: Handout | 'new') => { setEditing(h); setTitle(h === 'new' ? '' : h.title); setText(h === 'new' ? '' : h.text); setImage(h === 'new' ? '' : h.image) }
   const save = () => {
@@ -99,7 +103,22 @@ export function HandoutsPanel() {
         ))}
         {!handouts.length && <li className="muted">No handouts yet.</li>}
       </ul>
-      {!editing && <button className="btn sm" onClick={() => edit('new')}><Plus size={12} /> New handout</button>}
+      {!editing && (
+        <div className="tt-row">
+          <button className="btn sm" onClick={() => edit('new')}><Plus size={12} /> New handout</button>
+          <button className="btn sm" onClick={() => setFromPage(!fromPage)}>From a page</button>
+        </div>
+      )}
+      {!editing && fromPage && (
+        <PagePicker autoFocus placeholder="Find a page to hand out…" onPick={async (p) => {
+          setFromPage(false)
+          try {
+            const full = await api.getPage(p.id)
+            const portrait = typeof full.props?.portrait === 'string' && /^\/api\/uploads\//.test(full.props.portrait) ? full.props.portrait : ''
+            setEditing('new'); setTitle(p.title || 'Untitled'); setText(docText(full.content)); setImage(portrait)
+          } catch { /* the page could not be read: nothing is filled in */ }
+        }} />
+      )}
       {editing && (
         <>
           <input className="input" aria-label="Handout title" placeholder="Title" maxLength={120} value={title} onChange={(e) => setTitle(e.target.value)} />

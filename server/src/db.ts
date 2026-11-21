@@ -511,6 +511,18 @@ const migrations: (string | ((d: Database.Database) => void))[] = [
   `,
   // invite links can be given a name, so the owner can tell them apart
   `ALTER TABLE invites ADD COLUMN label TEXT NOT NULL DEFAULT ''`,
+  // the jukebox: sound files of a world that the GM plays for everyone
+  `
+  CREATE TABLE tracks (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    upload_id TEXT NOT NULL,
+    loop INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX tracks_ws ON tracks(workspace_id);
+  `,
 ]
 
 export const SCHEMA_VERSION = migrations.length

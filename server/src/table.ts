@@ -10,7 +10,7 @@ import { db, now } from './db.js'
 import { uid } from './pages.js'
 import { publishWorld } from './live.js'
 import { presenceChanged } from './presence.js'
-import { ALLOWED } from './routes/uploads.js'
+import { ALLOWED, AUDIO } from './routes/uploads.js'
 import { parseChat, readable, withInline, type Kind, type Part } from './chat.js'
 import { buildSight, canSee, type Sight, type SightToken } from './sight.js'
 import { advance, emptyCombat, end as endCombat, start as startCombat, visible as visibleCombat, withList, type Combat } from './combat.js'
@@ -303,12 +303,24 @@ function rollOnTable(ws: string, c: Conn, t: RollTableDb) {
   return true
 }
 
+// ---------- the jukebox ----------
+
+/** What plays in each world right now. It is not kept: a restart is silence. */
+const playing = new Map<string, Set<string>>()
+interface TrackDb { id: string; name: string; upload_id: string; loop: number }
+function jukeboxFor(ws: string) {
+  const rows = db.prepare('SELECT id, name, upload_id, loop FROM tracks WHERE workspace_id = ? ORDER BY created_at').all(ws) as TrackDb[]
+  const on = playing.get(ws) ?? new Set<string>()
+  return { tracks: rows.map((t) => ({ id: t.id, name: t.name, url: `/api/uploads/${t.upload_id}`, loop: !!t.loop })), playing: rows.filter((t) => on.has(t.id)).map((t) => t.id) }
+}
+function sendJukebox(ws: string) { const j = jukeboxFor(ws); for (const c of inWorld(ws)) send(c, { t: 'jukebox', ...j }) }
+
 function sendSnapshot(c: Conn) {
   const { active, settings } = stateOf(c.ws)
   viewFor(c, c.scene)
   send(c, {
     t: 'snapshot', you: { id: c.user.id, username: c.user.username, role: c.role }, settings, scenes: scenesOf(c.ws), active,
-    sceneId: c.scene, tokens: tokensFor(c, c.scene), online: onlineIn(c.ws), members: membersOf(c.ws), chat: historyFor(c), combat: visibleCombat(combatOf(c.ws), c.role === 'gm'), handouts: handoutsFor(c), rolltables: rollTablesFor(c), decks: decksFor(c), ...sceneState(c),
+    sceneId: c.scene, tokens: tokensFor(c, c.scene), online: onlineIn(c.ws), members: membersOf(c.ws), chat: historyFor(c), combat: visibleCombat(combatOf(c.ws), c.role === 'gm'), handouts: handoutsFor(c), rolltables: rollTablesFor(c), decks: decksFor(c), jukebox: jukeboxFor(c.ws), ...sceneState(c),
   })
 }
 
@@ -736,6 +748,33 @@ async function handle(c: Conn, m: ClientMessage) {
       if (!t || (t.secret && !gm)) return nack(c, m, 'no such table')
       if (!rollOnTable(ws, c, t)) return nack(c, m, 'That table has no entries.')
       return
+    }
+    case 'jukebox.add': {
+      if (!gm) return nack(c, m, 'only the GM can do that')
+      const uploadId = m.url.slice('/api/uploads/'.length)
+      const up = db.prepare('SELECT mime FROM uploads WHERE id = ? AND workspace_id = ?').get(uploadId, ws) as { mime: string } | undefined
+      if (!up || !AUDIO[up.mime]) return nack(c, m, 'That is not a sound file of this world.')
+      if ((db.prepare('SELECT COUNT(*) AS n FROM tracks WHERE workspace_id = ?').get(ws) as { n: number }).n >= 100) return nack(c, m, 'That is as many tracks as a world can keep.')
+      db.prepare('INSERT INTO tracks(id,workspace_id,name,upload_id,loop,created_at) VALUES(?,?,?,?,?,?)').run(uid(), ws, m.name, uploadId, m.loop ? 1 : 0, now())
+      return sendJukebox(ws)
+    }
+    case 'jukebox.remove': {
+      if (!gm) return nack(c, m, 'only the GM can do that')
+      db.prepare('DELETE FROM tracks WHERE id = ? AND workspace_id = ?').run(m.id, ws)
+      playing.get(ws)?.delete(m.id)
+      return sendJukebox(ws)
+    }
+    case 'jukebox.play': {
+      if (!gm) return nack(c, m, 'only the GM can do that')
+      if (!db.prepare('SELECT 1 FROM tracks WHERE id = ? AND workspace_id = ?').get(m.id, ws)) return nack(c, m, 'no such track')
+      if (!playing.has(ws)) playing.set(ws, new Set())
+      playing.get(ws)!.add(m.id)
+      return sendJukebox(ws)
+    }
+    case 'jukebox.stop': {
+      if (!gm) return nack(c, m, 'only the GM can do that')
+      if (m.id === 'all') playing.delete(ws); else playing.get(ws)?.delete(m.id)
+      return sendJukebox(ws)
     }
     case 'deck.save': {
       if (!gm) return nack(c, m, 'only the GM can do that')

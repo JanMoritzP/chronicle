@@ -12,6 +12,7 @@ import { exportUvtt, importUvtt } from '../tabletop/uvttFiles'
 import { EncounterPanel } from './TableEncounters'
 import { TilePanel, TilesSection } from './TableTiles'
 import { HandoutViewer, HandoutsPanel } from './TableHandouts'
+import { AudioPlayer } from './TableAudio'
 import { TablesAndDecks } from './TableDecks'
 import { ChatPanel, CombatPanel, LinkPage, SightLight, TokenSheet, TokenStats } from './TableParts'
 import { Select } from './Select'
@@ -307,6 +308,7 @@ export function TableView() {
         )}
       </div>
       <HandoutViewer />
+      <AudioPlayer />
       {narrow && <MyStrip />}
       {narrow && (
         <nav className="tt-nav" aria-label="Table sections">

@@ -1,3 +1,4 @@
+import { docText } from '../web/src/lib/docText'
 import { fillQueries, linesOf, queriesIn, refValue, resolveRefs } from '../web/src/lib/macro'
 import { emptyCharacter } from '../web/src/lib/sheet'
 
@@ -22,6 +23,14 @@ const r2 = resolveRefs('@{selected|name} @{selected|luck}', sel)
 check('what cannot be filled is reported and left', r2.missing.join() === '@{selected|luck}' && r2.text.includes('@{selected|luck}'))
 check('with nothing selected every reference is missing', resolveRefs('@{selected|name}', null).missing.length === 1)
 check('lines are trimmed, blank ones dropped and the number capped', linesOf(' /roll 1d20 \n\n/me hits\r\n') .join('|') === '/roll 1d20|/me hits' && linesOf('a\n'.repeat(30)).length === 10)
+
+const page = { type: 'doc', content: [
+  { type: 'heading', content: [{ type: 'text', text: 'The vault' }] },
+  { type: 'paragraph', content: [{ type: 'text', text: 'Under the ' }, { type: 'text', text: 'chapel', marks: [{ type: 'bold' }] }, { type: 'hardBreak' }, { type: 'text', text: 'second line' }] },
+  { type: 'bulletList', content: [{ type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'a key' }] }] }, { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'a coin' }] }] }] },
+] }
+check('a page becomes plain text, a line to each block', docText(page) === 'The vault\nUnder the chapel\nsecond line\n• a key\n• a coin')
+check('nothing gives nothing, and the length is capped', docText(null) === '' && docText({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'x'.repeat(50) }] }] }, 10).length === 10)
 
 console.log(failed ? `\n${failed} failed` : '\nall passed')
 process.exit(failed ? 1 : 0)

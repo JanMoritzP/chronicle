@@ -469,6 +469,12 @@ areas:
       - id: table.uvtt
         name: "Import and export Universal VTT maps with their walls, doors and lights"
         files: [web/src/tabletop/uvtt.ts, web/src/tabletop/uvttFiles.ts]
+      - id: table.recap
+        name: "A recap page drafted from the table chat, and a page handed out as a handout"
+        files: [server/src/recap.ts, server/src/routes/recap.ts, web/src/lib/docText.ts]
+      - id: table.jukebox
+        name: "Jukebox: sound files the GM plays for everyone, with a volume for each person"
+        files: [web/src/components/TableAudio.tsx, server/src/table.ts]
       - id: table.fog
         name: "Fog of war and darkness are switched on per scene and kept"
         files: [web/src/components/Tabletop.tsx]

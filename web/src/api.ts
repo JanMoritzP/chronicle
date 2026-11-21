@@ -100,6 +100,7 @@ export const api = {
   createStatTemplate: (ws: string, b: StatTemplateBody) => req<StatTemplateRow>('POST', `/api/workspaces/${ws}/stat-templates`, b),
   patchStatTemplate: (id: string, b: StatTemplateBody) => req<StatTemplateRow>('PATCH', `/api/stat-templates/${id}`, b),
   deleteStatTemplate: (id: string) => req('DELETE', `/api/stat-templates/${id}`),
+  sessionRecap: (ws: string) => req<{ lines: string[] }>('GET', `/api/workspaces/${ws}/recap`),
   listMacros: (ws: string) => req<Macro[]>('GET', `/api/workspaces/${ws}/macros`),
   createMacro: (ws: string, b: { name: string; text: string; shared: boolean }) => req<Macro>('POST', `/api/workspaces/${ws}/macros`, b),
   patchMacro: (id: string, b: { name: string; text: string; shared: boolean }) => req<Macro>('PATCH', `/api/macros/${id}`, b),

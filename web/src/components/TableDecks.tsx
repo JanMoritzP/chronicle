@@ -2,6 +2,7 @@ import { Pencil, Plus, Shuffle, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { confirmDialog } from '../lib/dialog'
 import { sendTable, useTable, type Deck, type RollTable } from '../tabletop/state'
+import { Jukebox } from './TableAudio'
 
 // Roll tables and card decks. A table is a list to roll on (a heavier entry comes up more often, [[2d6]] inside an entry is rolled);
 // the GM keeps secret ones. A deck is dealt by the server: your hand is yours alone, a card played or drawn face up is shown to everyone.
@@ -11,6 +12,7 @@ export function TablesAndDecks() {
     <div className="tt-form">
       <RollTables />
       <Decks />
+      <Jukebox />
     </div>
   )
 }

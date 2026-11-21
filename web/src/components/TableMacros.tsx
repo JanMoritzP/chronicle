@@ -34,6 +34,26 @@ export async function runMacro(text: string) {
   for (const line of linesOf(filled)) sendTable({ t: 'chat', text: line })
 }
 
+/** A page with the chat of the latest session in it, for the GM to turn into the story of what happened. */
+export async function draftRecap() {
+  const ws = useStore.getState().wsId
+  if (!ws) return
+  try {
+    const { lines } = await api.sessionRecap(ws)
+    if (!lines.length) { await alertDialog('There is nothing in the table chat to make a recap from yet.'); return }
+    const [date, ...rest] = lines
+    const content = {
+      type: 'doc',
+      content: [
+        { type: 'paragraph', content: [{ type: 'text', text: 'A first draft from the table chat. Keep what matters and rewrite the rest.' }] },
+        { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'What happened' }] },
+        ...rest.map((l) => ({ type: 'paragraph', content: [{ type: 'text', text: l }] })),
+      ],
+    }
+    await useStore.getState().createPage({ title: `Session recap, ${date.replace(/^\w+day /, '')}`, content })
+  } catch (e: any) { await alertDialog(e.message) }
+}
+
 export function MacroBar() {
   const wsId = useStore((s) => s.wsId)
   const owner = useStore((s) => s.user?.role === 'owner')
