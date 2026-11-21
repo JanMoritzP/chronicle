@@ -280,3 +280,16 @@ Rules that apply: migrations append only; backup restore, export and copy get up
 ## 12. Still open
 
 1. Anything missing from the Roll20 parity table that you use at your own table?
+
+## What is still missing, by phase
+
+Spatial sound (sound that fades with distance) is cut. Arbitrary GM scripts stay out on purpose. Everything else not built yet is numbered here and done in this order.
+
+1. **Rules at the table.** Opportunity attacks (done). Drag ruler with movement cost and difficult terrain. Roll templates (attack and spell cards). Subclass and feat choices on level up.
+2. **Map and light.** User-defined layers. Light angle (cones). Light through windows. Night vision tint. Terrain walls.
+3. **Sheets.** Sheet designer and custom-sheet packs. Compendium drag onto a sheet. Containers for inventory. Magic item effects beyond armor class. Light sources as inventory items.
+4. **More systems.** Further rule systems after D&D 5e, 2024 and Pathfinder 2e. Pathfinder spell lists and importing. 2024 species and backgrounds.
+5. **Table comfort.** Rebindable table shortcuts. Dragging macros from chat and sheets. Linking chat to session notes. Playlists. "See through" tokens. Fog update on drop and performance modes. Performance measurement.
+6. **Time and places.** Time of day tied to the calendar. Levels and stairs. Animated backgrounds.
+7. **Map editor extras.** Freehand caves, diagonal walls, windows and secret doors, picture props, procedural dungeons.
+8. **People.** Voice and video. E-mail invites. 3D dice.
