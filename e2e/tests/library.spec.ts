@@ -140,3 +140,16 @@ test('a spell and an item from the library are added to a character sheet', { ta
   await app.getByRole('list', { name: 'Results for Add an item from the library' }).getByRole('button', { name: 'Longsword', exact: true }).first().click()
   await expect(app.getByLabel('Item 1')).toHaveValue('Longsword')
 })
+
+test('a species and a background from the library are put on a character sheet', { tag: '@feature:library.origin' }, async ({ app, makePage }) => {
+  await makePage('Orla', { props: { type: 'person' } })
+  await app.reload()
+  await openPage(app, 'Orla')
+  await app.getByRole('button', { name: 'Add a character sheet' }).click()
+  await app.getByLabel('Choose a species from the library').fill('elf')
+  await app.getByRole('list', { name: 'Results for Choose a species from the library' }).getByRole('button').first().click()
+  await expect(app.getByLabel('Species', { exact: true })).toHaveValue(/Elf/)
+  await app.getByLabel('Choose a background from the library').fill('sage')
+  await app.getByRole('list', { name: 'Results for Choose a background from the library' }).getByRole('button').first().click()
+  await expect(app.getByLabel('Background', { exact: true })).toHaveValue('Sage')
+})

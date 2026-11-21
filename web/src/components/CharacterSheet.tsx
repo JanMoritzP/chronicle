@@ -8,6 +8,7 @@ import {
 import { attunedCount, capacityOf, carriedWeight, loadOf, MAX_ATTUNED } from '../lib/levelup'
 import { LevelUpPanel } from './LevelUpPanel'
 import { LibraryAdd } from './LibraryAdd'
+import { backgroundPatch, speciesPatch } from '../lib/origin'
 import { exportCharacter } from '../lib/importers'
 import { FeatureEditor, type SheetPatch } from './SheetView'
 import { Select } from './Select'
@@ -78,6 +79,12 @@ export function CharacterSheet({ sheet, set, roll }: { sheet: Sheet; set?: (patc
             </>
           ) : <span className="muted">{[sheet.species, sheet.background, sheet.alignment, sheet.player && `played by ${sheet.player}`].filter(Boolean).join(' · ')}</span>}
         </div>
+        {edit && (
+          <div className="cs-line">
+            <LibraryAdd label="Choose a species from the library" categories={['species']} onPick={(e) => act(speciesPatch(sheet, e.data, e.name))} />
+            <LibraryAdd label="Choose a background from the library" categories={['background']} onPick={(e) => act(backgroundPatch(sheet, e.data, e.name))} />
+          </div>
+        )}
         <div className="cs-classes">
           {classes.map((c, i) => (
             <span key={i} className="cs-class">

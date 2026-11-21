@@ -445,6 +445,9 @@ areas:
       - id: packs.sheet
         name: "A system pack adds its own fields to a character sheet"
         files: [web/src/components/CharacterSheet.tsx, server/src/pack.ts, web/src/lib/systems.ts]
+      - id: library.origin
+        name: "A species or background from the library put on a character sheet"
+        files: [web/src/lib/origin.ts, web/src/components/CharacterSheet.tsx]
       - id: table.stats
         name: "Hit points, damage, healing and conditions on a token, with a linked page's sheet"
         files: [web/src/components/TableParts.tsx, web/src/components/TableSheet.tsx]
