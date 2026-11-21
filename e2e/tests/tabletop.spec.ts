@@ -1257,3 +1257,43 @@ test('walls: a rectangle in one drag, one-way walls, shown areas, and light that
     await expect(app.getByTitle('How the light moves')).toContainText('Flickers', { timeout: 1500 })
   }).toPass()
 })
+
+test('drawing: arrows, shapes, fading marks and pins on the map', { tag: '@feature:table.draw-more' }, async ({ app }) => {
+  await openTable(app)
+  await makeScene(app, 'Chart')
+  const canvas = app.locator('.tt-canvas canvas')
+  const box = (await canvas.boundingBox())!
+  const cx = box.x + box.width / 2, cy = box.y + box.height / 2
+  const blank = await canvas.screenshot()
+  await app.getByRole('button', { name: 'Draw', exact: true }).click()
+  const kinds = app.getByRole('group', { name: 'Kind of drawing' })
+  await expect(kinds).toContainText('Arrow')
+  await kinds.getByRole('button', { name: 'Arrow', exact: true }).click()
+  await app.mouse.move(cx - 100, cy)
+  await app.mouse.down()
+  await app.mouse.move(cx + 60, cy - 40, { steps: 5 })
+  await app.mouse.up()
+  await expect(async () => { expect((await canvas.screenshot()).equals(blank)).toBe(false) }).toPass()
+  const withArrow = await canvas.screenshot()
+
+  // a shape: click the corners, double-click to close it
+  await kinds.getByRole('button', { name: 'Shape', exact: true }).click()
+  await app.getByLabel('Filled').check()
+  await expect(app.getByLabel('Fill strength')).toBeVisible()
+  await app.mouse.click(cx - 80, cy + 60)
+  await app.mouse.click(cx + 20, cy + 60)
+  await app.mouse.dblclick(cx - 30, cy + 130)
+  await expect(async () => { expect((await canvas.screenshot()).equals(withArrow)).toBe(false) }).toPass()
+  await expect(app.getByLabel('Fades away')).toBeVisible()
+  await app.getByRole('button', { name: 'Draw', exact: true }).click()
+
+  // a pin with a label
+  const before = await canvas.screenshot()
+  await app.getByRole('button', { name: 'Pin a note' }).click()
+  await app.mouse.click(cx + 150, cy + 100)
+  const dialog = app.getByRole('dialog', { name: 'Pin a note' })
+  await dialog.getByLabel('Pin label').fill('The old well')
+  await dialog.getByRole('button', { name: 'Pin it' }).click()
+  await expect(dialog).toHaveCount(0)
+  await expect(async () => { expect((await canvas.screenshot()).equals(before)).toBe(false) }).toPass()
+})

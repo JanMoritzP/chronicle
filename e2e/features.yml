@@ -496,6 +496,9 @@ areas:
       - id: table.walls-more
         name: "Rectangle walls, one-way walls, locked doors, areas shown to the players, blindsight and truesight, moving lights"
         files: [web/src/tabletop/engine.ts, web/src/tabletop/fog.ts, server/src/sight.ts]
+      - id: table.draw-more
+        name: "Arrows, shapes, fill strength, fading marks, moving a drawing, covered squares of an area, pins that open pages, ping and pull"
+        files: [web/src/tabletop/engine.ts, web/src/components/PinDialog.tsx]
       - id: table.fog
         name: "Fog of war and darkness are switched on per scene and kept"
         files: [web/src/components/Tabletop.tsx]

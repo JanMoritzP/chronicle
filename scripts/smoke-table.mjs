@@ -911,6 +911,44 @@ gm.send({ t: 'scene.delete', id: revScene })
 await sleep(250)
 gm.send({ t: 'settings.set', patch: { playersOpenDoors: false } })
 
+// more kinds of drawing, moving one, fading ones, and pins on the map
+n = pb.mark()
+pa.send({ t: 'draw.add', sceneId: crypt, kind: 'arrow', points: [{ x: 10, y: 10 }, { x: 110, y: 60 }], color: '#ff0000', width: 4 })
+pa.send({ t: 'draw.add', sceneId: crypt, kind: 'polygon', points: [{ x: 300, y: 300 }, { x: 400, y: 300 }, { x: 350, y: 380 }], color: '#00ff00', width: 3, fill: '#00ff0066' })
+await sleep(350)
+const arrow = pb.since(n, (m) => m.t === 'draw' && m.drawing.kind === 'arrow')[0]?.drawing
+check('arrows and shapes can be drawn, with a fill that is not solid', !!arrow && pb.since(n, (m) => m.t === 'draw' && m.drawing.kind === 'polygon' && m.drawing.fill === '#00ff0066').length === 1)
+n = pb.mark()
+pa.send({ t: 'draw.move', id: arrow.id, dx: 50, dy: 20 })
+await sleep(250)
+const movedArrow = pb.since(n, (m) => m.t === 'draw' && m.drawing.id === arrow.id)[0]?.drawing
+check('a drawing can be moved by the person who made it', movedArrow?.points[0].x === 60 && movedArrow?.points[0].y === 30)
+pb.send({ t: 'draw.move', id: arrow.id, dx: 5, dy: 5, op: 'dm' })
+check("but not by someone else", !!(await pb.until((m) => m.t === 'nack' && m.op === 'dm')))
+gm.send({ t: 'draw.delete', ids: [arrow.id] })
+n = pb.mark()
+pa.send({ t: 'draw.add', sceneId: crypt, kind: 'line', points: [{ x: 1, y: 1 }, { x: 80, y: 80 }], color: '#ffffff', width: 3, temp: true })
+await sleep(500)
+const tempId = pb.since(n, (m) => m.t === 'draw' && m.drawing.kind === 'line')[0]?.drawing.id
+check('a temporary drawing appears', !!tempId)
+await sleep(9300)
+check('and goes away by itself', pb.since(n, (m) => m.t === 'draw.remove' && m.ids.includes(tempId)).length === 1)
+const loreP = (await call('POST', `/api/workspaces/${ws}/pages`, { title: 'The old well' }, gmCookie)).data
+n = pa.mark()
+gm.send({ t: 'pin.add', sceneId: crypt, x: 200, y: 200, label: 'Well', pageId: loreP.id, gmOnly: false })
+gm.send({ t: 'pin.add', sceneId: crypt, x: 220, y: 220, label: 'Secret stash', pageId: null, gmOnly: true })
+await sleep(350)
+const pinsOf = (c) => c.msgs.filter((m) => m.t === 'pins').at(-1)?.pins ?? []
+check('a pin on the map can open a page', pinsOf(gm).length === 2 && pinsOf(pa).length === 1 && pinsOf(pa)[0].pageId === loreP.id)
+check("the GM's own pins stay with the GM", !JSON.stringify(pa.since(n, () => true)).includes('Secret stash'))
+pa.send({ t: 'pin.add', sceneId: crypt, x: 1, y: 1, label: 'Mine', pageId: null, gmOnly: false, op: 'pp' })
+check('a player cannot pin', !!(await pa.until((m) => m.t === 'nack' && m.op === 'pp')))
+gm.send({ t: 'pin.add', sceneId: crypt, x: 5, y: 5, label: 'Nowhere', pageId: 'nope', gmOnly: false, op: 'pn' })
+check('a pin cannot point at a page that is not there', !!(await gm.until((m) => m.t === 'nack' && m.op === 'pn')))
+for (const p of pinsOf(gm)) gm.send({ t: 'pin.delete', id: p.id })
+await sleep(300)
+check('pins can be taken away', pinsOf(gm).length === 0 && pinsOf(pa).length === 0)
+
 // the GM brings everyone to look at one place
 n = pa.mark()
 gm.send({ t: 'camera.pull', x: 100, y: 200, w: 800, h: 600 })

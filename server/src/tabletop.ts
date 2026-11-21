@@ -243,11 +243,17 @@ export const clientMessage = z.discriminatedUnion('t', [
   z.object({ t: z.literal('combat.control'), action: z.enum(['start', 'next', 'prev', 'end', 'clear']) }),
   z.object({ t: z.literal('encounter.stage'), id, sceneId: id, x: coord, y: coord, hidden: z.boolean().default(true), combat: z.boolean().default(false) }),
   z.object({
-    t: z.literal('draw.add'), sceneId: id, kind: z.enum(['free', 'line', 'rect', 'ellipse', 'text', 'cone', 'beam', 'blast', 'cube']), points: z.array(point).min(1).max(600),
+    t: z.literal('draw.add'), sceneId: id, kind: z.enum(['free', 'line', 'arrow', 'polygon', 'rect', 'ellipse', 'text', 'cone', 'beam', 'blast', 'cube']), points: z.array(point).min(1).max(600),
     color: z.string().regex(/^#[0-9a-fA-F]{3,8}$/), width: z.number().min(1).max(40), fill: z.string().regex(/^(#[0-9a-fA-F]{3,8}|)$/).optional(),
     text: z.string().max(200).optional(), gmOnly: z.boolean().optional(),
+    /** fades away by itself after a few seconds (pointing something out) */
+    temp: z.boolean().optional(),
   }),
   z.object({ t: z.literal('draw.delete'), ids: z.array(id).min(1).max(100) }),
+  /** moves a drawing by this much */
+  z.object({ t: z.literal('draw.move'), id, dx: coord, dy: coord }),
+  z.object({ t: z.literal('pin.add'), sceneId: id, x: coord, y: coord, label: z.string().trim().min(1).max(60), pageId: id.nullable(), gmOnly: z.boolean() }),
+  z.object({ t: z.literal('pin.delete'), id }),
   z.object({ t: z.literal('draw.clear'), sceneId: id }),
   z.object({ t: z.literal('tile.add'), sceneId: id, image: tileImage, x: coord, y: coord, w: z.number().min(8).max(20000).optional(), h: z.number().min(8).max(20000).optional(), layer: z.enum(['bg', 'overhead', 'gm']).optional() }),
   z.object({ t: z.literal('tile.update'), id, patch: tilePatch }),

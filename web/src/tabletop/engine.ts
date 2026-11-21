@@ -1,7 +1,8 @@
 import { Application, Color, Container, Graphics, Sprite, Text, Texture } from 'pixi.js'
 import { FogLayer, type Light, type Rect, type Wall } from './fog'
+import type { Pin } from './state'
 import type { DrawKind, Drawing, Tile } from './state'
-import { formatDistance, hexCentres, hexCorners, measure, snap, tokenPixels, type Pt } from './grid'
+import { formatDistance, hexCentres, hexCorners, inTemplate, measure, snap, tokenPixels, type Pt } from './grid'
 import type { Cursor, Ruler, Scene, Token } from './state'
 
 // The picture of a scene: background, grid, tokens, rulers, pings and other people's cursors, drawn with WebGL.
@@ -23,15 +24,21 @@ export interface Hooks {
   /** the GM showed an area to the players, or took one back */
   onReveal(r: { x: number; y: number; w: number; h: number }): void
   onUnreveal(id: string): void
+  /** the GM held Alt and Shift: ping here and bring everyone to look at it */
+  onPull(p: Pt): void
+  onPinPlace(p: Pt): void
+  onPin(pin: Pin): void
+  onPinDelete(id: string): void
   onExplored(png: string): void
   onDraw(d: { kind: DrawKind; points: Pt[]; color: string; width: number; fill: string }): void
   onText(p: Pt, done: (text: string | null) => void): void
   onDrawErase(id: string): void
+  onDrawMove(id: string, dx: number, dy: number): void
   onTileSelect(id: string | null): void
   onTileMove(id: string, x: number, y: number): void
   colorOf(userId: string): number
 }
-export type Tool = 'select' | 'ruler' | 'wall' | 'erase' | 'draw' | 'reveal' | 'conceal'
+export type Tool = 'select' | 'ruler' | 'wall' | 'erase' | 'draw' | 'reveal' | 'conceal' | 'pin'
 
 const textures = new Map<string, Promise<Texture | null>>()
 /** Images come from our own server behind the login cookie, so they are fetched rather than handed to the loader by address. */
@@ -93,6 +100,10 @@ export class TableEngine {
   private walls: Wall[] = []
   private wallKind: Wall['kind'] = 'wall'
   private wallShape: 'line' | 'rect' = 'line'
+  private pins: Pin[] = []
+  private pinLayer = new Container()
+  /** corners of a polygon being drawn, one click each */
+  private polyPts: Pt[] = []
   private reveals: Rect[] = []
   private revealG = new Graphics()
   private wallPoly: Pt[] = []
@@ -107,7 +118,7 @@ export class TableEngine {
   private get gmView() { return this.me.gm && !this.preview }
   private shared = false
   private isViewer(t: Token) { const p = this.preview; return p ? p.tokens.includes(t.id) || t.owners.some((o) => p.users.includes(o)) : this.shared ? t.owners.length > 0 : t.owners.includes(this.me.id) }
-  private drag: null | { kind: 'pan' | 'tokens' | 'ruler' | 'marquee' | 'draw' | 'tile' | 'wallend' | 'wallrect' | 'revealrect'; start: Pt; screen: Pt; origins?: Map<string, Pt>; lead?: string; moved: boolean; sent: number; /** wall ends that move together, and where they went */ ends?: { id: string; end: 1 | 2 }[]; to?: Pt } = null
+  private drag: null | { kind: 'pan' | 'tokens' | 'ruler' | 'marquee' | 'draw' | 'tile' | 'wallend' | 'wallrect' | 'revealrect' | 'drawmove'; /** the drawing being moved */ drawing?: Drawing; start: Pt; screen: Pt; origins?: Map<string, Pt>; lead?: string; moved: boolean; sent: number; /** wall ends that move together, and where they went */ ends?: { id: string; end: 1 | 2 }[]; to?: Pt } = null
   private pointers = new Map<number, Pt>()
   private pinch: null | { dist: number; scale: number } = null
   private longPress: number | undefined
@@ -128,7 +139,7 @@ export class TableEngine {
     this.fog = new FogLayer(this.app)
     this.fog.onExplored = (png) => { if (!this.preview) this.hooks.onExplored(png) }
     this.fog.onDrawn = () => this.poke()
-    this.world.addChild(this.bg, this.gridG, this.tileBg, this.drawLayer, this.tokenLayer, this.tileOver, this.tileGm, this.ambientG, this.fog.view, this.revealG, this.wallG, this.triggerG, this.others, this.ruleG, this.ruleLabel, this.overlay, this.wallPreview, this.strokeG, this.tileSel, this.marquee)
+    this.world.addChild(this.bg, this.gridG, this.tileBg, this.drawLayer, this.tokenLayer, this.tileOver, this.tileGm, this.ambientG, this.fog.view, this.revealG, this.pinLayer, this.wallG, this.triggerG, this.others, this.ruleG, this.ruleLabel, this.overlay, this.wallPreview, this.strokeG, this.tileSel, this.marquee)
     this.ruleLabel.visible = false
     this.app.stage.addChild(this.world, this.weatherG)
     this.weatherG.eventMode = 'none'
@@ -466,6 +477,29 @@ export class TableEngine {
   setWallKind(kind: Wall['kind']) { this.wallKind = kind }
   /** Walls drawn as lines one after another, or as a rectangle in one drag. */
   setWallShape(shape: 'line' | 'rect') { this.wallShape = shape }
+  /** Notes pinned to the scene. A pin with a page opens it when clicked. */
+  setPins(list: Pin[]) {
+    this.poke()
+    this.pins = list
+    this.pinLayer.removeChildren().forEach((c) => c.destroy({ children: true }))
+    for (const p of list) {
+      const box = new Container()
+      box.position.set(p.x, p.y)
+      box.scale.set(1 / this.world.scale.x)
+      const dot = new Graphics().circle(0, -10, 8).fill({ color: p.gmOnly ? 0xb36bff : 0xe0572e }).stroke({ width: 2, color: 0x000000, alpha: 0.7 })
+      dot.poly([-5, -4, 0, 6, 5, -4]).fill({ color: p.gmOnly ? 0xb36bff : 0xe0572e })
+      const t = new Text({ text: p.label, style: { fontSize: 12, fill: 0xffffff, fontFamily: 'sans-serif', fontWeight: '700', stroke: { color: 0x000000, width: 3 } } })
+      t.position.set(12, -18)
+      box.addChild(dot, t)
+      this.pinLayer.addChild(box)
+    }
+  }
+
+  private nearPin(p: Pt): Pin | null {
+    const reach = 14 / this.world.scale.x
+    return [...this.pins].reverse().find((x) => Math.hypot(x.x - p.x, x.y - 10 / this.world.scale.x - p.y) <= reach) ?? null
+  }
+
   /** Areas the GM showed the players, drawn for the GM as green outlines. */
   setReveals(list: Rect[]) { this.poke(); this.reveals = list; this.fog.setReveals(list); this.drawReveals() }
   private drawReveals() {
@@ -553,6 +587,17 @@ export class TableEngine {
     }
     g.fill({ color, alpha: 0.28 }).stroke({ width: 2 / this.world.scale.x, color, alpha: 0.9 })
     box.addChild(g)
+    // the grid squares the area covers, as the rules count them (the middle of the square inside)
+    if (s && s.grid === 'square') {
+      const cells = new Graphics()
+      const x0 = Math.floor((Math.min(a.x, b.x) - len) / s.gridSize), x1 = Math.ceil((Math.max(a.x, b.x) + len) / s.gridSize)
+      const y0 = Math.floor((Math.min(a.y, b.y) - len) / s.gridSize), y1 = Math.ceil((Math.max(a.y, b.y) + len) / s.gridSize)
+      for (let cx = x0; cx < x1; cx++) for (let cy = y0; cy < y1; cy++) {
+        if (inTemplate(kind as 'cone', a, b, { x: (cx + 0.5) * s.gridSize, y: (cy + 0.5) * s.gridSize }, s.gridSize)) cells.rect(cx * s.gridSize, cy * s.gridSize, s.gridSize, s.gridSize)
+      }
+      cells.fill({ color, alpha: 0.22 }).stroke({ width: 1 / this.world.scale.x, color, alpha: 0.5 })
+      box.addChild(cells)
+    }
     if (s) {
       const label = new Text({ text: formatDistance((len / s.gridSize) * s.dist, s.unit), style: { fontSize: 14, fill: 0xffffff, fontFamily: 'sans-serif', stroke: { color: 0x000000, width: 3 } } })
       label.scale.set(1 / this.world.scale.x)
@@ -590,9 +635,18 @@ export class TableEngine {
       for (const p of pts.slice(1)) g.lineTo(p.x, p.y)
       if (pts.length === 1) g.circle(a.x, a.y, width / 2).fill({ color: c })
     } else if (kind === 'line') g.moveTo(a.x, a.y).lineTo(b.x, b.y)
+    else if (kind === 'arrow') {
+      g.moveTo(a.x, a.y).lineTo(b.x, b.y)
+      const ang = Math.atan2(b.y - a.y, b.x - a.x), head = 10 + width * 2
+      g.moveTo(b.x, b.y).lineTo(b.x - head * Math.cos(ang - 0.45), b.y - head * Math.sin(ang - 0.45)).moveTo(b.x, b.y).lineTo(b.x - head * Math.cos(ang + 0.45), b.y - head * Math.sin(ang + 0.45))
+    } else if (kind === 'polygon') {
+      g.moveTo(a.x, a.y)
+      for (const p of pts.slice(1)) g.lineTo(p.x, p.y)
+      if (pts.length > 2) g.closePath()
+    }
     else if (kind === 'rect') g.rect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y))
     else g.ellipse((a.x + b.x) / 2, (a.y + b.y) / 2, Math.abs(b.x - a.x) / 2, Math.abs(b.y - a.y) / 2)
-    if (fill && (kind === 'rect' || kind === 'ellipse')) g.fill({ color: new Color(fill).toNumber(), alpha: 0.35 })
+    if (fill && (kind === 'rect' || kind === 'ellipse' || (kind === 'polygon' && pts.length > 2))) g.fill({ color: new Color(fill.slice(0, 7)).toNumber(), alpha: fill.length === 9 ? Number.parseInt(fill.slice(7), 16) / 255 : 0.35 })
     g.stroke({ width, color: c, cap: 'round', join: 'round' })
     box.addChild(g)
     return box
@@ -645,6 +699,20 @@ export class TableEngine {
     if (this.gmView) return
     // a hidden token is the GM's secret, even from the GM looking through a player's eyes
     for (const v of this.views.values()) v.box.visible = !(this.preview && v.token.hidden) && (this.isViewer(v.token) || this.fog.isVisible({ x: v.token.x, y: v.token.y }))
+  }
+
+  /** Draws the polygon so far, with its next side following the pointer. */
+  private previewPolygon(to: Pt) {
+    this.strokeG.removeChildren().forEach((c) => c.destroy({ children: true }))
+    if (this.polyPts.length) this.strokeG.addChild(this.shape('polygon', [...this.polyPts, to], this.drawStyle.color, this.drawStyle.width, this.drawStyle.fill, '', 0.8))
+  }
+
+  /** Closes the polygon being drawn and sends it (Enter or a double click). */
+  finishPolygon() {
+    const pts = this.polyPts
+    this.polyPts = []
+    this.strokeG.removeChildren().forEach((c) => c.destroy({ children: true }))
+    if (pts.length >= 3) this.hooks.onDraw({ ...this.drawStyle, points: pts })
   }
 
   /** Ends the wall being drawn and sends it. */
@@ -711,7 +779,7 @@ export class TableEngine {
     }
   }
 
-  setTool(tool: Tool) { this.poke(); this.tool = tool; this.rulerBase = []; this.wallPoly = []; this.wallPreview.clear(); this.drawWalls(); if (this.ready) this.app.canvas.style.cursor = tool === 'ruler' ? 'crosshair' : '' }
+  setTool(tool: Tool) { this.poke(); this.tool = tool; this.rulerBase = []; this.polyPts = []; this.strokeG.removeChildren().forEach((c) => c.destroy({ children: true })); this.wallPoly = []; this.wallPreview.clear(); this.drawWalls(); if (this.ready) this.app.canvas.style.cursor = tool === 'ruler' ? 'crosshair' : '' }
 
   setOthers(cursors: Record<string, Cursor>, rulers: Record<string, Ruler>) { this.poke();
     if (!this.ready) return
@@ -827,6 +895,7 @@ export class TableEngine {
       const door = this.nearWall(world, (w) => w.kind === 'door' || w.kind === 'secret')
       if (door) { this.hooks.onDoorLock(door.id, !door.locked); return }
     }
+    if (e.altKey && e.shiftKey && this.me.gm) { this.hooks.onPing(world); this.hooks.onPull(world); return }
     if (e.altKey) return this.hooks.onPing(world)
     const pan = e.button === 1 || e.button === 2
     if (!pan && this.me.gm && this.tool === 'wall' && this.wallShape === 'rect') {
@@ -867,11 +936,22 @@ export class TableEngine {
       this.wallPoly.push(pt)
       return
     }
+    if (!pan && this.tool === 'erase' && this.me.gm) { const pin = this.nearPin(world); if (pin) { this.hooks.onPinDelete(pin.id); return } }
     if (!pan && this.tool === 'erase') {
       const d = this.nearDrawing(world)
       if (d) { this.hooks.onDrawErase(d.id); return }
       const w = this.me.gm ? this.nearWall(world) : null
       if (w) this.hooks.onWallErase(w.id)
+      return
+    }
+    if (!pan && this.me.gm && this.tool === 'pin') { this.hooks.onPinPlace(world); return }
+    if (!pan && this.tool === 'draw' && this.drawStyle.kind === 'polygon') {
+      const now = performance.now()
+      const again = now - this.lastClick.t < 350 && Math.hypot(world.x - this.lastClick.x, world.y - this.lastClick.y) < 6 / this.world.scale.x
+      this.lastClick = { t: now, x: world.x, y: world.y }
+      if (again) { this.finishPolygon(); return }
+      this.polyPts.push(world)
+      this.previewPolygon(world)
       return
     }
     if (!pan && this.tool === 'draw') {
@@ -881,6 +961,13 @@ export class TableEngine {
       return
     }
     const tok = pan ? null : this.hit(world)
+    if (!tok && !pan && this.tool === 'select') {
+      const pin = this.nearPin(world)
+      if (pin) { this.hooks.onPin(pin); return }
+      // a drawing of your own (or any, for the GM) can be dragged somewhere else
+      const dr = this.nearDrawing(world)
+      if (dr && (this.me.gm || dr.userId === this.me.id)) { this.drag = { kind: 'drawmove', drawing: dr, start: world, screen, moved: false, sent: 0 }; return }
+    }
     if (!tok && !pan && this.me.canDoors) {
       const door = this.nearWall(world, (w) => w.kind === 'door' || (w.kind === 'secret' && this.me.gm))
       if (door) { this.hooks.onDoor(door.id); return }
@@ -969,6 +1056,13 @@ export class TableEngine {
         if (now - d.sent > 70) { d.sent = now; this.hooks.onRuler(path) }
         break
       }
+      case 'drawmove': {
+        const dr = d.drawing!
+        const off = { x: world.x - d.start.x, y: world.y - d.start.y }
+        this.strokeG.removeChildren().forEach((c) => c.destroy({ children: true }))
+        this.strokeG.addChild(this.shape(dr.kind, dr.points.map((p) => ({ x: p.x + off.x, y: p.y + off.y })), dr.color, dr.width, dr.fill, dr.text, 0.7))
+        break
+      }
       case 'wallrect':
       case 'revealrect': {
         const to = d.kind === 'wallrect' ? this.snapWall(world) : world
@@ -1053,6 +1147,10 @@ export class TableEngine {
       const end = this.scene ? snapPoint(this.toWorld(this.local(e)), this.scene) : this.toWorld(this.local(e))
       this.rulerBase = [...this.rulerBase, end]
     } else if (d.kind === 'tokens' || d.kind === 'ruler') { if (d.kind === 'ruler') this.rulerBase = []; this.ruleG.clear(); this.ruleLabel.visible = false; if (d.moved) this.hooks.onRuler(null) }
+    if (d.kind === 'drawmove') {
+      this.strokeG.removeChildren().forEach((c) => c.destroy({ children: true }))
+      if (d.moved) { const w = this.toWorld(this.local(e)); this.hooks.onDrawMove(d.drawing!.id, w.x - d.start.x, w.y - d.start.y) }
+    }
     if ((d.kind === 'wallrect' || d.kind === 'revealrect')) {
       this.wallPreview.clear()
       const w = this.toWorld(this.local(e))

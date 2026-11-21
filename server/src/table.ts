@@ -230,6 +230,10 @@ interface DrawingDb { id: string; scene_id: string; user_id: string; kind: strin
 const drawingJson = (r: DrawingDb) => ({
   id: r.id, sceneId: r.scene_id, userId: r.user_id, kind: r.kind, points: parse<{ x: number; y: number }[]>(r.points, []), color: r.color, width: r.width, fill: r.fill, text: r.text, gmOnly: !!r.gm_only,
 })
+interface PinDb { id: string; x: number; y: number; label: string; page_id: string | null; gm_only: number }
+/** Pins on a scene; the GM's own are left out for everyone else. */
+const pinsFor = (c: Conn, scene: string | null) => !scene ? [] : (db.prepare('SELECT id, x, y, label, page_id, gm_only FROM scene_pins WHERE scene_id = ? AND workspace_id = ?').all(scene, c.ws) as PinDb[]).filter((p) => c.role === 'gm' || !p.gm_only).map((p) => ({ id: p.id, x: p.x, y: p.y, label: p.label, pageId: p.page_id, gmOnly: !!p.gm_only }))
+const sendPins = (ws: string, sceneId: string) => { for (const c of inWorld(ws)) if (c.scene === sceneId) send(c, { t: 'pins', sceneId, pins: pinsFor(c, sceneId) }) }
 const drawingRow = (id: string) => { const r = db.prepare('SELECT * FROM drawings WHERE id = ?').get(id) as DrawingDb | undefined; return r ? drawingJson(r) : undefined }
 /** Drawings the GM keeps to themselves are left out for everyone else. */
 const drawingsFor = (c: Conn, scene: string | null) => !scene ? [] : (db.prepare('SELECT * FROM drawings WHERE scene_id = ? AND workspace_id = ? ORDER BY created_at').all(scene, c.ws) as DrawingDb[]).filter((r) => c.role === 'gm' || !r.gm_only).map(drawingJson)
@@ -244,7 +248,7 @@ function tilesFor(c: Conn, scene: string | null) {
 }
 const sendTiles = (ws: string, sceneId: string) => { for (const c of inWorld(ws)) if (c.scene === sceneId) send(c, { t: 'tiles', sceneId, tiles: tilesFor(c, sceneId) }) }
 
-const sceneState = (c: Conn) => ({ walls: wallsFor(c, c.scene), reveals: revealsOf(c.ws, c.scene), lights: lightsOf(c.ws, c.scene), fog: fogOf(c, c.scene), drawings: drawingsFor(c, c.scene), tiles: tilesFor(c, c.scene) })
+const sceneState = (c: Conn) => ({ pins: pinsFor(c, c.scene), walls: wallsFor(c, c.scene), reveals: revealsOf(c.ws, c.scene), lights: lightsOf(c.ws, c.scene), fog: fogOf(c, c.scene), drawings: drawingsFor(c, c.scene), tiles: tilesFor(c, c.scene) })
 
 function sendView(c: Conn) {
   send(c, { t: 'view', sceneId: c.scene, tokens: tokensFor(c, c.scene), ...sceneState(c) })
@@ -1131,6 +1135,11 @@ async function handle(c: Conn, m: ClientMessage) {
         .run(id, m.sceneId, ws, c.user.id, m.kind, JSON.stringify(m.points), m.color, m.width, m.fill ?? '', m.text ?? '', gm && m.gmOnly ? 1 : 0, now())
       const d = drawingRow(id)!
       for (const x of inWorld(ws)) if (x.scene === m.sceneId && (x.role === 'gm' || !d.gmOnly)) send(x, { t: 'draw', drawing: d })
+      // a temporary drawing goes by itself
+      if (m.temp) setTimeout(() => {
+        if (!db.prepare('DELETE FROM drawings WHERE id = ?').run(id).changes) return
+        for (const x of inWorld(ws)) if (x.scene === m.sceneId) send(x, { t: 'draw.remove', ids: [id] })
+      }, 9000)
       return
     }
     case 'draw.delete': {
@@ -1145,6 +1154,31 @@ async function handle(c: Conn, m: ClientMessage) {
       }
       for (const [sceneId, ids] of Object.entries(gone)) for (const x of inWorld(ws)) if (x.scene === sceneId) send(x, { t: 'draw.remove', ids })
       return
+    }
+    case 'draw.move': {
+      const d = drawingRow(m.id)
+      if (!d || !sceneRow(d.sceneId, ws)) return nack(c, m, 'no such drawing')
+      if (!gm && d.userId !== c.user.id) return nack(c, m, 'not allowed')
+      const points = d.points.map((p: { x: number; y: number }) => ({ x: p.x + m.dx, y: p.y + m.dy }))
+      db.prepare('UPDATE drawings SET points = ? WHERE id = ?').run(JSON.stringify(points), m.id)
+      const moved = drawingRow(m.id)!
+      for (const x of inWorld(ws)) if (x.scene === d.sceneId && (x.role === 'gm' || !moved.gmOnly)) send(x, { t: 'draw', drawing: moved })
+      return
+    }
+    case 'pin.add': {
+      if (!gm) return nack(c, m, 'only the GM can do that')
+      if (!sceneRow(m.sceneId, ws)) return nack(c, m, 'no such scene')
+      if (m.pageId && !db.prepare('SELECT 1 FROM pages WHERE id = ? AND workspace_id = ? AND deleted_at IS NULL').get(m.pageId, ws)) return nack(c, m, 'no such page')
+      if ((db.prepare('SELECT COUNT(*) AS n FROM scene_pins WHERE scene_id = ?').get(m.sceneId) as { n: number }).n >= 300) return nack(c, m, 'That is as many pins as a scene can keep.')
+      db.prepare('INSERT INTO scene_pins(id,scene_id,workspace_id,x,y,label,page_id,gm_only) VALUES(?,?,?,?,?,?,?,?)').run(uid(), m.sceneId, ws, m.x, m.y, m.label, m.pageId, m.gmOnly ? 1 : 0)
+      return sendPins(ws, m.sceneId)
+    }
+    case 'pin.delete': {
+      if (!gm) return nack(c, m, 'only the GM can do that')
+      const p = db.prepare('SELECT scene_id AS s FROM scene_pins WHERE id = ? AND workspace_id = ?').get(m.id, ws) as { s: string } | undefined
+      if (!p) return nack(c, m, 'no such pin')
+      db.prepare('DELETE FROM scene_pins WHERE id = ?').run(m.id)
+      return sendPins(ws, p.s)
     }
     case 'draw.clear': {
       if (!gm) return nack(c, m, 'only the GM can do that')

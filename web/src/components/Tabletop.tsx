@@ -15,6 +15,7 @@ import { HandoutViewer, HandoutsPanel } from './TableHandouts'
 import { AudioPlayer } from './TableAudio'
 import { TriggersSection } from './TableTriggers'
 import { MapEditor } from './MapEditor'
+import { PinDialog } from './PinDialog'
 import { TokenActions, TokenBars, TokenLook } from './TokenLook'
 import { TablesAndDecks } from './TableDecks'
 import { ChatPanel, CombatPanel, LinkPage, SightLight, TokenSheet, TokenStats } from './TableParts'
@@ -54,6 +55,8 @@ export function TableView() {
   const host = useRef<HTMLDivElement>(null)
   const styleRef = useRef({ color: '#ff5252', width: 4 })
   const gmOnlyRef = useRef(false)
+  const tempRef = useRef(false)
+  const [pinAt, setPinAt] = useState<{ x: number; y: number } | null>(null)
   const engine = useRef<TableEngine | null>(null)
   const scene = scenes.find((s) => s.id === sceneId) ?? null
   const gm = role === 'gm'
@@ -86,7 +89,12 @@ export function TableView() {
       onUnreveal: (id) => { sendTable({ t: 'fog.unreveal', id }) },
       onWallMove: (updates) => { for (const u of updates) sendTable({ t: 'wall.update', id: u.id, patch: u.patch }) },
       onDoor: (id) => { sendTable({ t: 'door.toggle', id }) },
-      onDraw: (d) => { const id = useTable.getState().sceneId; if (id && d.points.length) sendTable({ t: 'draw.add', sceneId: id, kind: d.kind, points: d.points, color: d.color, width: d.width, ...(d.fill ? { fill: d.fill } : {}), gmOnly: gmOnlyRef.current && useTable.getState().role === 'gm' }) },
+      onDraw: (d) => { const id = useTable.getState().sceneId; if (id && d.points.length) sendTable({ t: 'draw.add', sceneId: id, kind: d.kind, points: d.points, color: d.color, width: d.width, ...(d.fill ? { fill: d.fill } : {}), gmOnly: gmOnlyRef.current && useTable.getState().role === 'gm', ...(tempRef.current ? { temp: true } : {}) }) },
+      onDrawMove: (id, dx, dy) => { sendTable({ t: 'draw.move', id, dx, dy }) },
+      onPull: (p) => { const v = engine.current?.getView(); if (v) sendTable({ t: 'camera.pull', x: p.x - v.w / 2, y: p.y - v.h / 2, w: v.w, h: v.h }) },
+      onPinPlace: (p) => setPinAt(p),
+      onPin: (pin) => { if (pin.pageId) useStore.getState().navigate({ type: 'page', id: pin.pageId }) },
+      onPinDelete: (id) => { sendTable({ t: 'pin.delete', id }) },
       onText: async (p) => {
         const id = useTable.getState().sceneId
         const text = await askText('Write on the map', { label: 'Text', placeholder: 'The cellar door', okLabel: 'Place' })
@@ -113,6 +121,7 @@ export function TableView() {
       push()
       e.setWalls(useTable.getState().walls)
       e.setReveals(useTable.getState().reveals)
+      e.setPins(useTable.getState().pins)
       e.setTriggers(useTable.getState().triggers.filter((t) => !t.scene || t.scene === useTable.getState().sceneId).filter((t) => t.event === 'enter'))
       e.setLights(useTable.getState().lights)
       e.setTokens(useTable.getState().tokens)
@@ -133,6 +142,7 @@ export function TableView() {
         if (s.selectedTile !== prev.selectedTile) e.setSelectedTile(s.selectedTile)
         if (s.walls !== prev.walls) e.setWalls(s.walls)
         if (s.reveals !== prev.reveals) e.setReveals(s.reveals)
+        if (s.pins !== prev.pins) e.setPins(s.pins)
         if (s.triggers !== prev.triggers || s.sceneId !== prev.sceneId) e.setTriggers(s.triggers.filter((t) => !t.scene || t.scene === s.sceneId).filter((t) => t.event === 'enter'))
         if (s.lights !== prev.lights) e.setLights(s.lights)
         if (s.sceneId !== prev.sceneId || s.fog !== prev.fog) e.setExplored(s.fog)
@@ -146,13 +156,14 @@ export function TableView() {
     return () => { off(); e.destroy(); engine.current = null }
   }, [])
 
-  const [draw, setDraw] = useState<{ kind: DrawKind; color: string; width: number; fill: boolean }>({ kind: 'free', color: '#ff5252', width: 4, fill: false })
+  const [draw, setDraw] = useState<{ kind: DrawKind; color: string; width: number; fill: boolean; opacity: number; temp: boolean }>({ kind: 'free', color: '#ff5252', width: 4, fill: false, opacity: 35, temp: false })
   const [gmOnly, setGmOnly] = useState(false)
   const canDraw = useTable((s) => s.role === 'gm' || (s.role === 'player' && s.settings.playersDraw))
   useEffect(() => {
     styleRef.current = { color: draw.color, width: draw.width }
     gmOnlyRef.current = gmOnly
-    engine.current?.setDrawStyle({ kind: draw.kind, color: draw.color, width: draw.width, fill: draw.fill ? draw.color : '' })
+    tempRef.current = draw.temp
+    engine.current?.setDrawStyle({ kind: draw.kind, color: draw.color, width: draw.width, fill: draw.fill ? draw.color + Math.round((draw.opacity / 100) * 255).toString(16).padStart(2, '0') : '' })
   }, [draw, gmOnly])
   const [wallKind, setWallKind] = useState<'wall' | 'door' | 'secret' | 'window' | 'oneway'>('wall')
   const [wallShape, setWallShape] = useState<'line' | 'rect'>('line')
@@ -190,6 +201,7 @@ export function TableView() {
     const st = useTable.getState()
     const sel = st.tokens.filter((t) => st.selected.includes(t.id))
     if (e.key === 'Enter' && tool === 'wall') engine.current?.finishWalls()
+    else if (e.key === 'Enter' && tool === 'draw') engine.current?.finishPolygon()
     else if (e.key === 'Escape') { engine.current?.finishWalls(); useTable.setState({ selected: [] }); setTool('select') }
     else if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z') && !e.shiftKey) { e.preventDefault(); engine.current?.undoMove() }
     else if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C') && sel.length) { clipboard = sel.map((t) => structuredClone(t)) }
@@ -242,13 +254,15 @@ export function TableView() {
         {canDraw && tool === 'draw' && (
           <>
             <span className="seg tt-kinds" role="group" aria-label="Kind of drawing">
-              {([['free', 'Pen', 'Draw freehand'], ['line', 'Line', 'A straight line'], ['rect', 'Box', 'A rectangle'], ['ellipse', 'Circle', 'An ellipse'], ['text', 'Text', 'Write on the map'], ['cone', 'Cone', 'Spell area: a cone from the origin, as long as it is wide at the end'], ['beam', 'Ray', 'Spell area: a line one cell wide'], ['blast', 'Burst', 'Spell area: a circle from its centre'], ['cube', 'Cube', 'Spell area: a square from the middle of one side']] as const).map(([k, label, hint]) => <button key={k} className={draw.kind === k ? 'on' : ''} title={hint} onClick={() => setDraw({ ...draw, kind: k })}>{label}</button>)}
+              {([['free', 'Pen', 'Draw freehand'], ['line', 'Line', 'A straight line'], ['arrow', 'Arrow', 'A line with a head'], ['polygon', 'Shape', 'Click the corners, double-click to close it'], ['rect', 'Box', 'A rectangle'], ['ellipse', 'Circle', 'An ellipse'], ['text', 'Text', 'Write on the map'], ['cone', 'Cone', 'Spell area: a cone from the origin, as long as it is wide at the end'], ['beam', 'Ray', 'Spell area: a line one cell wide'], ['blast', 'Burst', 'Spell area: a circle from its centre'], ['cube', 'Cube', 'Spell area: a square from the middle of one side']] as const).map(([k, label, hint]) => <button key={k} className={draw.kind === k ? 'on' : ''} title={hint} onClick={() => setDraw({ ...draw, kind: k })}>{label}</button>)}
             </span>
             <span className="tt-swatches" role="group" aria-label="Colour">
               {['#ff5252', '#ffb300', '#66bb6a', '#29b6f6', '#ab47bc', '#ffffff', '#212121'].map((c) => <button key={c} className={`tt-swatch${draw.color === c ? ' on' : ''}`} style={{ background: c }} title={c} aria-label={`Colour ${c}`} onClick={() => setDraw({ ...draw, color: c })} />)}
             </span>
             <label className="tt-inline" title="Line width">Width<input type="range" min={2} max={16} value={draw.width} onChange={(e) => setDraw({ ...draw, width: Number(e.target.value) })} /></label>
-            {(draw.kind === 'rect' || draw.kind === 'ellipse') && <label className="tt-inline"><input type="checkbox" checked={draw.fill} onChange={(e) => setDraw({ ...draw, fill: e.target.checked })} />Filled</label>}
+            {(draw.kind === 'rect' || draw.kind === 'ellipse' || draw.kind === 'polygon') && <label className="tt-inline"><input type="checkbox" checked={draw.fill} onChange={(e) => setDraw({ ...draw, fill: e.target.checked })} />Filled</label>}
+            {draw.fill && <label className="tt-inline" title="How solid the fill is">Fill<input type="range" min={10} max={100} aria-label="Fill strength" value={draw.opacity} onChange={(e) => setDraw({ ...draw, opacity: Number(e.target.value) })} /></label>}
+            <label className="tt-inline" title="Gone after a few seconds, to point something out"><input type="checkbox" checked={draw.temp} onChange={(e) => setDraw({ ...draw, temp: e.target.checked })} />Fades away</label>
             {gm && <label className="tt-inline" title="Only you see it"><input type="checkbox" checked={gmOnly} onChange={(e) => setGmOnly(e.target.checked)} />GM only</label>}
           </>
         )}
@@ -257,6 +271,7 @@ export function TableView() {
         {gm && <button className={`btn sm square${tool === 'wall' ? ' on' : ''}`} title="Draw walls, doors and windows. Click to place points, double-click or Enter to finish." aria-label="Draw walls" onClick={() => setTool(tool === 'wall' ? 'select' : 'wall')}><BrickWall size={14} /></button>}
         {gm && scene && (
           <>
+            <button className={`btn sm${tool === 'pin' ? ' on' : ''}`} title="Click the map to pin a note, with a page if you like" aria-label="Pin a note" onClick={() => setTool(tool === 'pin' ? 'select' : 'pin')}>Pin</button>
             <button className={`btn sm${tool === 'reveal' ? ' on' : ''}`} title="Drag a rectangle to show that part of the map to the players" aria-label="Show an area" onClick={() => setTool(tool === 'reveal' ? 'select' : 'reveal')}>Show area</button>
             <button className={`btn sm${tool === 'conceal' ? ' on' : ''}`} title="Click an area you showed to take it back" aria-label="Hide a shown area" onClick={() => setTool(tool === 'conceal' ? 'select' : 'conceal')}>Hide area</button>
           </>
@@ -338,6 +353,7 @@ export function TableView() {
         )}
       </div>
       <HandoutViewer />
+      {pinAt && <PinDialog at={pinAt} onClose={() => setPinAt(null)} />}
       <AudioPlayer />
       {narrow && <MyStrip />}
       {narrow && (

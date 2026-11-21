@@ -584,6 +584,19 @@ const migrations: (string | ((d: Database.Database) => void))[] = [
   );
   CREATE INDEX reveals_scene ON scene_reveals(scene_id);
   `,
+  // map pins: a note on the scene that can open a page
+  `
+  CREATE TABLE scene_pins (
+    id TEXT PRIMARY KEY,
+    scene_id TEXT NOT NULL REFERENCES scenes(id) ON DELETE CASCADE,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    x REAL NOT NULL, y REAL NOT NULL,
+    label TEXT NOT NULL,
+    page_id TEXT,
+    gm_only INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE INDEX pins_scene ON scene_pins(scene_id);
+  `,
 ]
 
 export const SCHEMA_VERSION = migrations.length
