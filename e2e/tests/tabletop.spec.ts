@@ -1910,3 +1910,23 @@ test('the map editor: diagonal walls and pictures of your own as props', { tag: 
   await expect(editor.getByRole('button', { name: 'Choose a picture' })).toBeVisible()
   await expect(editor.getByLabel('Picture size in cells')).toBeVisible()
 })
+
+test('a chat line can be added to the session notes page', { tag: '@feature:table.chat-notes' }, async ({ app, api, world }) => {
+  await openTable(app)
+  await makeScene(app, 'Council')
+  await app.locator('.tt-panel .seg').getByRole('button', { name: /Chat/ }).click()
+  await app.getByLabel('Chat message').fill('The duke agrees to open the gates.')
+  await app.getByLabel('Chat message').press('Enter')
+  await app.getByRole('button', { name: 'Add this message to the session notes' }).first().click()
+  await expect(app.getByRole('button', { name: 'Add this message to the session notes' }).first()).toContainText('Noted')
+  await app.getByLabel('Chat message').fill('/me nods')
+  await app.getByLabel('Chat message').press('Enter')
+  await app.getByRole('list', { name: 'Chat' }).getByRole('listitem').filter({ hasText: 'nods' }).getByRole('button', { name: 'Add this message to the session notes' }).click()
+  await expect.poll(async () => {
+    const pages = (await api.json<{ pages: { id: string; title: string }[] }>('get', `/api/workspaces/${world.id}/bootstrap`)).pages
+    const notes = pages.find((p) => p.title.startsWith('Session notes'))
+    if (!notes) return ''
+    const full = await api.json<{ content: unknown }>('get', `/api/pages/${notes.id}`)
+    return JSON.stringify(full.content)
+  }, { timeout: 15_000 }).toMatch(/The duke agrees to open the gates\..*nods/s)
+})

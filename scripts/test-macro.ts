@@ -1,5 +1,5 @@
 import { docText } from '../web/src/lib/docText'
-import { macroLineOf, fillQueries, linesOf, queriesIn, refValue, resolveRefs } from '../web/src/lib/macro'
+import { noteLineOf, macroLineOf, fillQueries, linesOf, queriesIn, refValue, resolveRefs } from '../web/src/lib/macro'
 import { emptyCharacter } from '../web/src/lib/sheet'
 
 let failed = 0
@@ -38,5 +38,9 @@ check('talk with rolls inside keeps them in double brackets', macroLineOf({ kind
 check('an emote and an out of character line keep their command', macroLineOf({ kind: 'emote', parts: [{ t: 'text', text: 'draws a sword' }] }) === '/me draws a sword' && macroLineOf({ kind: 'ooc', parts: [{ t: 'text', text: 'brb' }] }) === '/ooc brb')
 check('a card becomes a /card line again', macroLineOf({ kind: 'say', parts: [{ t: 'card', title: 'Longsword', rows: [{ label: 'Attack', parts: [roll('1d20+5')] }, { label: '', parts: [{ t: 'text', text: 'Pommel strike' }] }] }] }) === '/card Longsword | Attack: [[1d20+5]] | Pommel strike')
 check('a whisper or an empty message has no line', macroLineOf({ kind: 'whisper', parts: [{ t: 'text', text: 'psst' }] }) === null && macroLineOf({ kind: 'say', parts: [] }) === null)
+check('a spoken line becomes who said it and what', noteLineOf({ kind: 'say', name: 'Mara', parts: [{ t: 'text', text: 'Follow me.' }] }) === 'Mara: Follow me.')
+check('a roll becomes who rolled what and the result', noteLineOf({ kind: 'roll', name: 'Tor', parts: [{ t: 'roll', roll: { expr: '1d20+5', label: 'stealth', total: 17 } }] }) === 'Tor rolled stealth 17')
+check('an emote reads as an action and a card as its title and lines', noteLineOf({ kind: 'emote', name: 'Tor', parts: [{ t: 'text', text: 'draws a sword' }] }) === 'Tor draws a sword' && noteLineOf({ kind: 'say', name: 'Tor', parts: [{ t: 'card', title: 'Longsword', rows: [{ label: 'Attack', parts: [{ t: 'roll', roll: { expr: '1d20', label: '', total: 15 } }] }] }] }) === 'Tor: Longsword (Attack 15)')
+check('whispers and empty messages are not written down', noteLineOf({ kind: 'whisper', name: 'A', parts: [{ t: 'text', text: 'x' }] }) === null && noteLineOf({ kind: 'say', name: 'A', parts: [] }) === null)
 console.log(failed ? `\n${failed} failed` : '\nall passed')
 process.exit(failed ? 1 : 0)

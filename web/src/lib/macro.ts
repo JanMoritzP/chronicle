@@ -79,3 +79,13 @@ export function macroLineOf(m: { kind: string; parts: MsgPart[] }): string | nul
   if (!text) return null
   return m.kind === 'emote' ? `/me ${text}` : m.kind === 'ooc' ? `/ooc ${text}` : text
 }
+
+/** A chat message as a line of notes for the session write-up: who said it, and what was rolled with the result. Null for a whisper or an empty message. */
+export function noteLineOf(m: { kind: string; name: string; parts: (MsgPart & { roll?: { expr?: string; label?: string; total?: number } })[] }): string | null {
+  if (m.kind === 'whisper') return null
+  const say = (parts: MsgPart[]): string => parts.map((p) => (p.t === 'roll' ? `${[p.roll?.label, (p.roll as { total?: number } | undefined)?.total].filter((x) => x !== undefined && x !== '').join(' ')}` : p.t === 'card' ? `${p.title ?? ''}${p.rows?.length ? ` (${p.rows.map((r) => `${r.label ? `${r.label} ` : ''}${say(r.parts)}`.trim()).join(', ')})` : ''}` : p.text ?? '')).join('').trim()
+  const text = say(m.parts)
+  if (!text) return null
+  if ((m.kind === 'roll' || m.kind === 'gmroll') && m.parts.length === 1 && m.parts[0].t === 'roll') return `${m.name} rolled ${text}`
+  return m.kind === 'emote' ? `${m.name} ${text}` : `${m.name}: ${text}`
+}

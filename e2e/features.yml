@@ -484,6 +484,9 @@ areas:
       - id: table.call
         name: "Voice and video between the people at the table"
         files: [web/src/tabletop/call.ts, web/src/components/CallPanel.tsx, server/src/table.ts]
+      - id: table.chat-notes
+        name: "A chat line added to the session notes page"
+        files: [web/src/components/TableMacros.tsx, web/src/components/TableParts.tsx, web/src/lib/macro.ts]
       - id: table.stats
         name: "Hit points, damage, healing and conditions on a token, with a linked page's sheet"
         files: [web/src/components/TableParts.tsx, web/src/components/TableSheet.tsx]

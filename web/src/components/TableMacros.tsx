@@ -30,6 +30,29 @@ export async function saveMessageAsMacro(line: string) {
   try { await api.createMacro(ws, { name: name.trim().slice(0, 60), text: line.slice(0, 2000), shared: false }); window.dispatchEvent(new Event('tt-macros')) } catch (e: any) { await alertDialog(e.message) }
 }
 
+/** Adds a line to the session notes: one page for the table, made the first time and added to after that (kept for this world in this browser). */
+export async function addToSessionNotes(line: string): Promise<boolean> {
+  const ws = useStore.getState().wsId
+  if (!ws) return false
+  const key = `tt-notes:${ws}`
+  const para = { type: 'paragraph', content: [{ type: 'text', text: line.slice(0, 2000) }] }
+  try {
+    let id: string | null = null
+    try { id = localStorage.getItem(key) } catch { /* no memory of it */ }
+    if (id) {
+      try {
+        const p = await api.getPage(id, true)
+        await api.patchPage(id, { content: { ...p.content, content: [...(p.content?.content ?? []), para] } })
+        return true
+      } catch { /* the page is gone: a new one is made */ }
+    }
+    const page = await useStore.getState().createPage({ title: `Session notes, ${new Date().toLocaleDateString()}`, content: { type: 'doc', content: [para] }, open: false })
+    if (!page) return false
+    try { localStorage.setItem(key, page.id) } catch { /* the next line makes another page */ }
+    return true
+  } catch (e: any) { await alertDialog(e.message ?? 'The notes could not be written.'); return false }
+}
+
 export async function runMacro(text: string) {
   const answers: Record<string, string> = {}
   for (const q of queriesIn(text)) {
