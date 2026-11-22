@@ -25,9 +25,10 @@ export const VIDEO: Record<string, string> = { 'video/webm': '.webm', 'video/mp4
 const ANY: Record<string, string> = { ...ALLOWED, ...AUDIO, ...VIDEO }
 
 /** Checks a file that is already on disk against the world's quota and the plugins, then records it. Removes the file when refused. */
-async function keep(ws: string, user: string, id: string, dest: string, filename: string, mime: string, reply: FastifyReply) {
+type Kept = { id: string; url: string; mime: string; size: number; warnings?: string[] }
+async function keepFile(ws: string, user: string, id: string, dest: string, filename: string, mime: string): Promise<Kept | { code: number; error: string }> {
   const size = fs.statSync(dest).size
-  const refuse = (code: number, error: string) => { fs.unlinkSync(dest); return reply.code(code).send({ error }) }
+  const refuse = (code: number, error: string) => { fs.unlinkSync(dest); return { code, error } }
   // a world keeps a limited amount of files
   const used = (db.prepare('SELECT COALESCE(SUM(size), 0) AS n FROM uploads WHERE workspace_id = ?').get(ws) as { n: number }).n
   if (used + size > config.uploadQuotaMb * 1024 * 1024) return refuse(413, `This world has used its ${config.uploadQuotaMb} MB of files. Delete some in the asset library first.`)
@@ -41,9 +42,27 @@ async function keep(ws: string, user: string, id: string, dest: string, filename
   const failures = await runHook('upload:stored', { ws, user, id, filename, mime, size, file: dest, url })
   return { id, url, mime, size, ...(failures.length ? { warnings: failures.map((f) => `${f.plugin}: ${f.error}`) } : {}) }
 }
+async function keep(ws: string, user: string, id: string, dest: string, filename: string, mime: string, reply: FastifyReply) {
+  const r = await keepFile(ws, user, id, dest, filename, mime)
+  return 'error' in r ? reply.code(r.code).send({ error: r.error }) : r
+}
 
 /** What the content of a picture says it is, whatever the sender claimed. */
 const SNIFFED: Record<string, string> = { png: 'image/png', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', heif: 'image/avif' }
+
+/** Lets a plugin add a picture the same way the upload routes do (quota, hooks). Throws with a readable message when refused. */
+export async function addPicture(ws: string, user: string, filename: string, bytes: Buffer): Promise<Kept> {
+  let format = ''
+  try { format = (await sharp(bytes).metadata()).format ?? '' } catch { /* not a picture */ }
+  const mime = SNIFFED[format]
+  if (!mime) throw new Error('That is not a PNG, JPEG, WebP, GIF or AVIF picture')
+  const id = uid()
+  const dest = path.join(config.dataDir, 'uploads', id + ANY[mime])
+  fs.writeFileSync(dest, bytes)
+  const r = await keepFile(ws, user, id, dest, filename, mime)
+  if ('error' in r) throw new Error(r.error)
+  return r
+}
 
 export async function uploadRoutes(app: FastifyInstance) {
   // raw bytes are read as a buffer, so a script or another program can send a picture without building a form

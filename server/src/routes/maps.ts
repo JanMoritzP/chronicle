@@ -292,3 +292,50 @@ export async function mapRoutes(app: FastifyInstance) {
     ).all(id)
   })
 }
+
+// ---------- for plugins: a detail map behind a pin ----------
+
+const sniffExt = async (bytes: Buffer) => {
+  let format = ''
+  try { format = (await sharp(bytes, { limitInputPixels: false }).metadata()).format ?? '' } catch { /* not a picture */ }
+  const ext = ({ png: '.png', jpeg: '.jpg', webp: '.webp', heif: '.avif' } as Record<string, string>)[format]
+  if (!ext) throw new Error('A map must be a PNG, JPEG, WebP or AVIF picture')
+  return ext
+}
+
+export const mapSlots = {
+  /** Pins on a map that point at a page but have no map behind them yet: where a detail map is missing. */
+  pins: () => (db.prepare(
+    `SELECT i.id, i.map_id AS mapId, m.workspace_id AS ws, i.page_id AS pageId, p.title
+     FROM map_items i JOIN maps m ON m.id = i.map_id JOIN pages p ON p.id = i.page_id
+     JOIN workspaces w ON w.id = m.workspace_id
+     WHERE i.kind = 'point' AND i.target_map_id IS NULL AND p.deleted_at IS NULL AND w.deleted_at IS NULL ORDER BY i.created_at`,
+  ).all() as { id: string; mapId: string; ws: string; pageId: string; title: string }[]),
+  exists: (mapId: string) => !!db.prepare('SELECT 1 FROM maps WHERE id = ?').get(mapId),
+  /** Makes a tiled map from a picture, as a child of the map holding the pin, and opens it from every such pin of that page. Returns the new map id. */
+  async create(ws: string, pageId: string, name: string, bytes: Buffer) {
+    const ext = await sniffExt(bytes)
+    const pin = db.prepare('SELECT m.id AS mapId FROM map_items i JOIN maps m ON m.id = i.map_id WHERE m.workspace_id = ? AND i.page_id = ? AND i.target_map_id IS NULL ORDER BY i.created_at').get(ws, pageId) as { mapId: string } | undefined
+    const id = uid()
+    fs.mkdirSync(mapDir(id), { recursive: true })
+    fs.writeFileSync(path.join(mapDir(id), 'source' + ext), bytes)
+    db.transaction(() => {
+      db.prepare('INSERT INTO maps(id,workspace_id,parent_map_id,name,status,source_ext,created_at) VALUES(?,?,?,?,?,?,?)').run(id, ws, pin?.mapId ?? null, name.slice(0, 100) || 'Map', 'processing', ext, now())
+      db.prepare('INSERT INTO map_layers(id,map_id,name,sort) VALUES(?,?,?,0)').run(uid(), id, 'Default')
+      db.prepare('UPDATE map_items SET target_map_id = ?, updated_at = ? WHERE page_id = ? AND target_map_id IS NULL AND map_id IN (SELECT id FROM maps WHERE workspace_id = ?)').run(id, now(), pageId, ws)
+    })()
+    enqueue(id)
+    return id
+  },
+  /** A new picture for an existing map: pins and layers stay, the tiles are made again. */
+  async replace(mapId: string, bytes: Buffer) {
+    const row = db.prepare('SELECT source_ext FROM maps WHERE id = ?').get(mapId) as { source_ext: string | null } | undefined
+    if (!row) return false
+    const ext = await sniffExt(bytes)
+    if (row.source_ext && row.source_ext !== ext) fs.rmSync(path.join(mapDir(mapId), 'source' + row.source_ext), { force: true })
+    fs.writeFileSync(path.join(mapDir(mapId), 'source' + ext), bytes)
+    db.prepare("UPDATE maps SET source_ext = ?, status = 'processing', error = NULL WHERE id = ?").run(ext, mapId)
+    enqueue(mapId)
+    return true
+  },
+}

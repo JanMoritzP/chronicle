@@ -1776,3 +1776,37 @@ export function closeAllTable() {
 export function resetTable() {
   for (const c of conns) sendSnapshot(c)
 }
+
+// ---------- for plugins: pictures that fill an empty slot of the tabletop, announced to everyone at the table ----------
+
+export const tableSlots = {
+  /** Scenes with their background (empty when none) and exact size. */
+  scenes: () => (db.prepare('SELECT s.id, s.workspace_id AS ws, s.name, s.bg, s.width, s.height FROM scenes s JOIN workspaces w ON w.id = s.workspace_id WHERE w.deleted_at IS NULL ORDER BY s.created_at').all() as { id: string; ws: string; name: string; bg: string; width: number; height: number }[]),
+  tokens: () => (db.prepare('SELECT t.id, t.workspace_id AS ws, t.name, t.image FROM tokens t JOIN workspaces w ON w.id = t.workspace_id WHERE w.deleted_at IS NULL ORDER BY t.created_at').all() as { id: string; ws: string; name: string; image: string }[]),
+  handouts: () => (db.prepare('SELECT h.id, h.workspace_id AS ws, h.title, h.image FROM handouts h JOIN workspaces w ON w.id = h.workspace_id WHERE w.deleted_at IS NULL ORDER BY h.created_at').all() as { id: string; ws: string; title: string; image: string }[]),
+  setSceneBackground(id: string, url: string) {
+    const row = db.prepare('SELECT workspace_id AS ws FROM scenes WHERE id = ?').get(id) as { ws: string } | undefined
+    if (!row) return false
+    db.prepare('UPDATE scenes SET bg = ?, updated_at = ? WHERE id = ?').run(url, now(), id)
+    const scene = sceneRow(id, row.ws)!
+    for (const x of inWorld(row.ws)) send(x, { t: 'scene', scene: sceneFor(x, scene) })
+    return true
+  },
+  /** Gives the picture to every token of this name in the world that has none. Returns how many. */
+  setTokenImages(ws: string, name: string, url: string) {
+    const rows = db.prepare("SELECT id FROM tokens WHERE workspace_id = ? AND image = '' AND lower(trim(name)) = ?").all(ws, name.trim().toLowerCase()) as { id: string }[]
+    for (const r of rows) {
+      const before = tokenRow(r.id, ws)!
+      db.prepare('UPDATE tokens SET image = ?, updated_at = ? WHERE id = ?').run(url, now(), r.id)
+      emitToken(ws, before, tokenRow(r.id, ws)!)
+    }
+    return rows.length
+  },
+  setHandoutImage(id: string, url: string) {
+    const row = db.prepare('SELECT workspace_id AS ws FROM handouts WHERE id = ?').get(id) as { ws: string } | undefined
+    if (!row) return false
+    db.prepare('UPDATE handouts SET image = ?, updated_at = ? WHERE id = ?').run(url, now(), id)
+    sendHandouts(row.ws)
+    return true
+  },
+}

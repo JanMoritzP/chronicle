@@ -1,3 +1,4 @@
+import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -8,6 +9,12 @@ import { worldRole } from './access.js'
 import { requireOwner, userFromRequest, type AuthUser } from './auth.js'
 import { config } from './config.js'
 import { db } from './db.js'
+import { publishWorld } from './live.js'
+import { mapSlots } from './routes/maps.js'
+import { addPicture } from './routes/uploads.js'
+import { replaceContent, type PageRow } from './pages.js'
+import type { DocNode } from './doc.js'
+import { tableSlots } from './table.js'
 
 /**
  * Plugins are folders with a plugin.json and an entry module. Chronicle looks in the bundled `plugins/` folder and in
@@ -27,6 +34,42 @@ export type HookName = keyof HookMap
 
 const HOOK_NAMES = new Set<string>(['upload:before', 'upload:stored', 'upload:deleted'])
 const HOOK_TIMEOUT_MS = 20_000
+
+// ---------- picture slots in pages ----------
+
+interface ImageBlock { key: string; label: string; shape: string }
+const SHAPES = new Set(['square', 'circle', 'wide', 'tall'])
+/** The image blocks of the built-in page types (the layouts themselves live in the web app). */
+const BUILTIN_IMAGES: Record<string, ImageBlock[]> = {
+  person: [{ key: 'portrait', label: 'Portrait', shape: 'square' }],
+  monster: [{ key: 'portrait', label: 'Portrait', shape: 'wide' }],
+  item: [{ key: 'portrait', label: 'Portrait', shape: 'square' }],
+  location: [{ key: 'portrait', label: 'Banner', shape: 'wide' }],
+}
+function imageBlocksOf(definition: any): ImageBlock[] {
+  const out: ImageBlock[] = []
+  for (const zone of ['top', 'side', 'main', 'bottom']) {
+    for (const b of Array.isArray(definition?.[zone]) ? definition[zone] : []) {
+      if (b?.type === 'image' && typeof b.key === 'string' && b.key) out.push({ key: b.key, label: typeof b.label === 'string' ? b.label : b.key, shape: SHAPES.has(b.shape) ? b.shape : 'square' })
+    }
+  }
+  return out
+}
+
+const PLACEHOLDER = /^\[image:\s*(.+?)\s*\]$/i
+const placeholderHash = (description: string) => crypto.createHash('sha1').update(description.toLowerCase()).digest('hex').slice(0, 6)
+const plainText = (n: DocNode): string => (n.type === 'text' ? n.text ?? '' : (n.content ?? []).map(plainText).join(''))
+/** Calls fn for every paragraph that is only `[image: description]`; fn may replace it and returns whether it did. */
+function walkPlaceholders(node: DocNode, fn: (description: string, replace: (n: DocNode) => void) => boolean) {
+  const kids = node.content
+  if (!kids) return
+  for (let i = 0; i < kids.length; i++) {
+    const k = kids[i]
+    const m = k.type === 'paragraph' ? PLACEHOLDER.exec(plainText(k).trim()) : null
+    if (m) fn(m[1], (n) => { kids[i] = n })
+    else walkPlaceholders(k, fn)
+  }
+}
 
 /** Thrown through ctx.reject(): the action is refused with this message (only honoured by "before" hooks). */
 export class PluginRejection extends Error {}
@@ -53,7 +96,8 @@ type Manifest = z.infer<typeof manifestSchema>
 type Field = Manifest['config'][number]
 type Value = string | number | boolean
 
-type Access = 'owner' | 'editor' | 'user'
+/** `none`: no Chronicle login at all. The route must authenticate the caller itself (for example a webhook with a token). */
+type Access = 'owner' | 'editor' | 'user' | 'none'
 type RouteHandler = (req: FastifyRequest, reply: FastifyReply) => unknown
 type Handler = (payload: any) => unknown
 
@@ -161,7 +205,108 @@ function contextFor(p: Loaded) {
     },
     worldName: (ws: string) => (db.prepare('SELECT name FROM workspaces WHERE id = ?').get(ws) as { name: string } | undefined)?.name ?? null,
     worldRole: (user: AuthUser, ws: string) => worldRole(user, ws),
+    pages: {
+      /** Every page that is not deleted, with its special page type id and whether a portrait is set. */
+      list: () => (db.prepare('SELECT p.id, p.workspace_id AS ws, p.title, p.props FROM pages p JOIN workspaces w ON w.id = p.workspace_id WHERE p.deleted_at IS NULL AND w.deleted_at IS NULL ORDER BY p.created_at').all() as { id: string; ws: string; title: string; props: string }[])
+        .map((r) => {
+          let props: { type?: unknown; portrait?: unknown } = {}
+          try { props = JSON.parse(r.props) } catch { /* damaged props count as empty */ }
+          return { id: r.id, ws: r.ws, title: r.title, type: typeof props.type === 'string' ? props.type : '', portrait: typeof props.portrait === 'string' ? props.portrait : '' }
+        }),
+      /** Sets the portrait of a page to an upload url. Returns false when the page is gone. Open clients refresh. */
+      setPortrait: (pageId: string, url: string) => {
+        const row = db.prepare('SELECT workspace_id AS ws, props FROM pages WHERE id = ? AND deleted_at IS NULL').get(pageId) as { ws: string; props: string } | undefined
+        if (!row) return false
+        const props = JSON.parse(row.props || '{}')
+        props.portrait = url
+        db.prepare('UPDATE pages SET props = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(props), Date.now(), pageId)
+        publishWorld(row.ws, { k: 'refresh', area: 'pages', pageId })
+        return true
+      },
+      /**
+       * Every picture slot of a page's special page type (image blocks of the layout), built in or custom, with its
+       * current value. `key` portrait is the page thumbnail, any other key lives in the page's data.
+       */
+      imageSlots: () => {
+        const custom = new Map<string, ImageBlock[]>()
+        for (const t of db.prepare('SELECT id, definition FROM page_types').all() as { id: string; definition: string }[]) {
+          try { custom.set(t.id, imageBlocksOf(JSON.parse(t.definition))) } catch { /* a damaged type has no slots */ }
+        }
+        const out: { page: string; ws: string; title: string; type: string; key: string; label: string; shape: string; value: string }[] = []
+        for (const r of db.prepare('SELECT p.id, p.workspace_id AS ws, p.title, p.props FROM pages p JOIN workspaces w ON w.id = p.workspace_id WHERE p.deleted_at IS NULL AND w.deleted_at IS NULL ORDER BY p.created_at').all() as { id: string; ws: string; title: string; props: string }[]) {
+          let props: { type?: unknown; portrait?: unknown; data?: Record<string, unknown> } = {}
+          try { props = JSON.parse(r.props) } catch { continue }
+          const type = typeof props.type === 'string' ? props.type : ''
+          for (const b of custom.get(type) ?? BUILTIN_IMAGES[type] ?? []) {
+            const v = b.key === 'portrait' ? props.portrait : props.data?.[b.key]
+            out.push({ page: r.id, ws: r.ws, title: r.title, type, key: b.key, label: b.label, shape: b.shape, value: typeof v === 'string' ? v : '' })
+          }
+        }
+        return out
+      },
+      /** Puts a picture into one image block of a page. Returns false when the page is gone. */
+      setImage: (pageId: string, key: string, url: string) => {
+        const row = db.prepare('SELECT workspace_id AS ws, props FROM pages WHERE id = ? AND deleted_at IS NULL').get(pageId) as { ws: string; props: string } | undefined
+        if (!row) return false
+        const props = JSON.parse(row.props || '{}')
+        if (key === 'portrait') props.portrait = url
+        else props.data = { ...(props.data ?? {}), [key]: url }
+        db.prepare('UPDATE pages SET props = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(props), Date.now(), pageId)
+        publishWorld(row.ws, { k: 'refresh', area: 'pages', pageId })
+        return true
+      },
+      /** Paragraphs in page text that consist of just `[image: what it shows]`: a picture the writer wants here. */
+      textImages: () => {
+        const out: { page: string; ws: string; title: string; description: string; hash: string }[] = []
+        for (const r of db.prepare("SELECT p.id, p.workspace_id AS ws, p.title, p.content FROM pages p JOIN workspaces w ON w.id = p.workspace_id WHERE p.deleted_at IS NULL AND w.deleted_at IS NULL AND p.text LIKE '%[image:%'").all() as { id: string; ws: string; title: string; content: string }[]) {
+          try { walkPlaceholders(JSON.parse(r.content), (d) => { out.push({ page: r.id, ws: r.ws, title: r.title, description: d, hash: placeholderHash(d) }); return false }) } catch { /* damaged content */ }
+        }
+        return out
+      },
+      /** Replaces the `[image: ...]` paragraph with that hash by the picture. Open editors reload. Returns false when it is gone. */
+      fillTextImage: (pageId: string, hash: string, url: string, oldUrl = '') => {
+        const page = db.prepare('SELECT * FROM pages WHERE id = ? AND deleted_at IS NULL').get(pageId) as PageRow | undefined
+        if (!page) return false
+        const doc = JSON.parse(page.content) as DocNode
+        let done = false
+        walkPlaceholders(doc, (d, replace) => {
+          if (done || placeholderHash(d) !== hash) return false
+          replace({ type: 'image', attrs: { src: url, alt: d } })
+          done = true
+          return true
+        })
+        // no placeholder left: this is a replacement, so swap the picture that stands there
+        const swap = (n: DocNode) => {
+          if (n.type === 'image' && oldUrl && n.attrs?.src === oldUrl) { n.attrs = { ...n.attrs, src: url }; done = true }
+          for (const k of n.content ?? []) swap(k)
+        }
+        if (!done) swap(doc)
+        if (!done) return false
+        replaceContent(page, doc, null)
+        publishWorld(page.workspace_id, { k: 'refresh', area: 'pages', pageId })
+        return true
+      },
+    },
+    /** Detail maps: pins that point at a page but have no map behind them, and making or replacing that map from a picture. */
+    maps: {
+      pins: () => mapSlots.pins(),
+      exists: (mapId: string) => mapSlots.exists(mapId),
+      create: (ws: string, pageId: string, name: string, bytes: Buffer) => mapSlots.create(ws, pageId, name, bytes),
+      replace: (mapId: string, bytes: Buffer) => mapSlots.replace(mapId, bytes),
+    },
+    /** Pictures of the tabletop. Lists show what is set; the setters announce the change to everyone at the table. */
+    table: {
+      scenes: () => tableSlots.scenes(),
+      tokens: () => tableSlots.tokens(),
+      handouts: () => tableSlots.handouts(),
+      setSceneBackground: (id: string, url: string) => tableSlots.setSceneBackground(id, url),
+      /** Every token of that name in the world without a picture gets it; returns how many. */
+      setTokenImages: (ws: string, name: string, url: string) => tableSlots.setTokenImages(ws, name, url),
+      setHandoutImage: (id: string, url: string) => tableSlots.setHandoutImage(id, url),
+    },
     uploads: {
+      /** Stores a picture like an upload from the app (quota, hooks). Throws when it is not a picture or is refused. */
+      add: (ws: string, filename: string, bytes: Buffer, user = 'plugin') => addPicture(ws, user, filename, bytes),
       list: () => (db.prepare('SELECT id, workspace_id AS ws, filename, mime, size FROM uploads ORDER BY created_at').all() as { id: string; ws: string; filename: string; mime: string; size: number }[])
         .map((r) => ({ ...r, file: uploadFile(r.id, r.mime), url: `/api/uploads/${r.id}` })),
     },
@@ -261,6 +406,8 @@ function describe(p: Loaded) {
 }
 
 export async function pluginRoutes(app: FastifyInstance) {
+  // a plugin route may receive raw bytes (a webhook that pushes a picture); they arrive as a Buffer
+  app.addContentTypeParser(/^(image\/[a-z0-9.+-]+|application\/octet-stream)$/, { parseAs: 'buffer', bodyLimit: 50 * 1024 * 1024 }, (_req, body, done) => done(null, body))
   app.get('/api/plugins', { preHandler: requireOwner }, async () => [...registry.values()].map(describe))
 
   app.patch('/api/plugins/:id', { preHandler: requireOwner }, async (req, reply) => {
@@ -310,11 +457,13 @@ export async function pluginRoutes(app: FastifyInstance) {
       const p = registry.get(id)
       const route = p?.active ? p.routes.get(`${req.method} /${rest}`) : undefined
       if (!route) return reply.code(404).send({ error: 'not found' })
-      const user = userFromRequest(req)
-      if (!user) return reply.code(401).send({ error: 'unauthorized' })
-      req.user = user
-      if (route.access === 'owner' && user.role !== 'owner') return reply.code(403).send({ error: 'owner only' })
-      if (route.access === 'editor' && user.role === 'viewer') return reply.code(403).send({ error: 'read-only account' })
+      if (route.access !== 'none') {
+        const user = userFromRequest(req)
+        if (!user) return reply.code(401).send({ error: 'unauthorized' })
+        req.user = user
+        if (route.access === 'owner' && user.role !== 'owner') return reply.code(403).send({ error: 'owner only' })
+        if (route.access === 'editor' && user.role === 'viewer') return reply.code(403).send({ error: 'read-only account' })
+      }
       try { return await route.handler(req, reply) } catch (err) {
         logger?.warn(`plugin ${id}, ${req.method} /${rest}: ${(err as Error).message}`)
         p!.error = (err as Error).message

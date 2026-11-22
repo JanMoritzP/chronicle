@@ -54,8 +54,14 @@ export function deactivate() {}
 | `on(hook, fn)` | Subscribe to a hook (below). Handlers may be async. |
 | `emit('plugin:name', payload)` | Tell other plugins; they subscribe with `on('plugin:name', fn)`. |
 | `reject(message)` | In an `upload:before` handler: refuses the upload with that message. |
-| `route(method, path, [{access}], handler)` | Serves `/api/plugins/<id>/<path>`. `handler(req, reply)` is a Fastify handler; return a value to send it as JSON. `access` is `owner` (default), `editor` or `user`. A route that takes a world id must check `ctx.worldRole(req.user, ws)` itself. |
+| `route(method, path, [{access}], handler)` | Serves `/api/plugins/<id>/<path>`. `handler(req, reply)` is a Fastify handler; return a value to send it as JSON. `access` is `owner` (default), `editor`, `user` or `none` (no Chronicle login: the route must authenticate the caller itself, for example a webhook with a token). A route that takes a world id must check `ctx.worldRole(req.user, ws)` itself. Raw `image/*` and `application/octet-stream` bodies arrive as a Buffer. |
 | `worldName(ws)`, `worldRole(user, ws)` | Look up a world. |
+| `pages.list()`, `pages.setPortrait(pageId, url)` | Every page (`id, ws, title, type, portrait`), and set a page's portrait to an upload url. |
+| `pages.imageSlots()`, `pages.setImage(pageId, key, url)` | Every image block of every page's special page type (built in or custom) with its value; fill one (`portrait` is the thumbnail, other keys live in the page data). |
+| `pages.textImages()`, `pages.fillTextImage(pageId, hash, url, [oldUrl])` | Paragraphs that are only `[image: description]`, and replace one by the picture (or swap `oldUrl`). Open editors reload. |
+| `maps.pins()`, `maps.create(ws, pageId, name, bytes)`, `maps.replace(mapId, bytes)`, `maps.exists(mapId)` | Pins that point at a page and open no map; make a tiled map from a picture and open it from those pins; re-tile a map from a new picture. |
+| `table.scenes()`, `table.tokens()`, `table.handouts()`, `table.setSceneBackground`, `table.setTokenImages`, `table.setHandoutImage` | Tabletop picture slots and their setters; changes reach everyone at the table. |
+| `uploads.add(ws, filename, bytes, [user])` | Store a picture like an upload from the app (quota, hooks); throws when it is not a picture or is refused. |
 | `uploads.list()` | Every stored upload: `id, ws, filename, mime, size, file, url`. |
 | `image.info(fileOrBuffer)` | `{ format, width, height }`, or null when it is not a picture. |
 
@@ -82,13 +88,26 @@ More hooks are added by calling `runHook(name, payload)` from `server/src/plugin
 
 ## Image administration (bundled)
 
-Works with the image administration program (sprite-admin, "Sprite Contract" 1.0). With the plugin on, every picture stored anywhere in Chronicle:
+Works with the image administration program over HTTP only (see its `PLUGIN_INTEGRATION.md` and `CONTRACT.md`). The plugin never touches that program's files. The flow:
 
-1. becomes one sprite in `<contract folder>/<include folder>/chronicle-<world id>.json`, with the id `chronicle/<world>-<short id>/<name>-<short id>`, a description, `spec` (format and the picture's exact size, so a replacement fits) and a target under the delivery folder. The world's folder gets a title. Braces in names are escaped so they are not read as placeholders.
-2. is sent to `POST <address>/api/upload?id=<sprite id>` (header `X-Sprite-Admin: 1`), so sprite-admin validates it and delivers it to the target path.
+1. **Request.** The plugin scrapes Chronicle for empty picture slots; each becomes one sprite in `POST <address>/api/requests`. Each kind can be switched off in Settings:
+   - **Page type pictures** (square 512 x 512, tall 3:4, wide 1024 x 448): every empty image block of a page's special page type, built in (person, monster, item, location: the portrait or banner) or custom (all its image blocks). Can be limited to some page types.
+   - **Pictures in text**: a paragraph that is only `[image: what it shows]` (800 x 450). When the picture arrives the line is replaced by it; a later replacement swaps that picture.
+   - **Detail maps** (4096 x 3072): a map pin that points at a page (default type `location`) but opens no map. The pushed picture becomes a tiled map, a child of the map holding the pin, and the pin opens it. A replacement re-tiles that map. The map keeps its own copy, so it is not in the asset library.
+   - **Tokens** (square, 256): tokens without a picture, one request per token name; the picture goes to every token of that name in the world that has none.
+   - **Handouts** (1024 x 768): handouts without a picture.
+   - **Scene backgrounds**: scenes without a background, at the scene's own size.
 
-Set it up: start `sprite-admin serve` on the project, make sure the root contract includes the folder (for example `include: [contracts/*.json]`), then in Settings, Plugins set the contract folder and turn it on. Settings has two buttons: add the pictures uploaded before the plugin was on, and send waiting pictures again (after image administration was down or refused one).
+   **Folders in image administration.** One tree per world, sorted by category, so the admin lists them neatly: `chronicle/<world>-<short id>/` then `pages/<page>-<short id>/<picture key>` (a page's pictures share a folder), `text/<page>-<short id>/<description>-<hash>`, `maps/<page>-<short id>`, `tokens/<name>-<hash>`, `handouts/<title>-<short id>` and `scenes/<scene>-<short id>`. The target path mirrors the id under the delivery folder.
 
-Notes: Chronicle keeps its own copy of each picture, so pages, shares, exports and backups work without image administration. AVIF, sound and video are not entered (the contract has no such format). Deleting a picture in Chronicle removes its sprite from the contract and leaves delivered files alone. If image administration refuses a picture the upload still succeeds, the sprite stays in the contract as missing, and the reason shows in Settings.
+   Every request has a description telling the person what to upload, an exact `spec` (width, height, format from the settings, default 512 x 512 png) so the admin's fit editor can scale and crop any upload to it, and a `target` whose extension is the format. Braces in titles are doubled so they are not read as placeholders. A page is requested once; a `422` answer changes nothing and its reasons are shown to the owner.
+2. **Push.** The admin `POST`s every valid upload to `/api/plugins/image-administration/webhook` (raw bytes, headers `X-Sprite-Id`, `-Seq`, `-Format`, `-Sha256`, and `Authorization: Bearer <webhook token>`). The plugin checks the token (this route has no Chronicle login: `access: 'none'`) and the hash, stores the bytes like any upload and makes them the page's portrait. The same image again changes nothing; a different one replaces the portrait (the old file stays in the asset library). A wrong hash answers 502 so the admin retries; an image nobody requested answers 404 and a format Chronicle cannot keep (SVG) 415, which the admin drops.
+3. **Catch up.** On start-up, after saving settings, every N minutes (default 5, 0 = off) and with the "Fetch new images" button the plugin calls `GET /api/events?since=<last seq>` and `GET /api/file?id=`, applies what a failed push missed and stores the highest `seq` in `DATA_DIR/plugin-data/image-administration/state.json` along with what was requested. The timer also requests images for pages created since.
+
+Set it up in Settings, Plugins: the admin address, the admin token (sent as `Authorization: Bearer` on every call), and a webhook token of your choosing. Start the admin with `--webhook <Chronicle address>/api/plugins/image-administration/webhook --webhook-token <the same token>`. Without a webhook token pushes are refused with 503 and pictures arrive by catch-up only. Never expose the admin server or its token to the public internet; the admin UI has no login. The webhook must be reachable from the admin server, so inside Docker use the host's address.
+
+Buttons: "Request images now" (look at every page again) and "Fetch new images" (catch up now).
+
+Notes: a page that gets a portrait some other way is simply not requested later; a request already sent is not withdrawn. Pushed pictures are applied live to everyone at the table. Requests made by version 2.0 and 2.1 keep their old ids; they are not requested again under the new folders. Not covered: the map viewer's own pictures other than detail maps, and pictures that are not in an empty slot.
 
 Tests: `node scripts/smoke-plugins.mjs <url> gm <pass>` (starts its own fake image administration).

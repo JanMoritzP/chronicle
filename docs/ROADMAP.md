@@ -414,13 +414,13 @@ What it does: every edit to a page is recorded with who made it and when, and an
 
 ## Plugins (built, first version)
 
-What it does: the owner can add behaviour to the server with plugins, and turns each on in Settings, Plugins. The first one connects every picture to the image administration program.
+What it does: the owner can add behaviour to the server with plugins, and turns each on in Settings, Plugins. The first one asks the image administration program for a portrait for every page that lacks one and receives what people upload there.
 
 - **Model.** Server side only. A plugin is a folder with `plugin.json` and an ESM entry; it gets hooks (`upload:before`, `upload:stored`, `upload:deleted`, custom `plugin:*` events), routes under `/api/plugins/<id>/`, saved settings drawn as a form in Settings, a status line, a private data folder and a few helpers. Full contract in `docs/PLUGINS.md`.
 - **Trust.** A plugin is code with the server's rights. Only the owner turns one on; found plugins are off. Plugin routes default to owner only. A plugin that fails to start stays off with the reason shown. A failing hook never breaks the action.
 - **Data.** `DATA_DIR/plugins-state.json` (enabled ids and settings), `DATA_DIR/plugin-data/<id>/`, no migration. Not in snapshots or the full download.
 - **New endpoint.** `POST /api/workspaces/:ws/images` takes the raw bytes of one picture and goes through the same quota and hooks as the form upload.
-- **Image administration plugin** (`plugins/image-administration`). Each stored picture becomes a sprite in a per-world contract file and is sent to sprite-admin. See `docs/PLUGINS.md`.
+- **Image administration plugin** (`plugins/image-administration`). Requests a picture for every empty slot: image blocks of page types, `[image: ...]` lines in page text, detail maps behind pins, tokens (per name), handouts, scene backgrounds (`POST /api/requests`, exact size so the admin's fit editor can crop), filed in folders per world and category. Receives uploads on a token-protected webhook route (`access: 'none'`) and catches up through `/api/events` and `/api/file`. HTTP only. See `docs/PLUGINS.md`.
 - **Not done yet.** Browser-side plugins (panels, editor blocks, slash commands), hooks for pages, maps and sessions, installing a plugin from the app, per-world plugin settings, map files uploaded as maps do not fire upload hooks, an end-to-end UI test of the Plugins section.
 - **Tests.** `node scripts/smoke-plugins.mjs <url> gm <pass>`.
 
