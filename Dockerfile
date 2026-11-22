@@ -15,6 +15,7 @@ COPY --from=build /app/node_modules node_modules
 COPY --from=build /app/server/dist server/dist
 COPY --from=build /app/server/package.json server/
 COPY --from=build /app/web/dist web/dist
+COPY --from=build /app/plugins plugins
 ENV WEB_DIST=/app/web/dist
 # owned by uid 1000 so a fresh volume is writable whether the container runs as root or as 1000:1000 (Umbrel)
 RUN mkdir -p /data && chown 1000:1000 /data

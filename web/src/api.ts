@@ -1,7 +1,7 @@
 import { get, set } from 'idb-keyval'
 import type { Calendar } from './lib/calendar'
 import type { PackData } from './lib/systems'
-import type { CommentItem, Macro, Encounter, EncounterBody, Invite, Person, LibraryEntry, LibraryIndex, LibraryStatus, BackupInfo, Bootstrap, EventRow, FullPage, MapFull, MapItem, MapLayer, CopyPreview, CopyResult, GameSession, MapMeta, PageType, PageVersion, Relation, StatsResult, StatTemplateRow, Template, TodoItem, User, Workspace, WorldSettings } from './types'
+import type { CommentItem, Macro, Encounter, EncounterBody, Invite, Person, LibraryEntry, LibraryIndex, LibraryStatus, BackupInfo, PluginInfo, Bootstrap, EventRow, FullPage, MapFull, MapItem, MapLayer, CopyPreview, CopyResult, GameSession, MapMeta, PageType, PageVersion, Relation, StatsResult, StatTemplateRow, Template, TodoItem, User, Workspace, WorldSettings } from './types'
 
 export interface StatTemplateBody { name: string; sections: any[]; look?: Record<string, any> }
 export interface PageTypeBody { name: string; icon: string; tag: string; source: string; definition: Record<string, any> }
@@ -176,6 +176,9 @@ export const api = {
   restoreBackup: (name: string) => req<{ ok: boolean; safety: string }>('POST', `/api/backups/${encodeURIComponent(name)}/restore`, {}),
   deleteBackup: (name: string) => req('DELETE', `/api/backups/${encodeURIComponent(name)}`),
   runBackup: () => req<{ name: string }>('POST', '/api/backups', {}),
+  plugins: () => req<PluginInfo[]>('GET', '/api/plugins'),
+  patchPlugin: (id: string, body: { enabled?: boolean; config?: Record<string, string | number | boolean> }) => req<PluginInfo>('PATCH', `/api/plugins/${id}`, body),
+  pluginAction: (id: string, route: string) => req<{ message?: string }>('POST', `/api/plugins/${id}${route}`, {}),
 
   /** Full page content, cached in memory and IndexedDB so previously opened pages still open offline. */
   async getPage(id: string, fresh = false): Promise<FullPage> {

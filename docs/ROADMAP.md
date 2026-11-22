@@ -412,6 +412,18 @@ What it does: every edit to a page is recorded with who made it and when, and an
 - **Not covered.** History is not copied to another world or exported, as before. Two people typing in the same few seconds produce one entry credited to whoever changed the page last.
 - **Tests.** `node scripts/smoke-history.mjs <url> <user> <pass>`.
 
+## Plugins (built, first version)
+
+What it does: the owner can add behaviour to the server with plugins, and turns each on in Settings, Plugins. The first one connects every picture to the image administration program.
+
+- **Model.** Server side only. A plugin is a folder with `plugin.json` and an ESM entry; it gets hooks (`upload:before`, `upload:stored`, `upload:deleted`, custom `plugin:*` events), routes under `/api/plugins/<id>/`, saved settings drawn as a form in Settings, a status line, a private data folder and a few helpers. Full contract in `docs/PLUGINS.md`.
+- **Trust.** A plugin is code with the server's rights. Only the owner turns one on; found plugins are off. Plugin routes default to owner only. A plugin that fails to start stays off with the reason shown. A failing hook never breaks the action.
+- **Data.** `DATA_DIR/plugins-state.json` (enabled ids and settings), `DATA_DIR/plugin-data/<id>/`, no migration. Not in snapshots or the full download.
+- **New endpoint.** `POST /api/workspaces/:ws/images` takes the raw bytes of one picture and goes through the same quota and hooks as the form upload.
+- **Image administration plugin** (`plugins/image-administration`). Each stored picture becomes a sprite in a per-world contract file and is sent to sprite-admin. See `docs/PLUGINS.md`.
+- **Not done yet.** Browser-side plugins (panels, editor blocks, slash commands), hooks for pages, maps and sessions, installing a plugin from the app, per-world plugin settings, map files uploaded as maps do not fire upload hooks, an end-to-end UI test of the Plugins section.
+- **Tests.** `node scripts/smoke-plugins.mjs <url> gm <pass>`.
+
 ## Look and navigation (built)
 
 What it does: a calmer, easier to read shell. No data or API changed.

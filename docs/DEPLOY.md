@@ -78,6 +78,7 @@ Keep HTTPS on in Cloudflare. The server trusts the proxy headers, so the session
 | `ADMIN_HOST` | 127.0.0.1 | address the dashboard listens on (the Docker image uses 0.0.0.0, the compose file publishes it to your network) |
 | `ADMIN_PANEL_USER` | admin | first start only |
 | `ADMIN_PANEL_PASSWORD` | | first start only, min 8 chars. Without it, and with no admin account yet, the dashboard stays off |
+| `BUNDLED_PLUGINS` | `plugins/` next to `server/` | plugins that ship with Chronicle (`/app/plugins` in Docker). Your own go in `DATA_DIR/plugins`; see `docs/PLUGINS.md`. A plugin that talks to a program on your computer (such as image administration) cannot reach it from a container at `127.0.0.1`: use the host's address |
 | `SESSION_DAYS` | 30 | |
 | `BACKUP_KEEP` | 14 | daily snapshots kept |
 

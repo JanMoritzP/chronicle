@@ -19,6 +19,8 @@ export const config = {
   })(),
   dataDir: path.resolve(process.env.DATA_DIR ?? path.join(here, '..', '..', 'data')),
   webDist: path.resolve(process.env.WEB_DIST ?? path.join(here, '..', '..', 'web', 'dist')),
+  /** Plugins that ship with Chronicle. Others go in DATA_DIR/plugins. */
+  bundledPluginsDir: path.resolve(process.env.BUNDLED_PLUGINS ?? path.join(here, '..', '..', 'plugins')),
   adminUser: process.env.ADMIN_USER ?? 'gm',
   adminPassword: process.env.ADMIN_PASSWORD,
   /** Port of the admin dashboard (people and world access). 0 turns it off. */

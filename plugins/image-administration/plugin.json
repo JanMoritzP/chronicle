@@ -1,0 +1,18 @@
+{
+  "id": "image-administration",
+  "name": "Image administration",
+  "version": "1.0.0",
+  "description": "Every picture added anywhere in Chronicle is also entered in the sprite contract of the image administration program (sprite-admin) and sent to it, so the picture can be managed and replaced there.",
+  "main": "index.mjs",
+  "config": [
+    { "key": "contractDir", "label": "Contract folder", "type": "text", "placeholder": "C:\\games\\dungeon-dash", "help": "The folder with the sprites.contract.yml of the project. Nothing happens until this is set." },
+    { "key": "includeFolder", "label": "Folder for Chronicle's contract files", "type": "text", "default": "contracts", "help": "Inside the contract folder. The root contract must include it, for example include: [contracts/*.json]." },
+    { "key": "targetFolder", "label": "Delivery folder", "type": "text", "default": "chronicle", "help": "Where the pictures are delivered, relative to the project root of the contract." },
+    { "key": "url", "label": "Image administration address", "type": "text", "default": "http://127.0.0.1:4870", "help": "Where sprite-admin serve is running." },
+    { "key": "sendImage", "label": "Send the picture too", "type": "boolean", "default": true, "help": "Off: only the contract entry is written, and the picture is delivered later by hand." }
+  ],
+  "actions": [
+    { "label": "Add existing pictures", "route": "/backfill", "help": "Enters every picture that was uploaded before this plugin was turned on." },
+    { "label": "Send waiting pictures again", "route": "/retry", "help": "Tries again for pictures that image administration did not accept." }
+  ]
+}

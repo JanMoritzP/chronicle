@@ -1,12 +1,16 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { pipeline } from 'node:stream/promises'
-import type { FastifyInstance } from 'fastify'
+import type { FastifyInstance, FastifyReply } from 'fastify'
+import sharp from 'sharp'
 import { z } from 'zod'
 import { requireEditor, requireOwner, requireUser } from '../auth.js'
 import { config } from '../config.js'
 import { db, now } from '../db.js'
 import { uid } from '../pages.js'
+import { PluginRejection, runHook } from '../plugins.js'
+
+const MAX_RAW = 25 * 1024 * 1024
 
 export const ALLOWED: Record<string, string> = {
   'image/png': '.png', 'image/jpeg': '.jpg', 'image/webp': '.webp', 'image/gif': '.gif', 'image/avif': '.avif',
@@ -20,7 +24,31 @@ export const AUDIO: Record<string, string> = {
 export const VIDEO: Record<string, string> = { 'video/webm': '.webm', 'video/mp4': '.mp4' }
 const ANY: Record<string, string> = { ...ALLOWED, ...AUDIO, ...VIDEO }
 
+/** Checks a file that is already on disk against the world's quota and the plugins, then records it. Removes the file when refused. */
+async function keep(ws: string, user: string, id: string, dest: string, filename: string, mime: string, reply: FastifyReply) {
+  const size = fs.statSync(dest).size
+  const refuse = (code: number, error: string) => { fs.unlinkSync(dest); return reply.code(code).send({ error }) }
+  // a world keeps a limited amount of files
+  const used = (db.prepare('SELECT COALESCE(SUM(size), 0) AS n FROM uploads WHERE workspace_id = ?').get(ws) as { n: number }).n
+  if (used + size > config.uploadQuotaMb * 1024 * 1024) return refuse(413, `This world has used its ${config.uploadQuotaMb} MB of files. Delete some in the asset library first.`)
+  filename = filename.slice(0, 200)
+  try { await runHook('upload:before', { ws, user, filename, mime, size, file: dest }) } catch (err) {
+    if (err instanceof PluginRejection) return refuse(422, err.message)
+    throw err
+  }
+  db.prepare('INSERT INTO uploads(id,workspace_id,filename,mime,size,created_at) VALUES(?,?,?,?,?,?)').run(id, ws, filename, mime, size, now())
+  const url = `/api/uploads/${id}`
+  const failures = await runHook('upload:stored', { ws, user, id, filename, mime, size, file: dest, url })
+  return { id, url, mime, size, ...(failures.length ? { warnings: failures.map((f) => `${f.plugin}: ${f.error}`) } : {}) }
+}
+
+/** What the content of a picture says it is, whatever the sender claimed. */
+const SNIFFED: Record<string, string> = { png: 'image/png', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', heif: 'image/avif' }
+
 export async function uploadRoutes(app: FastifyInstance) {
+  // raw bytes are read as a buffer, so a script or another program can send a picture without building a form
+  app.addContentTypeParser(/^(image\/[a-z0-9.+-]+|application\/octet-stream)$/, { parseAs: 'buffer', bodyLimit: MAX_RAW }, (_req, body, done) => done(null, body))
+
   app.post('/api/workspaces/:ws/uploads', { preHandler: requireEditor }, async (req, reply) => {
     const { ws } = req.params as { ws: string }
     const file = await req.file()
@@ -31,13 +59,24 @@ export async function uploadRoutes(app: FastifyInstance) {
     const dest = path.join(config.dataDir, 'uploads', id + ext)
     await pipeline(file.file, fs.createWriteStream(dest))
     if (file.file.truncated) { fs.unlinkSync(dest); return reply.code(413).send({ error: 'File too large' }) }
-    const size = fs.statSync(dest).size
-    // a world keeps a limited amount of files
-    const used = (db.prepare('SELECT COALESCE(SUM(size), 0) AS n FROM uploads WHERE workspace_id = ?').get(ws) as { n: number }).n
-    if (used + size > config.uploadQuotaMb * 1024 * 1024) { fs.unlinkSync(dest); return reply.code(413).send({ error: `This world has used its ${config.uploadQuotaMb} MB of files. Delete some in the asset library first.` }) }
-    db.prepare('INSERT INTO uploads(id,workspace_id,filename,mime,size,created_at) VALUES(?,?,?,?,?,?)')
-      .run(id, ws, file.filename.slice(0, 200), file.mimetype, size, now())
-    return { id, url: `/api/uploads/${id}`, mime: file.mimetype, size }
+    return keep(ws, req.user!.username, id, dest, file.filename, file.mimetype, reply)
+  })
+
+  // POST the bytes of one picture (PNG, JPEG, WebP, GIF or AVIF) as the body; ?name= is the file name shown in the asset library
+  app.post('/api/workspaces/:ws/images', { preHandler: requireEditor, bodyLimit: MAX_RAW }, async (req, reply) => {
+    const { ws } = req.params as { ws: string }
+    const q = z.object({ name: z.string().trim().min(1).max(200).default('image') }).safeParse(req.query)
+    if (!q.success) return reply.code(400).send({ error: 'bad request' })
+    const bytes = req.body
+    if (!Buffer.isBuffer(bytes) || !bytes.length) return reply.code(400).send({ error: 'Send the picture itself as the request body, with content type image/png, image/jpeg, image/webp, image/gif, image/avif or application/octet-stream' })
+    let format = ''
+    try { format = (await sharp(bytes).metadata()).format ?? '' } catch { /* not a picture */ }
+    const mime = SNIFFED[format]
+    if (!mime) return reply.code(415).send({ error: 'That is not a PNG, JPEG, WebP, GIF or AVIF picture' })
+    const id = uid()
+    const dest = path.join(config.dataDir, 'uploads', id + ANY[mime])
+    fs.writeFileSync(dest, bytes)
+    return keep(ws, req.user!.username, id, dest, q.data.name, mime, reply)
   })
 
   // the asset library: every file of the world, with tags to search by (the owner account only)
@@ -58,10 +97,11 @@ export async function uploadRoutes(app: FastifyInstance) {
 
   app.delete('/api/uploads/:id', { preHandler: requireOwner }, async (req, reply) => {
     const { id } = req.params as { id: string }
-    const row = db.prepare('SELECT mime FROM uploads WHERE id = ?').get(id) as { mime: string } | undefined
+    const row = db.prepare('SELECT mime, workspace_id AS ws FROM uploads WHERE id = ?').get(id) as { mime: string; ws: string } | undefined
     if (!row) return reply.code(404).send({ error: 'not found' })
     db.prepare('DELETE FROM uploads WHERE id = ?').run(id)
     try { fs.unlinkSync(path.join(config.dataDir, 'uploads', id + ANY[row.mime])) } catch { /* the file was already gone */ }
+    await runHook('upload:deleted', { ws: row.ws, id })
     return { ok: true }
   })
 

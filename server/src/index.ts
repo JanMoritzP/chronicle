@@ -36,6 +36,7 @@ import { recapRoutes } from './routes/recap.js'
 import { packRoutes } from './routes/packs.js'
 import { mapDocRoutes } from './routes/mapdocs.js'
 import { closeLibrary } from './library.js'
+import { pluginRoutes, startPlugins, stopPlugins } from './plugins.js'
 
 migrate()
 ensureOwner()
@@ -94,6 +95,8 @@ await app.register(recapRoutes)
 await app.register(packRoutes)
 await app.register(mapDocRoutes)
 await app.register(backupRoutes)
+await app.register(pluginRoutes)
+await startPlugins(app)
 
 app.get('/robots.txt', async (_req, reply) => reply.type('text/plain').send('User-agent: *\nDisallow: /\n'))
 app.get('/api/health', async () => ({ ok: true }))
@@ -120,7 +123,7 @@ for (const sig of ['SIGTERM', 'SIGINT'] as const) {
     if (stopping) return
     stopping = true
     const force = setTimeout(() => process.exit(1), 8000)
-    try { closeAllCollab(); closeAllTable(); closeAllLive(); await admin?.close(); await app.close(); db.pragma('wal_checkpoint(TRUNCATE)'); db.close(); closeLibrary() } catch (e) { console.error(e) }
+    try { closeAllCollab(); closeAllTable(); closeAllLive(); await stopPlugins(); await admin?.close(); await app.close(); db.pragma('wal_checkpoint(TRUNCATE)'); db.close(); closeLibrary() } catch (e) { console.error(e) }
     clearTimeout(force)
     process.exit(0)
   })

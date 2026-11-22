@@ -82,6 +82,11 @@ export interface Encounter extends EncounterBody { id: string; updatedAt: number
 export interface StatTemplateRow { id: string; name: string; sections: any[]; look?: Record<string, any>; updatedAt: number }
 export interface Bootstrap { pages: PageMeta[]; folders: Folder[]; links: LinkRow[]; zettels: Zettel[]; templates?: Template[]; pageTypes?: PageType[]; statTemplates?: StatTemplateRow[] }
 
+export interface PluginField { key: string; label: string; type: 'text' | 'number' | 'boolean'; help?: string; placeholder?: string; value: string | number | boolean }
+export interface PluginInfo {
+  id: string; name: string; version: string; description: string; bundled: boolean; enabled: boolean; active: boolean; error: string; status: string
+  config: PluginField[]; actions: { label: string; route: string; help?: string }[]
+}
 export interface BackupInfo { name: string; size: number; createdAt: number; kind: 'daily' | 'pre-restore' | 'other' }
 
 export type LibraryCategory = 'creature' | 'magicitem' | 'item' | 'spell' | 'class' | 'species' | 'background' | 'feat' | 'condition'

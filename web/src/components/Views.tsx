@@ -10,6 +10,7 @@ import { useStore } from '../store'
 import { THEMES, applyTheme } from '../themes'
 import { PageIcon } from './TypeIcon'
 import { InviteLinks } from './InviteLinks'
+import { PluginsSection } from './Plugins'
 import { SystemPacks } from './SystemPacks'
 import { Select } from './Select'
 import type { PageMeta, Zettel } from '../types'
@@ -450,6 +451,7 @@ export function SettingsView() {
     { id: 'sharing', label: 'Sharing', show: true, body: <SharedPages /> },
     { id: 'accounts', label: 'Accounts', show: owner, body: <AccountsSection /> },
     { id: 'backups', label: 'Backups', show: owner, body: <BackupsSection /> },
+    { id: 'plugins', label: 'Plugins', show: owner, body: <PluginsSection /> },
     { id: 'desktop', label: 'Desktop app', show: IN_DESKTOP_APP, body: <DesktopSettings /> },
     { id: 'me', label: 'My account', show: true, body: <MyAccountSection /> },
   ].filter((s) => s.show)
