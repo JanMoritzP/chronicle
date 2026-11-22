@@ -16,7 +16,9 @@ export const ALLOWED: Record<string, string> = {
 export const AUDIO: Record<string, string> = {
   'audio/mpeg': '.mp3', 'audio/ogg': '.ogg', 'audio/wav': '.wav', 'audio/webm': '.weba', 'audio/mp4': '.m4a', 'audio/aac': '.aac',
 }
-const ANY: Record<string, string> = { ...ALLOWED, ...AUDIO }
+/** Looping video for an animated map. */
+export const VIDEO: Record<string, string> = { 'video/webm': '.webm', 'video/mp4': '.mp4' }
+const ANY: Record<string, string> = { ...ALLOWED, ...AUDIO, ...VIDEO }
 
 export async function uploadRoutes(app: FastifyInstance) {
   app.post('/api/workspaces/:ws/uploads', { preHandler: requireEditor }, async (req, reply) => {
@@ -24,7 +26,7 @@ export async function uploadRoutes(app: FastifyInstance) {
     const file = await req.file()
     if (!file) return reply.code(400).send({ error: 'no file' })
     const ext = ANY[file.mimetype]
-    if (!ext) { file.file.resume(); return reply.code(415).send({ error: 'Only PNG, JPEG, WebP, GIF and AVIF images and MP3, OGG, WAV, WebM, M4A and AAC sound files are allowed' }) }
+    if (!ext) { file.file.resume(); return reply.code(415).send({ error: 'Only PNG, JPEG, WebP, GIF and AVIF images, WebM and MP4 video and MP3, OGG, WAV, WebM, M4A and AAC sound files are allowed' }) }
     const id = uid()
     const dest = path.join(config.dataDir, 'uploads', id + ext)
     await pipeline(file.file, fs.createWriteStream(dest))
@@ -69,6 +71,18 @@ export async function uploadRoutes(app: FastifyInstance) {
     if (!row || !ANY[row.mime]) return reply.code(404).send({ error: 'not found' })
     const file = path.join(config.dataDir, 'uploads', id + ANY[row.mime])
     if (!fs.existsSync(file)) return reply.code(404).send({ error: 'not found' })
+    // a video is read in pieces, so that it can loop and be skipped through
+    if (VIDEO[row.mime]) {
+      const size = fs.statSync(file).size
+      const r = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range ?? ''))
+      if (r && (r[1] || r[2])) {
+        const start = r[1] ? Number(r[1]) : Math.max(0, size - Number(r[2]))
+        const end = r[1] && r[2] ? Math.min(size - 1, Number(r[2])) : size - 1
+        if (start > end || start >= size) return reply.code(416).header('Content-Range', `bytes */${size}`).send()
+        return reply.code(206).header('Content-Type', row.mime).header('Accept-Ranges', 'bytes').header('Content-Range', `bytes ${start}-${end}/${size}`).header('Content-Length', end - start + 1).header('X-Content-Type-Options', 'nosniff').send(fs.createReadStream(file, { start, end }))
+      }
+      reply.header('Accept-Ranges', 'bytes').header('Content-Length', size)
+    }
     return reply
       .header('Content-Type', row.mime)
       .header('Cache-Control', 'private, max-age=31536000, immutable')

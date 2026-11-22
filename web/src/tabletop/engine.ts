@@ -53,6 +53,24 @@ function loadTexture(url: string) {
   return p
 }
 
+const videoKinds = new Map<string, Promise<boolean>>()
+/** Is the map picture at this address a looping video? Asked once, from the type the server gives it. */
+function isVideoUrl(url: string) {
+  let p = videoKinds.get(url)
+  if (!p) { p = fetch(url, { method: 'HEAD' }).then((r) => (r.headers.get('content-type') ?? '').startsWith('video/')).catch(() => false); videoKinds.set(url, p) }
+  return p
+}
+function makeVideo(url: string): Promise<HTMLVideoElement | null> {
+  return new Promise((resolve) => {
+    const v = document.createElement('video')
+    v.muted = true; v.loop = true; v.playsInline = true; v.autoplay = true; v.preload = 'auto'
+    v.onloadeddata = () => resolve(v)
+    v.onerror = () => resolve(null)
+    v.src = url
+    void v.play().catch(() => undefined)
+  })
+}
+
 interface TokenView { box: Container; token: Token; key: string }
 
 const HIT_PAD = 4
@@ -165,6 +183,7 @@ export class TableEngine {
 
   destroy() {
     this.gone = true
+    this.videoEl?.pause(); this.videoEl = null
     clearTimeout(this.longPress)
     if (!this.ready) return
     cancelAnimationFrame(this.raf)
@@ -197,9 +216,12 @@ export class TableEngine {
     const base = new Graphics().rect(0, 0, scene.width, scene.height).fill({ color: 0x20222a })
     this.bg.addChild(base)
     if (!scene.bg) return
-    const tex = await loadTexture(scene.bg)
+    this.videoEl?.pause(); this.videoEl = null
+    const video = (await isVideoUrl(scene.bg)) ? await makeVideo(scene.bg) : null
+    const tex = video ? Texture.from(video) : await loadTexture(scene.bg)
     this.poke()
-    if (!tex || this.scene?.id !== scene.id || this.scene.bg !== scene.bg || this.gone) return
+    if (!tex || this.scene?.id !== scene.id || this.scene.bg !== scene.bg || this.gone) { video?.pause(); return }
+    if (video) { this.videoEl = video; if (this.perf.light) video.pause() }
     const sprite = new Sprite(tex)
     sprite.width = scene.width
     sprite.height = scene.height
@@ -1229,6 +1251,8 @@ export class TableEngine {
 
   /** Settings for a slow machine, and the numbers that show how it is doing. */
   private perf = { fogOnDrop: false, light: false }
+  /** the looping video behind the map, when the map is one */
+  private videoEl: HTMLVideoElement | null = null
   private visionPending = false
   private frames = 0
   private frameFrom = performance.now()
@@ -1238,6 +1262,7 @@ export class TableEngine {
     if (!this.fog) return
     this.fog.setDetail(p.light)
     this.fog.still = p.light
+    if (this.videoEl) { if (p.light) this.videoEl.pause(); else void this.videoEl.play().catch(() => undefined) }
     this.weatherG.visible = !p.light && this.weather !== 'none'
     this.poke()
   }
@@ -1251,6 +1276,7 @@ export class TableEngine {
     if (this.needFit && this.host.clientWidth) this.fit()
     if (this.pings.length) { this.tick(); this.poke() }
     if (this.weather !== 'none' && !this.perf.light) { this.fall(); this.poke() }
+    if (this.videoEl && !this.perf.light) this.poke()
     if (this.fog.animated) { this.fog.animate(performance.now()); this.poke() }
     if (performance.now() > this.activeUntil) return
     this.app.render()

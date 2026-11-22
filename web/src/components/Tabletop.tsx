@@ -7,7 +7,7 @@ import { useStore } from '../store'
 import { TableEngine, type Tool } from '../tabletop/engine'
 import { snap } from '../tabletop/grid'
 import { joinTable, leaveTable, onTableMessage, sendTable, useTable, type DrawKind, type Scene, type Token } from '../tabletop/state'
-import { pickImage, uploadImage } from '../tabletop/upload'
+import { pickBackground, pickImage, uploadImage, videoSize } from '../tabletop/upload'
 import { exportUvtt, importUvtt } from '../tabletop/uvttFiles'
 import { EncounterPanel } from './TableEncounters'
 import { shownTiles, TilePanel, TilesSection } from './TableTiles'
@@ -527,7 +527,7 @@ function ScenePanel({ scene, active, wsId }: { scene: Scene; active: boolean; ws
     <div className="tt-form">
       <label>Name<input className="input" value={name} onChange={(e) => setName(e.target.value)} onBlur={() => name.trim() && name !== scene.name && patch({ name: name.trim() })} /></label>
       <div className="tt-row">
-        <button className="btn sm" onClick={async () => { const f = await pickImage(); if (f) { const url = await uploadImage(wsId, f); if (url) patch({ bg: url }) } }}>Set map image</button>
+        <button className="btn sm" onClick={async () => { const f = await pickBackground(); if (!f) return; const size = f.type.startsWith('video/') ? await videoSize(f) : null; const url = await uploadImage(wsId, f); if (url) patch({ bg: url, ...(size ? { width: Math.min(40000, Math.max(100, size.width)), height: Math.min(40000, Math.max(100, size.height)) } : {}) }) }}>Set map image or loop</button>
         {scene.bg && <button className="btn sm" onClick={() => patch({ bg: '' })}>Remove image</button>}
       </div>
       <div className="tt-row">

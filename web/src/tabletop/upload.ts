@@ -15,6 +15,30 @@ export async function uploadImage(ws: string, file: File): Promise<string | null
   }
 }
 
+/** A picture or a looping video for the map. */
+export function pickBackground(): Promise<File | null> {
+  return new Promise((resolve) => {
+    const el = document.createElement('input')
+    el.type = 'file'
+    el.accept = 'image/png,image/jpeg,image/webp,image/gif,image/avif,video/webm,video/mp4'
+    el.onchange = () => resolve(el.files?.[0] ?? null)
+    el.oncancel = () => resolve(null)
+    el.click()
+  })
+}
+
+/** How big a video is, in pixels, read from the file itself. */
+export function videoSize(file: File): Promise<{ width: number; height: number } | null> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file)
+    const v = document.createElement('video')
+    v.preload = 'metadata'
+    v.onloadedmetadata = () => { resolve(v.videoWidth && v.videoHeight ? { width: v.videoWidth, height: v.videoHeight } : null); URL.revokeObjectURL(url) }
+    v.onerror = () => { resolve(null); URL.revokeObjectURL(url) }
+    v.src = url
+  })
+}
+
 export function pickImage(): Promise<File | null> {
   return new Promise((resolve) => {
     const el = document.createElement('input')

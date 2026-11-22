@@ -1751,3 +1751,14 @@ test('the time of day sets how dark a scene is', { tag: '@feature:table.daylight
   await group.getByLabel('Hour of the day').fill('12')
   await expect(app.getByText(/^Darkness \(0 %\)/)).toBeVisible()
 })
+
+test('a looping video can be the map', { tag: '@feature:table.videomap' }, async ({ app }) => {
+  await openTable(app)
+  await makeScene(app, 'Bonfire')
+  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Scene', exact: true }).click()
+  const chooser = app.waitForEvent('filechooser')
+  await app.getByRole('button', { name: 'Set map image or loop' }).click()
+  await (await chooser).setFiles({ name: 'fire.webm', mimeType: 'video/webm', buffer: Buffer.from(Array.from({ length: 2000 }, (_, i) => i % 251)) })
+  await expect(app.getByRole('button', { name: 'Remove image' })).toBeVisible()
+  await expect(app.getByRole('alert')).toHaveCount(0)
+})

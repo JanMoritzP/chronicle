@@ -10,7 +10,7 @@ import { db, now } from './db.js'
 import { uid } from './pages.js'
 import { publishWorld } from './live.js'
 import { presenceChanged } from './presence.js'
-import { ALLOWED, AUDIO } from './routes/uploads.js'
+import { ALLOWED, AUDIO, VIDEO } from './routes/uploads.js'
 import { darknessAt } from './daylight.js'
 import { parseChat, readable, withInline, type Kind, type Part } from './chat.js'
 import { buildSight, canSee, type Sight, type SightToken } from './sight.js'
@@ -1635,7 +1635,9 @@ const sameScene = (c: Conn, who: (x: Conn) => boolean, msg: unknown) => {
 
 async function applyScenePatch(c: Conn, m: ClientMessage, id: string, patch: Record<string, unknown>) {
   const p = { ...patch } as Record<string, unknown>
-  if (typeof p.bg === 'string' && p.bg) {
+  // a looping video is a background too; its size is given by the browser that chose it
+  const isVideo = typeof p.bg === 'string' && /^\/api\/uploads\/[A-Za-z0-9-]+$/.test(p.bg) && ((db.prepare('SELECT mime FROM uploads WHERE id = ? AND workspace_id = ?').get(p.bg.slice('/api/uploads/'.length), c.ws) as { mime: string } | undefined)?.mime ?? '') in VIDEO
+  if (typeof p.bg === 'string' && p.bg && !isVideo) {
     const dims = await sizeOfUpload(p.bg, c.ws)
     if (!dims) { nack(c, m, 'that image is not in this world'); return false }
     // a new background sets the scene to its size unless the GM gave one
