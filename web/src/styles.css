@@ -1010,3 +1010,16 @@ button.cs-roll:disabled { cursor: default; }
 .tt-msg:hover .tt-keep, .tt-msg .tt-keep:focus-visible { opacity: .8; }
 
 .tt-stats-badge { position: absolute; left: 8px; bottom: 8px; z-index: 5; font: 11px/1.2 ui-monospace, monospace; background: rgba(0,0,0,.6); color: #fff; padding: 3px 6px; border-radius: 4px; pointer-events: none; }
+
+.tt-dice { position: absolute; left: 10px; bottom: 34px; z-index: 6; pointer-events: none; display: flex; flex-direction: column; gap: 6px; }
+.tt-dice-row { display: flex; gap: 8px; animation: die-away .4s ease 2.7s forwards; }
+.die { width: 44px; text-align: center; perspective: 300px; color: #fff; text-shadow: 0 1px 2px #000; }
+.die small { display: block; font-size: 10px; opacity: .8; }
+.die-cube { position: relative; width: 38px; height: 38px; margin: 3px; transform-style: preserve-3d; animation: die-tumble 1.1s cubic-bezier(.2,.7,.3,1) both; }
+.die-face { position: absolute; inset: 0; display: grid; place-items: center; font: 700 17px/1 system-ui, sans-serif; background: var(--accent, #8b6b4a); color: var(--accent-fg, #fff); border: 2px solid rgba(255,255,255,.55); border-radius: 7px; backface-visibility: hidden; }
+.die-cube.dropped .die-face { opacity: .45; }
+.f-front { transform: translateZ(19px); } .f-back { transform: rotateY(180deg) translateZ(19px); }
+.f-right { transform: rotateY(90deg) translateZ(19px); } .f-left { transform: rotateY(-90deg) translateZ(19px); }
+.f-top { transform: rotateX(90deg) translateZ(19px); } .f-bottom { transform: rotateX(-90deg) translateZ(19px); }
+@keyframes die-tumble { 0% { transform: translateY(-60px) rotateX(540deg) rotateY(720deg) rotateZ(90deg); opacity: 0; } 15% { opacity: 1; } 70% { transform: translateY(0) rotateX(60deg) rotateY(90deg) rotateZ(10deg); } 100% { transform: translateY(0) rotateX(0) rotateY(0) rotateZ(0); } }
+@keyframes die-away { to { opacity: 0; transform: translateY(8px); } }

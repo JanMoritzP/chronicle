@@ -478,6 +478,9 @@ areas:
       - id: table.map-editor-more
         name: "Map editor: cave brush, windows, secret doors and a generated dungeon"
         files: [web/src/tabletop/mapdoc.ts, web/src/components/MapEditor.tsx, web/src/tabletop/mapRender.ts]
+      - id: table.dice3d
+        name: "Dice that tumble across the map when someone rolls"
+        files: [web/src/components/DiceTray.tsx, web/src/lib/dicefaces.ts]
       - id: table.stats
         name: "Hit points, damage, healing and conditions on a token, with a linked page's sheet"
         files: [web/src/components/TableParts.tsx, web/src/components/TableSheet.tsx]

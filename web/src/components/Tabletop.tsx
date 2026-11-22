@@ -22,6 +22,7 @@ import { bind, DEFAULT_KEYS, KEY_ACTIONS, loadKeys, pressed, saveKeys, type KeyA
 import { PinDialog } from './PinDialog'
 import { ReadyBanner } from './ReadyBanner'
 import { ThreatBanner } from './ThreatBanner'
+import { DiceTray } from './DiceTray'
 import { Replay } from './Replay'
 import { TokenActions, TokenBars, TokenLook } from './TokenLook'
 import { TablesAndDecks } from './TableDecks'
@@ -382,6 +383,7 @@ export function TableView() {
       <ReadyBanner />
       {stats && <div className="tt-stats-badge" role="status" aria-label="Performance">{stats}</div>}
       <ThreatBanner />
+      <DiceTray />
       {pinAt && <PinDialog at={pinAt} onClose={() => setPinAt(null)} />}
       <AudioPlayer />
       {narrow && <MyStrip />}
@@ -645,6 +647,7 @@ function TablePanel() {
         <b>If the table is slow</b>
         <PerfBox k="fogOnDrop" label="Work out the fog when a token is put down" />
         <PerfBox k="light" label="Lighter drawing: coarser fog, no weather, no moving lights" />
+        <PerfBox k="noDice" label="No tumbling dice when someone rolls" />
         <PerfBox k="show" label="Show frames per second" />
       </div>
       <div className="tt-form" role="group" aria-label="Keys">

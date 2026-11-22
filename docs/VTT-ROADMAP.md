@@ -292,5 +292,5 @@ Spatial sound (sound that fades with distance) is cut. Arbitrary GM scripts stay
 5. **Table comfort.** Rebindable table shortcuts (done, for the single keys). Macros from chat (done, as a Save as macro button; sheets not). Linking chat to session notes. Playlists (done). "See through" tokens (done, as shared sight per token). Fog update on drop and performance modes (done). Performance measurement (done, a frames per second readout).
 6. **Time and places.** Time of day (done as the table's own hour; the calendar has no hours). Levels and stairs (done, as a travel trigger between scenes). Animated backgrounds (done, as looping video).
 7. **Map editor extras.** Freehand caves (done), windows and secret doors (done), procedural dungeons (done). Diagonal walls and picture props are not.
-8. **People.** Voice and video. E-mail invites. 3D dice.
+8. **People.** Voice and video. E-mail invites. 3D dice (done, as tumbling cubes).
 9. **Far back.** Difficult terrain that costs double movement on the drag ruler.
