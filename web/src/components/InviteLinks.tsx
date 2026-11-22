@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 import { alertDialog, confirmDialog } from '../lib/dialog'
+import { inviteMail } from '../lib/inviteMail'
 import { useStore } from '../store'
 import type { Invite } from '../types'
 import { Select } from './Select'
@@ -61,6 +62,7 @@ export function InviteLinks({ id, name, on }: { id: string; name: string; on: bo
             <div className="invites-fresh" role="status">
               <input className="input" readOnly aria-label="Invite link" value={fresh} onFocus={(e) => e.currentTarget.select()} />
               <button className="btn" onClick={copy}>{copied ? 'Copied' : 'Copy'}</button>
+              <a className="btn" href={inviteMail(name, fresh, role)} title="Opens your mail program with the link in a message">Send by e-mail</a>
               <p className="muted" style={{ fontSize: 13, margin: '4px 0 0', flexBasis: '100%' }}>Send this link to your players. It is shown only now; make another if you lose it.</p>
             </div>
           )}
