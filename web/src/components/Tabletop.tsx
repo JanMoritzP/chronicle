@@ -10,12 +10,13 @@ import { joinTable, leaveTable, onTableMessage, sendTable, useTable, type DrawKi
 import { pickBackground, pickImage, uploadImage, videoSize } from '../tabletop/upload'
 import { exportUvtt, importUvtt } from '../tabletop/uvttFiles'
 import { EncounterPanel } from './TableEncounters'
-import { shownTiles, TilePanel, TilesSection } from './TableTiles'
+import { shownTiles, shownTokens, TilePanel, TilesSection, TokenLayer } from './TableTiles'
 import { HandoutViewer, HandoutsPanel } from './TableHandouts'
 import { AudioPlayer } from './TableAudio'
 import { TriggersSection } from './TableTriggers'
 import { MapEditor } from './MapEditor'
 import { AssetLibrary } from './AssetLibrary'
+import { saveMessageAsMacro } from './TableMacros'
 import { partOfDay } from '../lib/daylight'
 import { loadPerf, savePerf, statsText, type Perf } from '../lib/tableperf'
 import { bind, DEFAULT_KEYS, KEY_ACTIONS, loadKeys, pressed, saveKeys, type KeyAction } from '../lib/tablekeys'
@@ -141,7 +142,7 @@ export function TableView() {
       e.setPins(useTable.getState().pins)
       e.setTriggers(useTable.getState().triggers.filter((t) => !t.scene || t.scene === useTable.getState().sceneId).filter((t) => t.event === 'enter'))
       e.setLights(useTable.getState().lights)
-      e.setTokens(useTable.getState().tokens)
+      e.setTokens(shownTokens(useTable.getState()))
       e.setSelected(useTable.getState().selected)
       e.setExplored(useTable.getState().fog)
       e.setDrawings(useTable.getState().drawings)
@@ -163,7 +164,7 @@ export function TableView() {
         if (s.triggers !== prev.triggers || s.sceneId !== prev.sceneId) e.setTriggers(s.triggers.filter((t) => !t.scene || t.scene === s.sceneId).filter((t) => t.event === 'enter'))
         if (s.lights !== prev.lights) e.setLights(s.lights)
         if (s.sceneId !== prev.sceneId || s.fog !== prev.fog) e.setExplored(s.fog)
-        if (s.tokens !== prev.tokens) e.setTokens(s.tokens)
+        if (s.tokens !== prev.tokens || s.hiddenLayers !== prev.hiddenLayers) e.setTokens(shownTokens(s))
         if (s.selected !== prev.selected) e.setSelected(s.selected)
         if (s.cursors !== prev.cursors || s.rulers !== prev.rulers) e.setOthers(s.cursors, s.rulers)
       })
@@ -213,6 +214,8 @@ export function TableView() {
   const one = selected.length === 1 ? tokens.find((t) => t.id === selected[0]) ?? null : null
 
   const [keys, setKeys] = useState(loadKeys)
+  // a right click on a roll button of a sheet keeps that roll as a macro
+  useEffect(() => { const on = (e: Event) => void saveMessageAsMacro((e as CustomEvent<string>).detail); window.addEventListener('tt-save-macro', on); return () => window.removeEventListener('tt-save-macro', on) }, [])
   const [perf, setPerf] = useState(loadPerf)
   const [stats, setStats] = useState('')
   useEffect(() => { const on = () => setPerf(loadPerf()); window.addEventListener('tt-perf', on); return () => window.removeEventListener('tt-perf', on) }, [])
@@ -476,6 +479,7 @@ function TokenPanel({ token, count }: { token: Token | null; count: number }) {
               {[0.5, 1, 2, 3, 4, 5].map((s) => <option key={s} value={String(s)}>{s === 0.5 ? 'Tiny (half a cell)' : s === 1 ? 'Medium (1 cell)' : `${s} cells`}</option>)}
             </Select>
           </label>
+          {gm && <TokenLayer token={token} />}
           <SightLight token={token} />
           <label>Colour<input type="color" className="tt-color" value={token.color || '#6b7280'} onChange={(e) => patch({ color: e.target.value })} /></label>
           <div className="tt-row">

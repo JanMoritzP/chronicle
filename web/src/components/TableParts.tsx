@@ -11,7 +11,7 @@ import { macroLineOf } from '../lib/macro'
 import { useRules } from '../lib/pack'
 import { Select } from './Select'
 import { lightItems } from '../lib/lightitems'
-import { SheetCard, loadSheet, useSheet, type AttackKit } from './TableSheet'
+import { SheetCard, catchRoll, loadSheet, useSheet, type AttackKit } from './TableSheet'
 
 const VALUED = new Set(['Clumsy', 'Doomed', 'Drained', 'Dying', 'Enfeebled', 'Frightened', 'Sickened', 'Slowed', 'Stunned', 'Stupefied', 'Wounded'])
 interface Effect { id: string; until?: 'turn'; name: string; rounds: number | null; ac?: number; attack?: string; save?: string; from?: string; concentration?: boolean }
@@ -222,7 +222,7 @@ export function TokenSheet({ token }: { token: Token }) {
   const lights = lightItems(sheet.inventory)
   return (
     <>
-      <SheetCard sheet={sheet} roll={(expr, label) => rollText(expr, `${nameOf}: ${label}`)} onPatch={can && sheet.kind === 'character' ? patch : undefined} attack={kit} />
+      <SheetCard sheet={sheet} roll={(expr, label) => { if (!catchRoll(expr, `${nameOf}: ${label}`)) rollText(expr, `${nameOf}: ${label}`) }} onPatch={can && sheet.kind === 'character' ? patch : undefined} attack={kit} />
       {can && lights.length > 0 && (
         <div className="tt-form" role="group" aria-label="Light from what is carried">
           <b>Light</b>

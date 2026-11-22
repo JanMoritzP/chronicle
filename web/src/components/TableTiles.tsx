@@ -1,7 +1,7 @@
 import { ArrowDown, ArrowUp, Eye, EyeOff, ImagePlus, Lock, LockOpen, RotateCw, Trash2 } from 'lucide-react'
 import { confirmDialog } from '../lib/dialog'
 import { alertDialog, askText } from '../lib/dialog'
-import { sendTable, useTable, type Scene, type SceneLayer, type Tile, type TileLayer } from '../tabletop/state'
+import { sendTable, useTable, type Scene, type SceneLayer, type Tile, type TileLayer, type Token } from '../tabletop/state'
 import { pickImage, uploadImage } from '../tabletop/upload'
 import { Select } from './Select'
 
@@ -14,6 +14,24 @@ const LAYERS: { id: TileLayer; label: string }[] = [
 
 /** The tiles this person has not hidden on their own screen by hiding a layer. */
 export const shownTiles = (s: { tiles: Tile[]; hiddenLayers: string[] }) => (s.hiddenLayers.length ? s.tiles.filter((t) => !t.layerId || !s.hiddenLayers.includes(t.layerId)) : s.tiles)
+
+/** The tokens this person has not hidden on their own screen by hiding a layer. */
+export const shownTokens = (s: { tokens: Token[]; hiddenLayers: string[] }) => (s.hiddenLayers.length ? s.tokens.filter((t) => typeof t.data?.layerId !== 'string' || !s.hiddenLayers.includes(t.data.layerId)) : s.tokens)
+
+/** The named layer of a token: a choice in the token's panel (the GM). */
+export function TokenLayer({ token }: { token: Token }) {
+  const scene = useTable((s) => s.scenes.find((x) => x.id === s.sceneId))
+  const layers = scene?.layers ?? []
+  if (!layers.length) return null
+  return (
+    <label>Named layer
+      <Select className="input" value={typeof token.data.layerId === 'string' ? token.data.layerId : ''} title="The named layer this token is on" onChange={(v) => { const data = { ...token.data }; if (v) data.layerId = v; else delete data.layerId; sendTable({ t: 'token.update', id: token.id, patch: { data } }) }}>
+        <option value="">None</option>
+        {layers.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+      </Select>
+    </label>
+  )
+}
 
 /** Named layers of a scene: the GM groups props (furniture, secrets, a second floor), then hides, locks or hands them to the players as a group. */
 function LayersSection({ scene }: { scene: Scene }) {
@@ -41,7 +59,7 @@ function LayersSection({ scene }: { scene: Scene }) {
             <button className="btn ghost sm" aria-label={`Delete the layer ${l.name}`} onClick={() => save(layers.filter((x) => x.id !== l.id))}><Trash2 size={12} /></button>
           </li>
         ))}
-        {layers.length === 0 && <li className="muted tt-hint">Make a layer, then put tiles on it from the tile's panel.</li>}
+        {layers.length === 0 && <li className="muted tt-hint">Make a layer, then put tiles and tokens on it from their panels.</li>}
       </ul>
       <div className="tt-row"><button className="btn sm" onClick={add}>Add a layer</button></div>
     </div>

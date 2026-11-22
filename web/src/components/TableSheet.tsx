@@ -9,6 +9,26 @@ import { ABILITIES, FEATURE_GROUPS, PF_SKILLS, multipleAttack, pfLore, pfPercept
 
 export type RollFn = (expr: string, label: string) => void
 
+/**
+ * Any roll button of a sheet can be kept as a macro with a right click. The line it makes is found by pressing the button while the
+ * roll is caught instead of sent: `caught` is set for that moment, and the roll function of the table asks it first.
+ */
+let caught: ((expr: string, label: string) => void) | null = null
+export const catchRoll = (expr: string, label: string): boolean => { if (!caught) return false; caught(expr, label); return true }
+function useDraggableRolls() {
+  const ref = useRef<HTMLDivElement>(null)
+  const onContextMenu = (e: React.MouseEvent) => {
+    const b = (e.target as HTMLElement).closest('button.tt-roll') as HTMLButtonElement | null
+    if (!b) return
+    e.preventDefault()
+    let line = ''
+    caught = (expr, label) => { line = `/roll ${expr} ${label}`.trim() }
+    try { b.click() } finally { caught = null }
+    if (line) window.dispatchEvent(new CustomEvent('tt-save-macro', { detail: line }))
+  }
+  return { ref, onContextMenu }
+}
+
 const cache = new Map<string, Promise<{ sheet: Sheet | null; type: string | null; portrait: string | null }>>()
 
 /** The sheet of a page, read once. A page that is not a creature has none. */
@@ -47,11 +67,12 @@ const GLYPH = { one: '◆', two: '◆◆', three: '◆◆◆', reaction: '↺', 
 
 /** A Pathfinder 2e creature: checks, saves and strikes with the multiple attack penalty as three buttons. Type "dc 25" after a roll in the chat to see the degree of success. */
 function Pf2eCard({ sheet, roll }: { sheet: Sheet; roll: RollFn }) {
+  const drag = useDraggableRolls()
   const p = sheet.pf2e!
   const bonus = (n: number) => `${n >= 0 ? '+' : '-'}${Math.abs(n)}`
   const check = (n: number, label: string) => roll(`1d20${bonus(n)}`, label)
   return (
-    <div className="tt-sheet">
+    <div className="tt-sheet" ref={drag.ref} onContextMenu={drag.onContextMenu}>
       <div className="tt-sheet-sub muted">Creature {p.level}{p.traits.length ? ` · ${p.traits.join(', ')}` : ''}</div>
       <div className="tt-sheet-facts">
         <span><b>AC</b> {sheet.ac.value}</span><span><b>HP</b> {sheet.hp.max}</span><span><b>Speed</b> {speedText(sheet)}</span>
@@ -114,6 +135,7 @@ export interface AttackKit {
 }
 
 export function SheetCard({ sheet, roll, onPatch, attack }: { sheet: Sheet; roll: RollFn; /** changes a field of the sheet by path (only given where the person may edit it) */ onPatch?: (patch: Record<string, unknown>) => void; /** when the table rolls attacks against targets */ attack?: AttackKit }) {
+  const drag = useDraggableRolls()
   const [target, setTarget] = useState('')
   const an = useRules().abilities
   if (sheet.ruleset === 'pf2e' && sheet.pf2e) return <Pf2eCard sheet={sheet} roll={roll} />
@@ -121,7 +143,7 @@ export function SheetCard({ sheet, roll, onPatch, attack }: { sheet: Sheet; roll
   const bonus = (n: number) => `${n >= 0 ? '+' : '-'}${Math.abs(n)}`
   const check = (e: React.MouseEvent, n: number, label: string) => roll(`1d20${bonus(n)}${mode(e)}`, label)
   return (
-    <div className="tt-sheet">
+    <div className="tt-sheet" ref={drag.ref} onContextMenu={drag.onContextMenu}>
       <div className="tt-sheet-sub muted">{[sheet.size, sheet.type, sheet.alignment && `, ${sheet.alignment}`].filter(Boolean).join(' ').replace(' ,', ',')}</div>
       {attack && (
         <div className="tt-row"><span className="muted">Target</span>

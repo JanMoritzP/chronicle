@@ -1837,3 +1837,46 @@ test('two people at the table can talk and see each other', { tag: '@feature:tab
   await expect(player.getByRole('button', { name: 'Join voice' })).toBeVisible()
   await expect(app.getByRole('region', { name: 'Call' }).locator('.tt-call-tile')).toHaveCount(1)
 })
+
+test('a token can be put on a named layer', { tag: '@feature:table.layers' }, async ({ app }) => {
+  await openTable(app)
+  await makeScene(app, 'Crypt')
+  await makeToken(app, 'Wisp')
+  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Scene', exact: true }).click()
+  await app.getByRole('button', { name: 'Add a layer' }).click()
+  await app.getByRole('dialog').getByRole('textbox').fill('Spirits')
+  await app.getByRole('dialog').locator('button[type=submit]').click()
+  await expect(app.getByRole('list', { name: 'Layers of this scene' })).toContainText('Spirits')
+  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Token', exact: true }).click()
+  await expect(async () => {
+    await app.getByTitle('The named layer this token is on').click()
+    await app.getByRole('option', { name: 'Spirits' }).click({ timeout: 1500 })
+    await expect(app.getByTitle('The named layer this token is on')).toContainText('Spirits', { timeout: 1500 })
+  }).toPass()
+})
+
+test('a roll button on a sheet can be kept as a macro with a right click', { tag: '@feature:table.chat-macro' }, async ({ app, api, world }) => {
+  await openTable(app)
+  await makeScene(app, 'Study')
+  const sheet = { v: 1, kind: 'character', ruleset: '5e', name: 'Ines', size: '', type: '', alignment: '', abilities: { str: 10, dex: 16, con: 10, int: 10, wis: 10, cha: 10 }, ac: { value: 12, note: '' }, hp: { max: 9, formula: '', current: 9, temp: 0 }, speed: { walk: 30 }, saves: {}, skills: {}, senses: {}, vulnerabilities: '', resistances: '', immunities: '', conditionImmunities: '', languages: '', features: { traits: [], actions: [], bonus: [], reactions: [], legendary: [] }, classes: [{ name: 'Rogue', level: 1 }] }
+  const page = await api.json<{ id: string }>('post', `/api/workspaces/${world.id}/pages`, { title: 'Ines', props: { type: 'person', sheet } })
+  await app.evaluate(async ({ worldId, pageId }) => {
+    const sock = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/table/${worldId}`)
+    const msgs: any[] = []
+    sock.onmessage = (e) => msgs.push(JSON.parse(e.data))
+    await new Promise((r) => (sock.onopen = r))
+    for (let i = 0; i < 100 && !msgs.some((m) => m.t === 'snapshot'); i++) await new Promise((r) => setTimeout(r, 30))
+    const sceneId = msgs.find((m) => m.t === 'snapshot').sceneId
+    sock.send(JSON.stringify({ t: 'token.add', sceneId, token: { name: 'Ines', x: 300, y: 300, pageId } }))
+    await new Promise((r) => setTimeout(r, 300))
+    sock.close()
+  }, { worldId: world.id, pageId: page.id })
+  await app.getByRole('list', { name: 'Tokens on this scene' }).getByRole('button', { name: 'Ines' }).click()
+  await app.locator('.tt-sheet button.tt-roll').first().click({ button: 'right' })
+  await app.getByRole('dialog').getByRole('textbox').fill('Quick check')
+  await app.getByRole('dialog').locator('button[type=submit]').click()
+  await app.locator('.tt-panel .seg').getByRole('button', { name: /Chat/ }).click()
+  const macro = app.getByRole('group', { name: 'Macros' }).getByRole('button', { name: 'Quick check', exact: true })
+  await expect(macro).toBeVisible()
+  await expect(macro).toHaveAttribute('title', /^\/roll 1d20/)
+})

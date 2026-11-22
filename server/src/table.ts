@@ -64,9 +64,18 @@ interface TokenDb {
   page_id: string | null; hidden: number; locked: number; owners: string; z: number; data: string
 }
 const parse = <T>(s: string, fallback: T): T => { try { return JSON.parse(s) as T } catch { return fallback } }
+/** The named layers of scenes, kept so that asking about a token does not ask the database about its scene each time. Forgotten when a scene's layers change. */
+const layerCache = new Map<string, SceneLayer[]>()
+const layersOfScene = (sceneId: string): SceneLayer[] => {
+  let l = layerCache.get(sceneId)
+  if (!l) { l = layersOf(db.prepare('SELECT layers FROM scenes WHERE id = ?').get(sceneId) as { layers: string } | undefined); layerCache.set(sceneId, l) }
+  return l
+}
+/** The named layer a token is on, if it is on one that still exists. */
+const layerOfToken = (sceneId: string, data: Record<string, unknown>) => (typeof data.layerId === 'string' ? layersOfScene(sceneId).find((l) => l.id === data.layerId) : undefined)
 export const tokenJson = (r: TokenDb): TokenRow => ({
   id: r.id, sceneId: r.scene_id, name: r.name, x: r.x, y: r.y, size: r.size, rotation: r.rotation, image: r.image, color: r.color,
-  pageId: r.page_id, hidden: !!r.hidden, locked: !!r.locked, owners: parse<string[]>(r.owners, []), z: r.z, data: parse<Record<string, unknown>>(r.data, {}),
+  pageId: r.page_id, hidden: !!r.hidden, locked: !!r.locked || !!layerOfToken(r.scene_id, parse<Record<string, unknown>>(r.data, {}))?.locked, owners: parse<string[]>(r.owners, []), z: r.z, data: parse<Record<string, unknown>>(r.data, {}),
 })
 const TOKEN_COLUMNS: Record<string, string> = { name: 'name', x: 'x', y: 'y', size: 'size', rotation: 'rotation', image: 'image', color: 'color', pageId: 'page_id', hidden: 'hidden', locked: 'locked', owners: 'owners', z: 'z', data: 'data' }
 
@@ -122,7 +131,7 @@ function sightFor(c: Conn, sceneId: string | null): Sight | null {
 }
 
 /** May this connection be told about the token: allowed to see it at all (hidden ones), and in sight where there is fog. */
-const tellable = (c: Conn, t: TokenRow) => canSeeToken(c.role, c.user.id, t) && canSee(c.sight, t)
+const tellable = (c: Conn, t: TokenRow) => canSeeToken(c.role, c.user.id, t) && canSee(c.sight, t) && (c.role === 'gm' || t.owners.includes(c.user.id) || layerOfToken(t.sceneId, t.data)?.players !== false)
 
 function tokensFor(c: Conn, scene: string | null) {
   if (!scene) { c.sight = null; c.shown = new Set(); return [] }
@@ -720,6 +729,11 @@ async function handle(c: Conn, m: ClientMessage) {
       if (!sceneRow(m.id, ws)) return nack(c, m, 'no such scene')
       if (!(await applyScenePatch(c, m, m.id, m.patch))) return
       { const row = sceneRow(m.id, ws)!; for (const x of inWorld(ws)) send(x, { t: 'scene', scene: sceneFor(x, row) }) }
+      // tokens on a layer that was locked or taken away from the players are told again, as they now are
+      if ('layers' in m.patch) {
+        const rows = (db.prepare('SELECT * FROM tokens WHERE scene_id = ? AND workspace_id = ?').all(m.id, ws) as TokenDb[]).map(tokenJson)
+        for (const x of inWorld(ws)) if (x.scene === m.id) for (const t of rows) { if (tellable(x, t)) { x.shown.add(t.id); send(x, { t: 'token', token: redact(x.role, x.user.id, t) }) } else if (x.shown.delete(t.id)) send(x, { t: 'token.remove', ids: [t.id] }) }
+      }
       scheduleSight(ws, m.id)
       return
     }
@@ -1669,6 +1683,7 @@ async function applyScenePatch(c: Conn, m: ClientMessage, id: string, patch: Rec
   }
   const cols = Object.keys(p).filter((k) => k in SCENE_COLUMNS)
   if (!cols.length) return true
+  if ('layers' in p) layerCache.delete(id)
   db.prepare(`UPDATE scenes SET ${cols.map((k) => `${SCENE_COLUMNS[k]} = ?`).join(', ')}, updated_at = ? WHERE id = ?`).run(...cols.map((k) => (typeof p[k] === 'boolean' ? (p[k] ? 1 : 0) : Array.isArray(p[k]) ? JSON.stringify(p[k]) : (p[k] as string | number))), now(), id)
   return true
 }
