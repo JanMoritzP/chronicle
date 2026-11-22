@@ -49,10 +49,16 @@ export function activate(ctx) {
 
   async function admin(route, init = {}) {
     const cfg = ctx.config.get()
-    const r = await fetch(`${cfg.url.replace(/\/+$/, '')}${route}`, {
-      ...init, headers: { ...init.headers, Authorization: `Bearer ${cfg.adminToken}` }, signal: AbortSignal.timeout(15000),
-    })
-    return r
+    const base = cfg.url.trim().replace(/\/+$/, '')
+    try {
+      return await fetch(`${base}${route}`, {
+        ...init, headers: { ...init.headers, Authorization: `Bearer ${cfg.adminToken}` }, signal: AbortSignal.timeout(15000),
+      })
+    } catch (err) {
+      // Node only says "fetch failed"; the reason (refused, unknown host, timeout, bad address) is in the cause
+      const why = err.name === 'TimeoutError' ? 'no answer within 15 seconds' : err.cause?.code ? `${err.cause.code}${err.cause.message ? `: ${err.cause.message}` : ''}` : err.cause?.message ?? err.message
+      throw new Error(`Cannot reach image administration at ${base || '(no address set)'}: ${why}. Check the address, that the server is running, and that Chronicle can reach it (inside Docker, 127.0.0.1 is the container itself).`)
+    }
   }
 
   // ---------- 1. scrape the application and request images ----------
