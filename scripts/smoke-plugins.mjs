@@ -31,9 +31,10 @@ const sha = (b) => crypto.createHash('sha256').update(b).digest('hex')
 
 // a stand-in for image administration: keeps requests, events and files; refuses ids that contain "invalid"
 const TOKEN = 'admin-secret', HOOK = 'hook-secret'
-const requests = new Map()
-const events = []
-const files = new Map()
+const requests = new Map()      // sprite id -> sprite as requested, with its project (ids are unique in this test: one world)
+const projectsSeen = new Map()  // project id -> { name, description, folders }
+const events = []               // { project, seq, id, ... }: every project counts its own events
+const files = new Map()         // "project|id" -> bytes
 let calls = 0
 const fake = http.createServer((req, res) => {
   const chunks = []
@@ -43,20 +44,28 @@ const fake = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://x')
     const json = (code, body) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)) }
     if (req.headers.authorization !== `Bearer ${TOKEN}`) return json(401, { ok: false, errors: ['no token'] })
+    const pid = url.searchParams.get('project') || 'default'
     if (req.method === 'POST' && url.pathname === '/api/requests') {
-      const { sprites = [] } = JSON.parse(Buffer.concat(chunks).toString() || '{}')
-      const errors = sprites.flatMap((s) => [!s.id && 'id', !s.description && 'description', !(s.spec?.width > 0 && s.spec?.height > 0) && 'exact size', !/\.(png|jpg|webp)$/.test(s.target ?? '') && 'target', s.description?.includes('invalid') && 'refused for the test'].filter(Boolean))
+      const body = JSON.parse(Buffer.concat(chunks).toString() || '{}')
+      const { sprites = [] } = body
+      const named = body.project?.id ?? 'default'
+      const errors = sprites.flatMap((x) => [!x.id && 'id', !x.description && 'description', !(x.spec?.width > 0 && x.spec?.height > 0) && 'exact size', !/\.(png|jpg|webp)$/.test(x.target ?? '') && 'target', x.description?.includes('invalid') && 'refused for the test'].filter(Boolean))
       if (errors.length) return json(422, { ok: false, errors })
-      for (const s of sprites) requests.set(s.id, s)
-      return json(200, { ok: true, sprites })
+      const prev = projectsSeen.get(named) ?? { folders: {} }
+      projectsSeen.set(named, { name: body.project?.name, description: body.project?.description, folders: { ...prev.folders, ...(body.folders ?? {}) } })
+      for (const x of sprites) requests.set(x.id, { ...x, _project: named })
+      return json(200, { ok: true, sprites: sprites.map((x) => x.id), project: named })
     }
-    if (url.pathname === '/api/events') return json(200, { events: events.filter((e) => e.seq > Number(url.searchParams.get('since') ?? 0)) })
+    if (url.pathname === '/api/events') {
+      if (pid !== 'default' && !projectsSeen.has(pid)) return json(404, { ok: false, errors: ['unknown project'] })
+      return json(200, { events: events.filter((e) => e.project === pid && e.seq > Number(url.searchParams.get('since') ?? 0)) })
+    }
     if (url.pathname === '/api/file') {
       const id = url.searchParams.get('id')
-      if (!files.has(id)) return json(404, { ok: false })
-      const b = files.get(id)
-      res.writeHead(200, { 'content-type': 'image/png', 'X-Sprite-Sha256': sha(b) })
-      return res.end(b)
+      if (!files.has(`${pid}|${id}`)) return json(404, { ok: false })
+      const bytes = files.get(`${pid}|${id}`)
+      res.writeHead(200, { 'content-type': 'image/png', 'X-Sprite-Sha256': sha(bytes) })
+      return res.end(bytes)
     }
     json(404, { ok: false })
   })
@@ -65,14 +74,14 @@ await new Promise((r) => fake.listen(0, '127.0.0.1', r))
 const fakeUrl = `http://127.0.0.1:${fake.address().port}`
 
 /** What a person's upload in the admin does: record the event, then (unless push is false) push it to the webhook. */
-async function upload(id, bytes, { push = true, token = HOOK, hash } = {}) {
-  files.set(id, bytes)
-  const seq = events.length + 1
-  events.push({ seq, id, format: 'png', bytes: bytes.length, sha256: sha(bytes) })
+async function upload(id, bytes, { push = true, token = HOOK, hash, project = requests.get(id)?._project ?? 'default' } = {}) {
+  files.set(`${project}|${id}`, bytes)
+  const seq = events.filter((e) => e.project === project).length + 1
+  events.push({ project, seq, id, format: 'png', bytes: bytes.length, sha256: sha(bytes) })
   if (!push) return null
   return fetch(`${base}/api/plugins/image-administration/webhook`, {
     method: 'POST', body: bytes,
-    headers: { 'content-type': 'image/png', 'x-sprite-id': id, 'x-sprite-seq': String(seq), 'x-sprite-format': 'png', 'x-sprite-sha256': hash ?? sha(bytes), ...(token ? { authorization: `Bearer ${token}` } : {}) },
+    headers: { 'content-type': 'image/png', 'x-sprite-project': project, 'x-sprite-id': id, 'x-sprite-seq': String(seq), 'x-sprite-format': 'png', 'x-sprite-sha256': hash ?? sha(bytes), ...(token ? { authorization: `Bearer ${token}` } : {}) },
   })
 }
 
@@ -132,8 +141,10 @@ r = await call('POST', '/api/plugins/image-administration/request', {})
 check('request answers', r.status === 200 && /2 new/.test(r.data.message), JSON.stringify(r.data))
 const heroReq = [...requests.values()].find((s) => s.description.includes('Hero'))
 check('one request per page that lacks a portrait', requests.size === 2 && [...requests.values()].every((s) => !s.description.includes('Plain') && !s.description.includes('Has Portrait')))
-check('exact size, format and target extension', heroReq?.spec.width === 300 && heroReq.spec.height === 200 && heroReq.spec.formats[0] === 'webp' && heroReq.target.endsWith('.webp') && heroReq.id.startsWith('chronicle/'), JSON.stringify(heroReq)?.slice(0, 200))
-check('braces in titles are escaped for placeholders', heroReq.description.includes('{{Elf}}'))
+check('exact size, format and target extension', heroReq?.spec.width === 300 && heroReq.spec.height === 200 && heroReq.spec.formats[0] === 'webp' && heroReq.target.endsWith('.webp') && heroReq.id.startsWith('pages/'), JSON.stringify(heroReq)?.slice(0, 200))
+check('titles go into descriptions as they are', heroReq.description.includes('{Elf}') && !heroReq.description.includes('{{'))
+const proj = heroReq._project
+check('the world became a project named after it', proj.startsWith('plug-test-') && projectsSeen.get(proj)?.name.startsWith('Plug {test}'), proj)
 await call('POST', '/api/plugins/image-administration/request', {})
 check('asking again does not request the same pages twice', requests.size === 2)
 const late = await mk('Latecomer', { type: 'location' })
@@ -158,7 +169,7 @@ r = await upload(heroReq.id, bytes)
 check('the same image again is idempotent', r.status === 204 && (await portraitOf(hero.id)) === first && (await call('GET', `/api/workspaces/${ws}/uploads`)).data.items.length === count)
 r = await upload(heroReq.id, png(4, 4))
 check('a replacement image replaces the portrait', r.status === 204 && (await portraitOf(hero.id)) !== first)
-r = await upload('chronicle/never/asked', png(2, 2))
+r = await upload('never/asked', png(2, 2), { project: proj })
 check('an image nobody requested is refused', r.status === 404)
 r = await upload(wolfReq.id, Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>'))
 check('a format Chronicle cannot keep is refused without a retry', r.status === 415 && !(await portraitOf(wolf.id)), String(r.status))
@@ -193,13 +204,13 @@ const sizeBefore = requests.size
 r = await call('POST', '/api/plugins/image-administration/request', {})
 const fresh = [...requests.values()].slice(sizeBefore)
 check('scene, two token names and a handout are requested', r.status === 200 && /4 new/.test(r.data.message) && fresh.length === 4, JSON.stringify(r.data))
-const sceneReq = fresh.find((s) => s.id.includes('/tabletop/scenes/'))
-const orcReq = fresh.find((s) => s.id.includes('/tabletop/tokens/orc'))
-const ariaReq = fresh.find((s) => s.id.includes('/tabletop/tokens/aria'))
-const handReq = fresh.find((s) => s.id.includes('/tabletop/handouts/'))
+const sceneReq = fresh.find((s) => s.id.startsWith('tabletop/scenes/'))
+const orcReq = fresh.find((s) => s.id.startsWith('tabletop/tokens/orc'))
+const ariaReq = fresh.find((s) => s.id.startsWith('tabletop/tokens/aria'))
+const handReq = fresh.find((s) => s.id.startsWith('tabletop/handouts/'))
 check('the scene is requested at its own size', sceneReq?.spec.width === sceneMsg.scene.width && sceneReq.spec.height === sceneMsg.scene.height, JSON.stringify(sceneReq?.spec))
 check('tokens are square and handouts have their own size', orcReq?.spec.width === 256 && orcReq.spec.height === 256 && handReq?.spec.width === 1024 && handReq.spec.height === 768)
-check('names carry no ids: no hash anywhere in a request id', [...requests.keys()].every((id) => !/-[0-9a-f]{6,8}(\/|$)/.test(id.split('/').slice(2).join('/'))), [...requests.keys()].join(' '))
+check('names carry no ids: no hash anywhere in a request id', [...requests.keys()].every((id) => !/-[0-9a-f]{6,8}(\/|$)/.test(id)), [...requests.keys()].join(' '))
 check('all four targets end in the format', fresh.every((s) => s.target.endsWith('.webp')))
 r = await upload(sceneReq.id, png(9, 9))
 const bgMsg = await wait((m) => m.t === 'scene' && m.scene?.id === sceneId && m.scene.bg?.startsWith('/api/uploads/'))
@@ -239,8 +250,8 @@ const textReq = fresh5.find((s) => s.description.startsWith('Illustration'))
 const tallReq = fresh5.find((s) => s.id.endsWith('/portrait') && s.description.includes('Moon Shrine'))
 const bannerReq = fresh5.find((s) => s.id.endsWith('/banner'))
 const mapReq = fresh5.find((s) => s.id.endsWith('/map'))
-const world5 = textReq.id.split('/')[1]
-check('the folders of the adventure are kept, with names only', textReq.id.startsWith(`chronicle/${world5}/pages/campaign/harbour-tale/harbour-at-dusk`) && tallReq.id === `chronicle/${world5}/pages/campaign/npcs/moon-shrine/portrait` && mapReq.id === `chronicle/${world5}/pages/harbour-town/map`, [textReq.id, tallReq.id, mapReq.id].join(' '))
+check('the real names of the folders reach the admin as titles', projectsSeen.get(proj).folders['pages/campaign']?.title === 'Campaign' && projectsSeen.get(proj).folders['pages/campaign/npcs']?.title === 'NPCs' && projectsSeen.get(proj).folders['pages/campaign/npcs/moon-shrine']?.title === 'Moon Shrine', JSON.stringify(projectsSeen.get(proj).folders))
+check('the folders of the adventure are kept, with names only', textReq.id.startsWith(`pages/campaign/harbour-tale/harbour-at-dusk`) && tallReq.id === `pages/campaign/npcs/moon-shrine/portrait` && mapReq.id === `pages/harbour-town/map`, [textReq.id, tallReq.id, mapReq.id].join(' '))
 check('both pictures of one page share its folder', tallReq.id.replace(/\/portrait$/, '') === bannerReq.id.replace(/\/banner$/, ''))
 check('shapes decide the size, a map has its own', tallReq.spec.width === 300 && tallReq.spec.height === 400 && bannerReq.spec.width === 1024 && bannerReq.spec.height === 448 && mapReq.spec.width === 4096 && textReq.spec.width === 800, JSON.stringify([tallReq.spec, bannerReq.spec, mapReq.spec, textReq.spec]))
 check('no map is requested for a page type that was not chosen', !fresh5.some((s) => s.id.endsWith('/map') && s.description.includes('Moon')))
@@ -275,7 +286,21 @@ check('nothing is requested twice', requests.size === again5)
 await mk('Twin', { type: 'person' })
 await mk('Twin', { type: 'person' })
 await call('POST', '/api/plugins/image-administration/request', {})
-check('equal names are told apart by a number', requests.has(`chronicle/${world5}/pages/twin/portrait`) && requests.has(`chronicle/${world5}/pages/twin-2/portrait`))
+const twinId = 'pages/twin/portrait'
+check('equal names are told apart by a number', requests.has(`pages/twin/portrait`) && requests.has(`pages/twin-2/portrait`))
+// a second world is a second project, with the same folder layout inside
+const ws2 = (await call('POST', '/api/workspaces', { name: 'Other Tale ' + Math.floor(Math.random() * 1e6) })).data.id
+const other = (await call('POST', `/api/workspaces/${ws2}/pages`, { title: 'Other Hero', props: { type: 'person' } })).data
+r = await call('POST', '/api/plugins/image-administration/request', {})
+const otherReq = requests.get('pages/other-hero/portrait')
+check('another world gets its own project', /^1 new/.test(r.data.message) && otherReq?._project?.startsWith('other-tale-') && otherReq._project !== proj, JSON.stringify(r.data))
+check('and both projects have their own pages folder', requests.get(twinId)._project === proj)
+r = await upload('pages/other-hero/portrait', png(5, 6))
+check('a push names its project, so the right page gets the picture', r.status === 204 && !!((await call('GET', `/api/pages/${other.id}`)).data.props?.portrait))
+r = await upload('pages/other-hero/portrait', png(7, 7), { push: false })
+r = await call('POST', '/api/plugins/image-administration/catchup', {})
+check('catch-up asks every project for its own events', r.status === 200 && /^1 new/.test(r.data.message), JSON.stringify(r.data))
+await call('DELETE', `/api/workspaces/${ws2}`)
 // forgetting starts over: everything still empty is requested again
 r = await call('POST', '/api/plugins/image-administration/forget', {})
 check('forget clears what the plugin remembers', r.status === 200 && /forgot/i.test(r.data.message), JSON.stringify(r.data))
