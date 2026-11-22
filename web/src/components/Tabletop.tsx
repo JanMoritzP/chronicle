@@ -354,6 +354,9 @@ export function TableView() {
       <div className="tt-main">
         <div className="tt-canvas" ref={host}>
           {!scene && <div className="tt-empty muted">{gm ? 'No scenes yet. Create one to start.' : 'The GM has not opened a scene yet.'}</div>}
+          {stats && <div className="tt-stats-badge" role="status" aria-label="Performance">{stats}</div>}
+          <DiceTray />
+          <CallPanel />
         </div>
         {panelOpen && (
           <aside className={`tt-panel${narrow ? ' sheet' : ''}`} aria-label="Table panel">
@@ -382,10 +385,7 @@ export function TableView() {
       </div>
       <HandoutViewer />
       <ReadyBanner />
-      {stats && <div className="tt-stats-badge" role="status" aria-label="Performance">{stats}</div>}
       <ThreatBanner />
-      <DiceTray />
-      <CallPanel />
       {pinAt && <PinDialog at={pinAt} onClose={() => setPinAt(null)} />}
       <AudioPlayer />
       {narrow && <MyStrip />}
