@@ -249,7 +249,7 @@ test('a system pack changes what the table shows, brings its content, and can be
 
 test('a system pack can add its own fields to a character sheet', { tag: '@feature:packs.sheet' }, async ({ app, makePage }) => {
   await openSettings(app, 'Worlds')
-  const pack = { format: 'chronicle-system', v: 1, id: 'doomed', name: 'Doomed', base: '5e', sheetFields: [{ id: 'doom', label: 'Doom', kind: 'number' }, { id: 'patron', label: 'Patron', kind: 'text' }] }
+  const pack = { format: 'chronicle-system', v: 1, id: 'doomed', name: 'Doomed', base: '5e', sheetFields: [{ id: 'doom', label: 'Doom', kind: 'number' }, { id: 'patron', label: 'Patron', kind: 'text' }], sheetLayout: { order: ['gear'], hidden: ['skills'] } }
   const chooser = app.waitForEvent('filechooser')
   await app.getByRole('button', { name: 'Install a pack from a file' }).click()
   await (await chooser).setFiles({ name: 'doomed.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(pack)) })
@@ -264,6 +264,9 @@ test('a system pack can add its own fields to a character sheet', { tag: '@featu
   await app.getByLabel('Doom', { exact: true }).fill('3')
   await app.getByLabel('Patron', { exact: true }).fill('The Hollow King')
   await expect(app.getByRole('region', { name: 'Extras of Doomed' })).toBeVisible()
+  // the pack hides the skills and puts the equipment first
+  await expect(app.getByRole('region', { name: 'Skills' })).toBeHidden()
+  await expect(app.getByRole('region', { name: 'Equipment' })).toHaveCSS('order', '1')
   await app.reload()
   await openPage(app, 'Brann')
   await expect(app.getByLabel('Doom', { exact: true })).toHaveValue('3')

@@ -7,6 +7,7 @@ import { z } from 'zod'
 
 export const PACK_FORMAT = 'chronicle-system'
 const ABILITY_KEYS = ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const
+export const SHEET_SECTIONS = ['combat', 'abilities', 'skills', 'spells', 'features', 'extra', 'gear'] as const
 const word = z.string().trim().min(1).max(30)
 
 export const packSchema = z.object({
@@ -27,6 +28,8 @@ export const packSchema = z.object({
   initiative: z.string().regex(/^\d{0,2}d\d{1,3}([+-]\d{1,3})?$/i).optional(),
   /** extra fields a character sheet of this system carries (a sanity score, a faith, a rank) */
   sheetFields: z.array(z.object({ id: z.string().regex(/^[a-z][a-z0-9-]{0,19}$/), label: z.string().trim().min(1).max(30), kind: z.enum(['number', 'text', 'check']) }).strict()).max(24).optional(),
+  /** which sections of a character sheet are shown, and in what order (the ones not named keep their usual place after the named ones) */
+  sheetLayout: z.object({ order: z.array(z.enum(SHEET_SECTIONS)).max(7).optional(), hidden: z.array(z.enum(SHEET_SECTIONS)).max(7).optional() }).strict().optional(),
   grid: z.object({ unit: z.string().trim().min(1).max(8), dist: z.number().min(0.1).max(1000), type: z.enum(['square', 'hex-row', 'hex-col', 'none']) }).optional(),
   content: z.object({
     rollTables: z.array(z.object({ name: z.string().trim().min(1).max(60), entries: z.string().max(20000), secret: z.boolean().optional() })).max(30).optional(),

@@ -6,6 +6,17 @@ import type { RuleSystem } from '../types'
 
 export type AbilityKey = 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha'
 export const ABILITY_KEYS: AbilityKey[] = ['str', 'dex', 'con', 'int', 'wis', 'cha']
+export const SHEET_SECTIONS = ['combat', 'abilities', 'skills', 'spells', 'features', 'extra', 'gear'] as const
+export type SheetSection = (typeof SHEET_SECTIONS)[number]
+export const SECTION_NAMES: Record<SheetSection, string> = { combat: 'Armor, hit points and speed', abilities: 'Abilities', skills: 'Skills', spells: 'Spellcasting', features: 'Features and attacks', extra: 'Extra fields', gear: 'Equipment' }
+
+/** Where each section of a character sheet goes and which are hidden, from a pack's layout: the named ones first in their order, the others after in the usual order. */
+export function layoutOf(layout: PackData['sheetLayout']): { order: Record<SheetSection, number>; hidden: Set<SheetSection> } {
+  const first = [...new Set(layout?.order ?? [])]
+  const all = [...first, ...SHEET_SECTIONS.filter((s) => !first.includes(s))]
+  return { order: Object.fromEntries(all.map((s, i) => [s, i + 1])) as Record<SheetSection, number>, hidden: new Set(layout?.hidden ?? []) }
+}
+
 export interface SheetField { id: string; label: string; kind: 'number' | 'text' | 'check' }
 export interface AbilityName { name: string; short: string }
 
@@ -18,6 +29,7 @@ export interface PackData {
   initiative?: string
   grid?: { unit: string; dist: number; type: 'square' | 'hex-row' | 'hex-col' | 'none' }
   sheetFields?: SheetField[]
+  sheetLayout?: { order?: SheetSection[]; hidden?: SheetSection[] }
   content?: { rollTables?: { name: string; entries: string; secret?: boolean }[]; decks?: { name: string; cards: string }[]; macros?: { name: string; text: string }[] }
 }
 
@@ -46,6 +58,8 @@ export interface Rules {
   grid: NonNullable<PackData['grid']>
   /** extra fields the pack adds to a character sheet */
   sheetFields: SheetField[]
+  /** the order of the sections of a character sheet and the ones left out */
+  sheetLayout: { order: Record<SheetSection, number>; hidden: Set<SheetSection> }
   /** the installed pack in use, if any */
   pack: PackData | null
 }
@@ -61,6 +75,7 @@ export function resolveRules(system: RuleSystem, pack: PackData | null): Rules {
     initiative: pack?.initiative ?? b.initiative!,
     grid: pack?.grid ?? b.grid!,
     sheetFields: pack?.sheetFields ?? [],
+    sheetLayout: layoutOf(pack?.sheetLayout),
   }
 }
 

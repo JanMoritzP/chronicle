@@ -1,4 +1,5 @@
 import { useRules } from '../lib/pack'
+import type { SheetSection } from '../lib/systems'
 import { Heart, Moon, Plus, Shield, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import {
@@ -47,6 +48,8 @@ export type RollFn = (expr: string, label: string) => void
 
 export function CharacterSheet({ sheet, set, roll }: { sheet: Sheet; set?: (patch: SheetPatch) => void; roll?: RollFn }) {
   const rules = useRules()
+  // where each section goes, and which are left out, as the system pack says
+  const place = (id: SheetSection) => ({ style: { order: rules.sheetLayout.order[id], ...(rules.sheetLayout.hidden.has(id) ? { display: 'none' } : {}) } as React.CSSProperties })
   const an = rules.abilities
   const edit = !!set
   const pb = proficiency(sheet)
@@ -112,7 +115,7 @@ export function CharacterSheet({ sheet, set, roll }: { sheet: Sheet; set?: (patc
 
       {edit && levelling && <LevelUpPanel sheet={sheet} set={act} onClose={() => setLevelling(false)} />}
 
-      <section className="cs-combat" aria-label="Combat">
+      <section className="cs-combat" aria-label="Combat" {...place('combat')}>
         <div className="cs-box"><Shield size={14} /><b>Armor class</b>{edit ? <Num label="Armor class" value={sheet.ac.value} max={99} onChange={(n) => act({ 'ac.value': n })} /> : <span>{sheet.ac.value}</span>}</div>
         <button className="cs-box cs-roll" disabled={!roll} title="Roll initiative" onClick={() => check(initiativeBonus(sheet), 'Initiative')}><b>Initiative</b><span>{signed(initiativeBonus(sheet))}</span></button>
         <div className="cs-box"><b>Speed</b>{edit ? <Num label="Walking speed" value={sheet.speed.walk} width={56} onChange={(n) => act({ 'speed.walk': n })} /> : <span>{sheet.speed.walk ?? 0} ft.</span>}</div>
@@ -143,7 +146,7 @@ export function CharacterSheet({ sheet, set, roll }: { sheet: Sheet; set?: (patc
         </div>
       </section>
 
-      <section className="cs-abilities" aria-label="Abilities">
+      <section className="cs-abilities" aria-label="Abilities" {...place('abilities')}>
         {ABILITIES.map((a) => (
           <div key={a} className="cs-ability">
             <button className="cs-roll" disabled={!roll} title={`Roll ${an[a].name} check`} onClick={() => check(abilityMod(sheet.abilities[a]), `${an[a].short} check`)}><b>{an[a].short}</b><span className="cs-mod">{signed(abilityMod(sheet.abilities[a]))}</span></button>
@@ -157,7 +160,7 @@ export function CharacterSheet({ sheet, set, roll }: { sheet: Sheet; set?: (patc
         ))}
       </section>
 
-      <section className="cs-skills" aria-label="Skills">
+      <section className="cs-skills" aria-label="Skills" {...place('skills')}>
         <h4>Skills <small className="muted">{edit ? 'click the mark to cycle none, proficient, expertise; Shift-click rolls' : ''}</small></h4>
         <div className="cs-skillgrid">
           {Object.keys(SKILLS).map((k) => (
@@ -173,7 +176,7 @@ export function CharacterSheet({ sheet, set, roll }: { sheet: Sheet; set?: (patc
           : profs.tools ? <div className="cs-line"><b>Proficiencies</b> {profs.tools}</div> : null}
       </section>
 
-      <section className="cs-spells" aria-label="Spellcasting">
+      <section className="cs-spells" aria-label="Spellcasting" {...place('spells')}>
         <h4>Spellcasting</h4>
         <div className="cs-line">
           {edit ? (
@@ -201,7 +204,7 @@ export function CharacterSheet({ sheet, set, roll }: { sheet: Sheet; set?: (patc
           : sheet.spells ? <p className="cs-notes">{sheet.spells}</p> : null}
       </section>
 
-      <section className="cs-features" aria-label="Features and attacks">
+      <section className="cs-features" aria-label="Features and attacks" {...place('features')}>
         <h4>Attacks and spells</h4>
         {edit ? <FeatureEditor group="actions" list={features('actions')} set={(list) => act({ 'features.actions': list })} />
           : features('actions').map((f, i) => <p key={i}><b><i>{f.name}.</i></b> {f.text}</p>)}
@@ -211,7 +214,7 @@ export function CharacterSheet({ sheet, set, roll }: { sheet: Sheet; set?: (patc
       </section>
 
       {rules.sheetFields.length > 0 && (
-        <section className="cs-extra" aria-label={`Extras of ${rules.name}`}>
+        <section className="cs-extra" aria-label={`Extras of ${rules.name}`} {...place('extra')}>
           <h4>{rules.name}</h4>
           <div className="cs-line">
             {rules.sheetFields.map((f) => {
@@ -227,7 +230,7 @@ export function CharacterSheet({ sheet, set, roll }: { sheet: Sheet; set?: (patc
           </div>
         </section>
       )}
-      <section className="cs-gear" aria-label="Equipment">
+      <section className="cs-gear" aria-label="Equipment" {...place('gear')}>
         <h4>Equipment</h4>
         <ul className="cs-items">
           {items.map((it, i) => (

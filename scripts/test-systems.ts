@@ -21,5 +21,9 @@ check('names become ids', slugOf('Dark Fantasy!') === 'dark-fantasy' && slugOf('
 
 check('a pack adds fields to the character sheet', resolveRules('5e', { ...pack, sheetFields: [{ id: 'doom', label: 'Doom', kind: 'number' }] }).sheetFields[0].id === 'doom' && resolveRules('5e', null).sheetFields.length === 0)
 check('and the server accepts them', 'pack' in (parsePack({ ...pack, sheetFields: [{ id: 'doom', label: 'Doom', kind: 'number' }, { id: 'faith', label: 'Faith', kind: 'text' }] }) as any) && 'error' in (parsePack({ ...pack, sheetFields: [{ id: 'Bad Id', label: 'x', kind: 'number' }] }) as any) && 'error' in (parsePack({ ...pack, sheetFields: [{ id: 'a', label: 'x', kind: 'dice' }] }) as any))
+const lay = resolveRules('5e', { ...pack, sheetLayout: { order: ['gear', 'spells'], hidden: ['skills'] } }).sheetLayout
+check('a pack puts sections first in its order and the rest after', lay.order.gear === 1 && lay.order.spells === 2 && lay.order.combat === 3 && lay.order.extra > lay.order.combat && lay.hidden.has('skills'))
+check('without a layout the sections keep their usual order and none is hidden', resolveRules('5e', null).sheetLayout.order.combat === 1 && resolveRules('5e', null).sheetLayout.order.gear === 7 && resolveRules('5e', null).sheetLayout.hidden.size === 0)
+check('the server accepts a layout and refuses a section that does not exist', 'pack' in (parsePack({ ...pack, sheetLayout: { order: ['gear'], hidden: ['skills'] } }) as any) && 'error' in (parsePack({ ...pack, sheetLayout: { order: ['moon'] } }) as any))
 console.log(failed ? `\n${failed} failed` : '\nall passed')
 process.exit(failed ? 1 : 0)
