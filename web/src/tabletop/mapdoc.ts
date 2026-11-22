@@ -10,7 +10,10 @@ export const PROP_NAMES: Record<PropKind, string> = { table: 'Table', pillar: 'P
 /** A door, a secret door (a wall to the players) or a window (sight and light pass, walking does not), on the edge above (n) or to the left of (w) a cell. */
 export type Opening = 'door' | 'secret' | 'window'
 export interface DocDoor { x: number; y: number; side: 'n' | 'w'; kind?: Opening }
-export interface DocProp { x: number; y: number; kind: PropKind; /** quarter turns */ turn: number }
+/** A prop is one of the drawn kinds, or a picture of the world's own (`kind` is "picture" and `image` an upload), `size` cells across. */
+export interface DocProp { x: number; y: number; kind: PropKind | 'picture'; /** quarter turns */ turn: number; image?: string; size?: number }
+/** A wall at any angle, between two corners of the grid (whole numbers of cells from the top left). */
+export interface DocDiagonal { x1: number; y1: number; x2: number; y2: number }
 export interface DocLight { x: number; y: number; /** cells of bright light; dim light reaches as far again */ radius: number; color: string }
 export interface MapDoc {
   v: 1
@@ -18,6 +21,8 @@ export interface MapDoc {
   /** one string per row, "1" for floor and "0" for nothing */
   floor: string[]
   doors: DocDoor[]
+  /** walls at any angle, drawn corner to corner */
+  diag?: DocDiagonal[]
   props: DocProp[]
   lights: DocLight[]
   theme: 'stone' | 'cave' | 'wood' | 'ice'
@@ -105,6 +110,7 @@ export function wallSegments(d: MapDoc, px: number): DocWall[] {
     }
     flush(d.rows)
   }
+  for (const g of d.diag ?? []) out.push({ x1: g.x1 * px, y1: g.y1 * px, x2: g.x2 * px, y2: g.y2 * px, kind: 'wall' })
   return out
 }
 
@@ -123,9 +129,11 @@ export function cleanDoc(raw: unknown): MapDoc | null {
   const theme = d.theme && d.theme in THEMES ? d.theme : 'stone'
   const inside = (x: unknown, y: unknown) => Number.isInteger(x) && Number.isInteger(y) && (x as number) >= 0 && (y as number) >= 0 && (x as number) < cols! && (y as number) < rows!
   const doors = (Array.isArray(d.doors) ? d.doors : []).filter((o) => o && inside(o.x, o.y) && (o.side === 'n' || o.side === 'w')).slice(0, 400).map((o): DocDoor => ({ x: o.x, y: o.y, side: o.side, ...(o.kind === 'secret' || o.kind === 'window' ? { kind: o.kind } : {}) }))
-  const props = (Array.isArray(d.props) ? d.props : []).filter((o) => o && inside(o.x, o.y) && (PROPS as readonly string[]).includes(o.kind)).slice(0, 600).map((o) => ({ x: o.x, y: o.y, kind: o.kind, turn: ((Number(o.turn) || 0) % 4 + 4) % 4 }))
+  const props = (Array.isArray(d.props) ? d.props : []).filter((o) => o && inside(o.x, o.y) && ((PROPS as readonly string[]).includes(o.kind) || (o.kind === 'picture' && typeof o.image === 'string' && /^\/api\/uploads\/[A-Za-z0-9-]+$/.test(o.image)))).slice(0, 600).map((o): DocProp => ({ x: o.x, y: o.y, kind: o.kind as DocProp['kind'], turn: ((Number(o.turn) || 0) % 4 + 4) % 4, ...(o.kind === 'picture' ? { image: o.image, size: clamp(Number(o.size) || 1, 0.5, 20) } : {}) }))
   const lights = (Array.isArray(d.lights) ? d.lights : []).filter((o) => o && inside(o.x, o.y)).slice(0, 100).map((o) => ({ x: o.x, y: o.y, radius: clamp(Number(o.radius) || 4, 1, 30), color: /^#[0-9a-fA-F]{6}$/.test(String(o.color)) ? String(o.color) : '#ffd9a0' }))
-  return { v: 1, cols: cols!, rows: rows!, floor: d.floor, doors, props, lights, theme }
+  const corner = (x: unknown, y: unknown) => Number.isInteger(x) && Number.isInteger(y) && (x as number) >= 0 && (y as number) >= 0 && (x as number) <= cols! && (y as number) <= rows!
+  const diag = (Array.isArray(d.diag) ? d.diag : []).filter((g) => g && corner(g.x1, g.y1) && corner(g.x2, g.y2) && (g.x1 !== g.x2 || g.y1 !== g.y2)).slice(0, 300).map((g): DocDiagonal => ({ x1: g.x1, y1: g.y1, x2: g.x2, y2: g.y2 }))
+  return { v: 1, cols: cols!, rows: rows!, floor: d.floor, doors, ...(diag.length ? { diag } : {}), props, lights, theme }
 }
 
 /** Grows or shrinks the grid, keeping what is inside the new size. */
@@ -133,7 +141,8 @@ export function resizeDoc(d: MapDoc, cols: number, rows: number): MapDoc {
   const c = clamp(Math.round(cols), MIN_SIDE, MAX_SIDE), r = clamp(Math.round(rows), MIN_SIDE, MAX_SIDE)
   const floor = Array.from({ length: r }, (_, y) => (d.floor[y] ?? '').slice(0, c).padEnd(c, '0'))
   const inside = (o: { x: number; y: number }) => o.x < c && o.y < r
-  return { ...d, cols: c, rows: r, floor, doors: d.doors.filter(inside), props: d.props.filter(inside), lights: d.lights.filter(inside) }
+  const corner = (g: DocDiagonal) => g.x1 <= c && g.x2 <= c && g.y1 <= r && g.y2 <= r
+  return { ...d, cols: c, rows: r, floor, ...(d.diag ? { diag: d.diag.filter(corner) } : {}), doors: d.doors.filter(inside), props: d.props.filter(inside), lights: d.lights.filter(inside) }
 }
 
 /** Paints (or clears) a round brush of `size` cells across, centred on a cell: the freehand way to draw a cave. */

@@ -1,18 +1,23 @@
-import { Eraser, Lamp, Redo2, Square, Undo2, X, DoorOpen, Route, Armchair, Trash2, Brush, Wand2 } from 'lucide-react'
+import { Eraser, Lamp, Redo2, Square, Undo2, X, DoorOpen, Route, Armchair, Trash2, Brush, Wand2, Slash } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../api'
 import { alertDialog, confirmDialog } from '../lib/dialog'
 import { cellsBetween, cleanDoc, emptyDoc, generateDungeon, paintBrush, paintCorridor, paintRect, PROPS, PROP_NAMES, resizeDoc, THEMES, toggleDoor, tableLights, wallSegments, type MapDoc, type Opening, type PropKind } from '../tabletop/mapdoc'
 import { drawMap, mapPicture } from '../tabletop/mapRender'
 import { sendTable, useTable, type Scene } from '../tabletop/state'
-import { uploadImage } from '../tabletop/upload'
+import { pickImage, uploadImage } from '../tabletop/upload'
 import { Select } from './Select'
 
 // The map editor: draw rooms and corridors on a grid, put doors on their edges, set props and lights, and make the scene from it: the picture,
 // the walls (worked out from where the floor ends), the doors and the lights. The map is kept so it can be opened and changed again.
 
-type Tool = 'floor' | 'erase' | 'corridor' | 'cave' | 'door' | 'prop' | 'light' | 'remove'
+type Tool = 'floor' | 'erase' | 'corridor' | 'cave' | 'diagonal' | 'door' | 'prop' | 'light' | 'remove'
 const SCENE_PX = 70
+/** How far a point is from a wall between two corners, in cells. */
+const segDistance = (px: number, py: number, g: { x1: number; y1: number; x2: number; y2: number }) => {
+  const dx = g.x2 - g.x1, dy = g.y2 - g.y1, t = Math.max(0, Math.min(1, ((px - g.x1) * dx + (py - g.y1) * dy) / (dx * dx + dy * dy || 1)))
+  return Math.hypot(px - (g.x1 + t * dx), py - (g.y1 + t * dy))
+}
 const nearestEdge = (doc: MapDoc, fx: number, fy: number) => {
   // which edge of the cell the pointer is closest to: top and left are the cell's own, bottom and right belong to the cell below and to the right
   const x = Math.floor(fx), y = Math.floor(fy), dx = fx - x, dy = fy - y
@@ -25,7 +30,11 @@ export function MapEditor({ scene, wsId, onClose }: { scene: Scene; wsId: string
   const [past, setPast] = useState<MapDoc[]>([])
   const [future, setFuture] = useState<MapDoc[]>([])
   const [tool, setTool] = useState<Tool>('floor')
-  const [prop, setProp] = useState<PropKind>('table')
+  const [prop, setProp] = useState<PropKind | 'picture'>('table')
+  const [pictureUrl, setPictureUrl] = useState('')
+  const [pictureSize, setPictureSize] = useState(2)
+  const [corner, setCorner] = useState<{ x: number; y: number } | null>(null)
+  const [redraw, setRedraw] = useState(0)
   const [turn, setTurn] = useState(0)
   const [radius, setRadius] = useState(4)
   const [color, setColor] = useState('#ffd9a0')
@@ -52,6 +61,7 @@ export function MapEditor({ scene, wsId, onClose }: { scene: Scene; wsId: string
     return () => { live = false }
   }, [wsId, scene.id])
 
+  useEffect(() => { setCorner(null) }, [tool])
   const change = (next: MapDoc) => { if (!doc) return; setPast((p) => [...p.slice(-60), doc]); setFuture([]); setDoc(next) }
   const undo = () => { const last = past.at(-1); if (!last || !doc) return; setPast(past.slice(0, -1)); setFuture([doc, ...future]); setDoc(last) }
   const redo = () => { const nx = future[0]; if (!nx || !doc) return; setFuture(future.slice(1)); setPast([...past, doc]); setDoc(nx) }
@@ -68,13 +78,14 @@ export function MapEditor({ scene, wsId, onClose }: { scene: Scene; wsId: string
     if (!c || !shown) return
     c.width = shown.cols * zoom; c.height = shown.rows * zoom
     const ctx = c.getContext('2d')!
-    drawMap(ctx, shown, zoom, { lights: true })
+    drawMap(ctx, shown, zoom, { lights: true, onLoad: () => setRedraw((n) => n + 1) })
     ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 1
     ctx.beginPath()
     for (let x = 0; x <= shown.cols; x++) { ctx.moveTo(x * zoom + 0.5, 0); ctx.lineTo(x * zoom + 0.5, shown.rows * zoom) }
     for (let y = 0; y <= shown.rows; y++) { ctx.moveTo(0, y * zoom + 0.5); ctx.lineTo(shown.cols * zoom, y * zoom + 0.5) }
     ctx.stroke()
-  }, [shown, zoom])
+    if (corner) { ctx.beginPath(); ctx.arc(corner.x * zoom, corner.y * zoom, 5, 0, Math.PI * 2); ctx.fillStyle = '#ffd23f'; ctx.fill(); ctx.strokeStyle = '#000'; ctx.stroke() }
+  }, [shown, zoom, redraw, corner])
 
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
@@ -82,6 +93,7 @@ export function MapEditor({ scene, wsId, onClose }: { scene: Scene; wsId: string
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo() }
       else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); redo() }
       else if (e.key === 'r' && tool === 'prop') setTurn((t) => (t + 1) % 4)
+      else if (e.key === 'Escape') setCorner(null)
     }
     window.addEventListener('keydown', key)
     return () => window.removeEventListener('keydown', key)
@@ -99,9 +111,20 @@ export function MapEditor({ scene, wsId, onClose }: { scene: Scene; wsId: string
     const c = cell(e)
     if (tool === 'door') { const { fx, fy } = at(e); change(toggleDoor(doc, { ...nearestEdge(doc, fx, fy), ...(opening !== 'door' ? { kind: opening } : {}) })); return }
     if (tool === 'cave') { setPast((p) => [...p.slice(-60), doc]); setFuture([]); setDoc(paintBrush(doc, c.x, c.y, brush, !brushClears)); setLast(c); (e.target as HTMLElement).setPointerCapture(e.pointerId); return }
-    if (tool === 'prop') { change({ ...doc, props: [...doc.props.filter((p) => !(p.x === c.x && p.y === c.y && (p.kind === 'rug') === (prop === 'rug'))), { x: c.x, y: c.y, kind: prop, turn }] }); return }
+    if (tool === 'prop') {
+      if (prop === 'picture' && !pictureUrl) { void alertDialog('Choose a picture first.'); return }
+      change({ ...doc, props: [...doc.props.filter((p) => !(p.x === c.x && p.y === c.y && (p.kind === 'rug') === (prop === 'rug'))), { x: c.x, y: c.y, kind: prop, turn, ...(prop === 'picture' ? { image: pictureUrl, size: pictureSize } : {}) }] }); return
+    }
     if (tool === 'light') { change({ ...doc, lights: [...doc.lights.filter((l) => !(l.x === c.x && l.y === c.y)), { x: c.x, y: c.y, radius, color }] }); return }
-    if (tool === 'remove') { change({ ...doc, props: doc.props.filter((p) => !(p.x === c.x && p.y === c.y)), lights: doc.lights.filter((l) => !(l.x === c.x && l.y === c.y)), doors: doc.doors.filter((d) => !(d.x === c.x && d.y === c.y)) }); return }
+    if (tool === 'diagonal') {
+      const { fx, fy } = at(e)
+      const p = { x: Math.min(doc.cols, Math.max(0, Math.round(fx))), y: Math.min(doc.rows, Math.max(0, Math.round(fy))) }
+      if (!corner) { setCorner(p); return }
+      setCorner(null)
+      if (p.x !== corner.x || p.y !== corner.y) change({ ...doc, diag: [...(doc.diag ?? []), { x1: corner.x, y1: corner.y, x2: p.x, y2: p.y }].slice(-300) })
+      return
+    }
+    if (tool === 'remove') { const { fx: rx, fy: ry } = at(e); change({ ...doc, diag: (doc.diag ?? []).filter((g) => segDistance(rx, ry, g) > 0.45), props: doc.props.filter((p) => !(p.x === c.x && p.y === c.y)), lights: doc.lights.filter((l) => !(l.x === c.x && l.y === c.y)), doors: doc.doors.filter((d) => !(d.x === c.x && d.y === c.y)) }); return }
     ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
     setDrag({ a: c, b: c })
   }
@@ -145,6 +168,7 @@ export function MapEditor({ scene, wsId, onClose }: { scene: Scene; wsId: string
   const tools: { id: Tool; label: string; icon: React.ReactNode }[] = [
     { id: 'floor', label: 'Room', icon: <Square size={14} /> }, { id: 'erase', label: 'Erase floor', icon: <Eraser size={14} /> }, { id: 'corridor', label: 'Corridor', icon: <Route size={14} /> },
     { id: 'cave', label: 'Cave brush', icon: <Brush size={14} /> },
+    { id: 'diagonal', label: 'Diagonal wall', icon: <Slash size={14} /> },
     { id: 'door', label: 'Door', icon: <DoorOpen size={14} /> }, { id: 'prop', label: 'Prop', icon: <Armchair size={14} /> }, { id: 'light', label: 'Light', icon: <Lamp size={14} /> }, { id: 'remove', label: 'Remove item', icon: <Trash2 size={14} /> },
   ]
   return (
@@ -156,7 +180,13 @@ export function MapEditor({ scene, wsId, onClose }: { scene: Scene; wsId: string
         </span>
         {tool === 'prop' && (
           <>
-            <Select className="input" style={{ width: 150 }} value={prop} onChange={(v) => setProp(v as PropKind)} title="Kind of prop">{PROPS.map((p) => <option key={p} value={p}>{PROP_NAMES[p]}</option>)}</Select>
+            <Select className="input" style={{ width: 150 }} value={prop} onChange={(v) => setProp(v as PropKind | 'picture')} title="Kind of prop">{[...PROPS.map((p) => <option key={p} value={p}>{PROP_NAMES[p]}</option>), <option key="picture" value="picture">A picture of your own</option>]}</Select>
+            {prop === 'picture' && (
+              <>
+                <button className="btn sm" onClick={async () => { const f = await pickImage(); if (f) { const url = await uploadImage(wsId, f); if (url) setPictureUrl(url) } }}>{pictureUrl ? 'Another picture' : 'Choose a picture'}</button>
+                <label className="sv-mini">Cells across<input className="input tt-num" type="number" min={0.5} max={20} step={0.5} aria-label="Picture size in cells" value={pictureSize} onChange={(e) => setPictureSize(Math.min(20, Math.max(0.5, Number(e.target.value) || 1)))} /></label>
+              </>
+            )}
             <button className="btn sm" title="Turn it a quarter (R)" onClick={() => setTurn((turn + 1) % 4)}>Turn</button>
           </>
         )}
@@ -198,7 +228,7 @@ export function MapEditor({ scene, wsId, onClose }: { scene: Scene; wsId: string
           setSeed(String(n)); change(generateDungeon(n, doc.cols, doc.rows, rooms, doc.theme))
         }}><Wand2 size={13} /> Generate a dungeon</button>
         <button className="btn sm" onClick={async () => { if (await confirmDialog('Every room, door, prop and light on this map is removed.', { title: 'Clear the map', okLabel: 'Clear', danger: true })) change(emptyDoc(doc.cols, doc.rows, doc.theme)) }}>Clear</button>
-        <span className="muted" style={{ fontSize: 12 }}>{doc.floor.join('').split('1').length - 1} cells of floor, {wallSegments(doc, 1).filter((w) => w.kind === 'door').length} doors, {wallSegments(doc, 1).filter((w) => w.kind === 'window').length} windows, {wallSegments(doc, 1).filter((w) => w.kind === 'secret').length} secret doors, {doc.lights.length} lights</span>
+        <span className="muted" style={{ fontSize: 12 }}>{doc.floor.join('').split('1').length - 1} cells of floor, {wallSegments(doc, 1).filter((w) => w.kind === 'door').length} doors, {wallSegments(doc, 1).filter((w) => w.kind === 'window').length} windows, {wallSegments(doc, 1).filter((w) => w.kind === 'secret').length} secret doors, {(doc.diag ?? []).length} diagonal walls, {doc.lights.length} lights</span>
       </div>
       <div className="map-editor-scroll">
         <canvas ref={canvas} aria-label="Map" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={() => setDrag(null)} onContextMenu={(e) => e.preventDefault()} style={{ touchAction: 'none', cursor: 'crosshair' }} />

@@ -815,6 +815,10 @@ const mdKinds = { ...mdDoc, doors: [{ x: 2, y: 1, side: 'n', kind: 'window' }, {
 check('a map keeps its windows and secret doors', (await call('PUT', mdUrl, { doc: mdKinds }, gmCookie)).status === 200 && JSON.stringify((await call('GET', mdUrl, null, gmCookie)).data.doc.doors) === JSON.stringify(mdKinds.doors))
 check('but not a kind of opening that does not exist', (await call('PUT', mdUrl, { doc: { ...mdDoc, doors: [{ x: 2, y: 1, side: 'n', kind: 'lava' }] } }, gmCookie)).status === 400)
 check('the map the other checks use is saved again', (await call('PUT', mdUrl, { doc: mdDoc }, gmCookie)).status === 200)
+const mdDiag = { ...mdDoc, diag: [{ x1: 1, y1: 1, x2: 4, y2: 3 }], props: [...mdDoc.props, { x: 3, y: 3, kind: 'picture', turn: 0, image: '/api/uploads/abc-123', size: 2 }] }
+check('a map keeps diagonal walls and pictures of its own', (await call('PUT', mdUrl, { doc: mdDiag }, gmCookie)).status === 200 && JSON.stringify((await call('GET', mdUrl, null, gmCookie)).data.doc.diag) === JSON.stringify(mdDiag.diag))
+check('but a picture from anywhere but the world is refused', (await call('PUT', mdUrl, { doc: { ...mdDoc, props: [{ x: 1, y: 1, kind: 'picture', turn: 0, image: 'https://evil.example/x.png', size: 2 }] } }, gmCookie)).status === 400)
+check('and a diagonal wall off the map is refused', (await call('PUT', mdUrl, { doc: { ...mdDoc, diag: [{ x1: 0, y1: 0, x2: 500, y2: 3 }] } }, gmCookie)).status === 400)
 check('a document that does not fit its own size is refused', (await call('PUT', mdUrl, { doc: { ...mdDoc, floor: ['0'] } }, gmCookie)).status === 400)
 check('so is one with a bad kind of theme or an oversized grid', (await call('PUT', mdUrl, { doc: { ...mdDoc, theme: 'lava' } }, gmCookie)).status === 400 && (await call('PUT', mdUrl, { doc: { ...mdDoc, cols: 500 } }, gmCookie)).status === 400)
 check('a player can neither read nor write it', (await call('GET', mdUrl, null, alice.cookie)).status === 403 && (await call('PUT', mdUrl, { doc: mdDoc }, alice.cookie)).status === 403)

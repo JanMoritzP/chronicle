@@ -10,7 +10,8 @@ const doc = z.object({
   cols: z.number().int().min(5).max(100), rows: z.number().int().min(5).max(100),
   floor: z.array(z.string().regex(/^[01]*$/)).max(100),
   doors: z.array(z.object({ x: z.number().int().min(0).max(99), y: z.number().int().min(0).max(99), side: z.enum(['n', 'w']), kind: z.enum(['door', 'secret', 'window']).optional() })).max(400),
-  props: z.array(z.object({ x: z.number().int().min(0).max(99), y: z.number().int().min(0).max(99), kind: z.string().max(20), turn: z.number().int().min(0).max(3) })).max(600),
+  diag: z.array(z.object({ x1: z.number().int().min(0).max(100), y1: z.number().int().min(0).max(100), x2: z.number().int().min(0).max(100), y2: z.number().int().min(0).max(100) })).max(300).optional(),
+  props: z.array(z.object({ x: z.number().int().min(0).max(99), y: z.number().int().min(0).max(99), kind: z.string().max(20), turn: z.number().int().min(0).max(3), image: z.string().regex(/^\/api\/uploads\/[A-Za-z0-9-]+$/).optional(), size: z.number().min(0.5).max(20).optional() })).max(600),
   lights: z.array(z.object({ x: z.number().int().min(0).max(99), y: z.number().int().min(0).max(99), radius: z.number().min(1).max(30), color: z.string().regex(/^#[0-9a-fA-F]{6}$/) })).max(100),
   theme: z.enum(['stone', 'cave', 'wood', 'ice']),
 }).refine((d) => d.floor.length === d.rows && d.floor.every((r) => r.length === d.cols), 'the floor does not match the size')

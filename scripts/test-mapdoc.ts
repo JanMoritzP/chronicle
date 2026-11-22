@@ -67,5 +67,14 @@ check('the same seed makes the same dungeon and another seed another', JSON.stri
 check('it has rooms, doors and lights, all inside the map', a.floor.join('').split('1').length - 1 > 60 && a.doors.length > 0 && a.lights.length > 0 && a.doors.every((d) => d.x >= 0 && d.y >= 0 && d.x < a.cols && d.y < a.rows) && cleanDoc(JSON.parse(JSON.stringify(a))) !== null)
 check('a small map still works', cleanDoc(generateDungeon(3, 12, 10, 3)) !== null && generateDungeon(3, 5, 5, 20).floor.length === 5)
 check('it can be turned into walls', wallSegments(a, 70).length > 10)
+// diagonal walls and pictures of the world's own
+const withDiag = { ...paintRect(emptyDoc(10, 8), 1, 1, 6, 5, true), diag: [{ x1: 2, y1: 2, x2: 7, y2: 4 }] }
+check('a diagonal wall is a wall between its two corners, in pixels', wallSegments(withDiag, 10).some((w) => w.kind === 'wall' && w.x1 === 20 && w.y1 === 20 && w.x2 === 70 && w.y2 === 40))
+check('diagonal walls survive cleaning, and bad ones do not', cleanDoc(JSON.parse(JSON.stringify(withDiag)))!.diag!.length === 1 && cleanDoc({ ...JSON.parse(JSON.stringify(withDiag)), diag: [{ x1: 0, y1: 0, x2: 0, y2: 0 }, { x1: -1, y1: 0, x2: 3, y2: 3 }, { x1: 0, y1: 0, x2: 99, y2: 3 }, { x1: 1, y1: 1, x2: 4, y2: 4 }] })!.diag!.length === 1)
+check('a map without diagonal walls has none', cleanDoc(JSON.parse(JSON.stringify(emptyDoc(10, 8))))!.diag === undefined)
+check('resizing drops the diagonal walls that no longer fit', resizeDoc(withDiag, 5, 5).diag!.length === 0 && resizeDoc(withDiag, 10, 8).diag!.length === 1)
+const pic = { ...emptyDoc(10, 8), props: [{ x: 2, y: 2, kind: 'picture', turn: 1, image: '/api/uploads/abc-123', size: 3 }, { x: 3, y: 3, kind: 'picture', turn: 0, image: 'https://evil.example/x.png', size: 3 }, { x: 4, y: 4, kind: 'picture', turn: 0 }, { x: 5, y: 5, kind: 'table', turn: 0 }] }
+const cleanPic = cleanDoc(JSON.parse(JSON.stringify(pic)))!
+check('a picture prop keeps its upload and size, and one pointing anywhere else is dropped', cleanPic.props.length === 2 && cleanPic.props[0].image === '/api/uploads/abc-123' && cleanPic.props[0].size === 3 && cleanPic.props[1].kind === 'table')
 console.log(failed ? `\n${failed} failed` : '\nall passed')
 process.exit(failed ? 1 : 0)

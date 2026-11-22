@@ -4,11 +4,36 @@ import { THEMES, wallSegments, type DocProp, type MapDoc } from './mapdoc'
 
 const shade = (x: number, y: number) => ((x * 73 + y * 151 + x * y * 7) % 9) / 9
 
-function prop(ctx: CanvasRenderingContext2D, p: DocProp, px: number) {
+const pictures = new Map<string, HTMLImageElement | 'loading' | 'failed'>()
+/** A picture of the world for a prop: drawn once it has loaded (`onLoad` asks for the map to be drawn again), and waited for by `loadPictures`. */
+function pictureFor(url: string, onLoad?: () => void): HTMLImageElement | null {
+  const have = pictures.get(url)
+  if (have && have !== 'loading' && have !== 'failed') return have
+  if (!have) {
+    pictures.set(url, 'loading')
+    const img = new Image()
+    img.onload = () => { pictures.set(url, img); onLoad?.() }
+    img.onerror = () => pictures.set(url, 'failed')
+    img.src = url
+  }
+  return null
+}
+export const loadPictures = (d: MapDoc) => Promise.all([...new Set(d.props.filter((p) => p.kind === 'picture' && p.image).map((p) => p.image!))].map((u) => new Promise<void>((resolve) => {
+  if (pictureFor(u, resolve)) resolve(); else if (pictures.get(u) === 'failed') resolve()
+  else setTimeout(resolve, 8000)
+})))
+
+function prop(ctx: CanvasRenderingContext2D, p: DocProp, px: number, onLoad?: () => void) {
   const cx = (p.x + 0.5) * px, cy = (p.y + 0.5) * px, u = px / 10
   ctx.save()
   ctx.translate(cx, cy)
   ctx.rotate((p.turn * Math.PI) / 2)
+  if (p.kind === 'picture' && p.image) {
+    const img = pictureFor(p.image, onLoad)
+    if (img) { const w = (p.size ?? 1) * px, h = (w * img.naturalHeight) / (img.naturalWidth || 1); ctx.drawImage(img, -w / 2, -h / 2, w, h) }
+    ctx.restore()
+    return
+  }
   ctx.lineWidth = Math.max(1, u * 0.35)
   ctx.strokeStyle = 'rgba(0,0,0,0.65)'
   const rect = (w: number, h: number, fill: string, r = u * 0.6) => { ctx.beginPath(); ctx.roundRect(-w / 2, -h / 2, w, h, r); ctx.fillStyle = fill; ctx.fill(); ctx.stroke() }
@@ -29,7 +54,7 @@ function prop(ctx: CanvasRenderingContext2D, p: DocProp, px: number) {
 }
 
 /** Paints the map into a canvas context for cells `px` wide. `lights` draws the light sources and their reach (for the editor, not the picture). */
-export function drawMap(ctx: CanvasRenderingContext2D, d: MapDoc, px: number, opts: { lights?: boolean } = {}) {
+export function drawMap(ctx: CanvasRenderingContext2D, d: MapDoc, px: number, opts: { lights?: boolean; /** called when a picture of a prop has loaded and the map should be drawn again */ onLoad?: () => void } = {}) {
   const t = THEMES[d.theme]
   ctx.fillStyle = t.bg
   ctx.fillRect(0, 0, d.cols * px, d.rows * px)
@@ -45,7 +70,7 @@ export function drawMap(ctx: CanvasRenderingContext2D, d: MapDoc, px: number, op
   ctx.beginPath()
   for (let y = 0; y < d.rows; y++) for (let x = 0; x < d.cols; x++) if (d.floor[y][x] === '1') ctx.rect(x * px + 0.5, y * px + 0.5, px, px)
   ctx.stroke()
-  for (const p of d.props) if (p.kind === 'rug') prop(ctx, p, px)
+  for (const p of d.props) if (p.kind === 'rug') prop(ctx, p, px, opts.onLoad)
   // walls: a dark line with a light edge, and doors as small wooden slabs across their edge
   ctx.lineCap = 'round'
   for (const w of wallSegments(d, px)) {
@@ -69,7 +94,7 @@ export function drawMap(ctx: CanvasRenderingContext2D, d: MapDoc, px: number, op
       ctx.restore()
     }
   }
-  for (const p of d.props) if (p.kind !== 'rug') prop(ctx, p, px)
+  for (const p of d.props) if (p.kind !== 'rug') prop(ctx, p, px, opts.onLoad)
   if (opts.lights) {
     for (const l of d.lights) {
       const cx = (l.x + 0.5) * px, cy = (l.y + 0.5) * px
@@ -81,7 +106,8 @@ export function drawMap(ctx: CanvasRenderingContext2D, d: MapDoc, px: number, op
 }
 
 /** The map as the picture a scene uses, with cells `px` wide. */
-export function mapPicture(d: MapDoc, px: number): Promise<Blob> {
+export async function mapPicture(d: MapDoc, px: number): Promise<Blob> {
+  await loadPictures(d)
   const c = document.createElement('canvas')
   c.width = d.cols * px; c.height = d.rows * px
   drawMap(c.getContext('2d')!, d, px)
