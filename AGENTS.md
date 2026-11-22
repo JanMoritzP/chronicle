@@ -30,7 +30,7 @@ npm start                    # run the built server
 
 PowerShell env: `$env:ADMIN_PASSWORD='x'; $env:DATA_DIR="$env:TEMP\test-data"; $env:PORT='3222'`.
 
-Config env: `PORT`, `HOST`, `DATA_DIR`, `ADMIN_USER`, `ADMIN_PASSWORD` (first start only), `SESSION_DAYS`, `BACKUP_KEEP`, `WEB_DIST`, `ADMIN_PORT`, `ADMIN_HOST`, `ADMIN_PANEL_USER`, `ADMIN_PANEL_PASSWORD` (dashboard account, first start only; the dashboard stays off without it).
+Config env: `PORT`, `HOST`, `DATA_DIR`, `ICE_SERVERS` (+ `ICE_USERNAME`, `ICE_CREDENTIAL`: STUN or TURN addresses for table voice and video, none by default), `ADMIN_USER`, `ADMIN_PASSWORD` (first start only), `SESSION_DAYS`, `BACKUP_KEEP`, `WEB_DIST`, `ADMIN_PORT`, `ADMIN_HOST`, `ADMIN_PANEL_USER`, `ADMIN_PANEL_PASSWORD` (dashboard account, first start only; the dashboard stays off without it).
 
 ### Running a throwaway server for testing
 Never test against the owner's real data directory.

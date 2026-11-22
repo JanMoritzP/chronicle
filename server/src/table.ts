@@ -349,6 +349,14 @@ function rollOnTable(ws: string, c: Conn, t: RollTableDb) {
 
 /** What plays in each world right now. It is not kept: a restart is silence. */
 const playing = new Map<string, Set<string>>()
+// ---------- voice and video ----------
+
+/** Who is in the call in each world, and whether they send video. Not kept. */
+const calls = new Map<string, Map<string, { video: boolean }>>()
+const callMembers = (ws: string) => [...(calls.get(ws) ?? [])].map(([id, v]) => ({ id, video: v.video }))
+function sendCall(ws: string) { const members = callMembers(ws); for (const c of inWorld(ws)) send(c, { t: 'call', members, ice: config.iceServers }) }
+function leaveCall(ws: string, userId: string) { if (calls.get(ws)?.delete(userId)) sendCall(ws) }
+
 // ---------- who is at the table, and a ready check ----------
 
 /** A ready check in each world: who has answered, and how. Not kept. */
@@ -454,6 +462,7 @@ function fireEnter(ws: string, userId: string, before: TokenRow, after: TokenRow
 
 function sendSnapshot(c: Conn) {
   const { active, settings } = stateOf(c.ws)
+  send(c, { t: 'call', members: callMembers(c.ws), ice: config.iceServers })
   viewFor(c, c.scene)
   send(c, {
     t: 'snapshot', you: { id: c.user.id, username: c.user.username, role: c.role }, settings, scenes: scenesOf(c.ws, c), active,
@@ -1028,6 +1037,20 @@ async function handle(c: Conn, m: ClientMessage) {
       if (on) list.add(m.user); else list.delete(m.user)
       await handle(c, { t: 'settings.set', patch: { [key]: [...list] } } as ClientMessage)
       if (m.t === 'user.ban' && m.banned) for (const x of inWorld(ws)) if (x.user.id === m.user) x.socket.close(CLOSE_DENIED, 'banned')
+      return
+    }
+    case 'call.join': {
+      if (!calls.has(ws)) calls.set(ws, new Map())
+      const room = calls.get(ws)!
+      if (!room.has(c.user.id) && room.size >= 8) return nack(c, m, 'The call is full: eight people can be in it at once.')
+      room.set(c.user.id, { video: m.video })
+      return sendCall(ws)
+    }
+    case 'call.leave': return leaveCall(ws, c.user.id)
+    case 'rtc': {
+      const room = calls.get(ws)
+      if (!room?.has(c.user.id) || !room.has(m.to) || m.to === c.user.id) return
+      for (const x of inWorld(ws)) if (x.user.id === m.to) send(x, { t: 'rtc', from: c.user.id, data: m.data })
       return
     }
     case 'ready.start': {
@@ -1690,7 +1713,7 @@ export function attachTable(server: HttpServer) {
         c.queue = c.queue.then(() => handle(c, r.data)).catch((e) => { console.error('table message failed:', r.data.t, e); nack(c, r.data, 'The table could not do that. Reload the page and try again.') })
       })
       socket.on('pong', () => { c.alive = true })
-      socket.on('close', () => { conns.delete(c); presenceChanged(); announce(c.ws); sameScene(c, () => true, { t: 'cursor.gone', user: c.user.id }) })
+      socket.on('close', () => { conns.delete(c); if (!inWorld(c.ws).some((x) => x.user.id === c.user.id)) leaveCall(c.ws, c.user.id); presenceChanged(); announce(c.ws); sameScene(c, () => true, { t: 'cursor.gone', user: c.user.id }) })
       socket.on('error', () => socket.terminate())
     })
   })

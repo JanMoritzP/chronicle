@@ -1023,3 +1023,13 @@ button.cs-roll:disabled { cursor: default; }
 .f-top { transform: rotateX(90deg) translateZ(19px); } .f-bottom { transform: rotateX(-90deg) translateZ(19px); }
 @keyframes die-tumble { 0% { transform: translateY(-60px) rotateX(540deg) rotateY(720deg) rotateZ(90deg); opacity: 0; } 15% { opacity: 1; } 70% { transform: translateY(0) rotateX(60deg) rotateY(90deg) rotateZ(10deg); } 100% { transform: translateY(0) rotateX(0) rotateY(0) rotateZ(0); } }
 @keyframes die-away { to { opacity: 0; transform: translateY(8px); } }
+
+.tt-call { position: absolute; right: 10px; bottom: 10px; z-index: 6; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; max-width: min(420px, 60%); padding: 6px 8px; border-radius: 10px; background: color-mix(in srgb, var(--panel) 92%, transparent); border: 1px solid var(--border); }
+.tt-call.joined { flex-direction: column; align-items: stretch; }
+.tt-call-tiles { display: flex; flex-wrap: wrap; gap: 6px; }
+.tt-call-tile { position: relative; width: 112px; height: 84px; border-radius: 8px; overflow: hidden; background: #1c1a20; display: grid; place-items: center; }
+.tt-call-tile video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; }
+.tt-call-tile.has-video video { opacity: 1; }
+.tt-call-tile small { position: absolute; left: 4px; bottom: 3px; color: #fff; font-size: 11px; text-shadow: 0 1px 2px #000; }
+.tt-call-avatar { font: 700 26px system-ui, sans-serif; color: #fff; opacity: .8; }
+.tt-call-error { color: var(--danger); flex-basis: 100%; }

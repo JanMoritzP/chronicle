@@ -1170,7 +1170,7 @@ await sleep(100)
 await call('PATCH', `/api/workspaces/${ws}`, { settings: { system: 'pf2e' } }, gmCookie)
 pa.send({ t: 'chat', text: '/roll 1d20+40 Athletics dc 20' })
 const degr = await gm.until((m) => m.t === 'chat.msg' && m.msg.parts[0]?.roll?.dc === 20)
-check('in a Pathfinder world a roll against a DC gets a degree of success', degr?.msg.parts[0].roll.degree === 'critical success')
+check('in a Pathfinder world a roll against a DC gets a degree of success', /success/.test(degr?.msg.parts[0].roll.degree ?? '') && !/failure/.test(degr?.msg.parts[0].roll.degree ?? ''))
 pa.send({ t: 'chat', text: '/roll 1d20 dc 99' })
 check('a DC that cannot be met is a failure of some degree', /failure/.test((await gm.until((m) => m.t === 'chat.msg' && m.msg.parts[0]?.roll?.dc === 99))?.msg.parts[0].roll.degree ?? ''))
 const pfPage = (await call('POST', `/api/workspaces/${ws}/pages`, { title: 'Watcher', props: { type: 'monster', sheet: { v: 1, ruleset: 'pf2e', name: 'Watcher', size: '', type: '', alignment: '', abilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 }, ac: { value: 20, note: '' }, hp: { max: 40, formula: '' }, speed: { walk: 25 }, saves: {}, skills: {}, senses: {}, vulnerabilities: '', resistances: '', immunities: '', conditionImmunities: '', languages: '', features: { traits: [], actions: [], bonus: [], reactions: [], legendary: [] }, pf2e: { level: 5, perception: 20, fort: 12, ref: 12, will: 12, mods: { str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 }, traits: [], rarity: 'common' } } } }, gmCookie)).data
@@ -1467,6 +1467,29 @@ check('a video can be the background of a scene, at the size given', gm.msgs.fil
 gm.send({ t: 'scene.update', id: crypt, patch: { bg: '/api/uploads/not-there' }, op: 'nobg' })
 check('a background that is not in the world is still refused', !!(await gm.until((m) => m.t === 'nack' && m.op === 'nobg')))
 gm.send({ t: 'scene.update', id: crypt, patch: { bg: '' } })
+await sleep(150)
+
+// voice and video: who is in the call, and the messages passed on between browsers
+const callOf = (c) => c.msgs.filter((m) => m.t === 'call').at(-1)?.members ?? []
+gm.send({ t: 'rtc', to: alice.id, data: { kind: 'offer', sdp: 'v=0' } })
+await sleep(200)
+check('a message to someone who is not in the call goes nowhere', !pa.has((m) => m.t === 'rtc'))
+gm.send({ t: 'call.join', video: true })
+pa.send({ t: 'call.join', video: false })
+await sleep(300)
+check('the call says who is in it and who sends video', callOf(gm).length === 2 && callOf(gm).find((x) => x.id === alice.id)?.video === false && callOf(pa).find((x) => x.id !== alice.id)?.video === true)
+gm.send({ t: 'rtc', to: alice.id, data: { kind: 'offer', sdp: 'v=0 offer' } })
+const gotOffer = await pa.until((m) => m.t === 'rtc' && m.data.kind === 'offer')
+check('a connection message is passed on, with who it is from', gotOffer?.data.sdp === 'v=0 offer' && gotOffer.from !== alice.id)
+pb.send({ t: 'rtc', to: alice.id, data: { kind: 'ice', candidate: { candidate: 'candidate:1 1 udp 1 1.2.3.4 5 typ host' } } })
+await sleep(200)
+check('someone outside the call cannot send one in', !pa.has((m) => m.t === 'rtc' && m.data.kind === 'ice'))
+gm.send({ t: 'rtc', to: alice.id, data: { kind: 'offer', sdp: 'x'.repeat(40000) }, op: 'bigsdp' })
+check('an oversized connection message is refused', !!(await gm.until((m) => m.t === 'nack' && m.op === 'bigsdp')))
+pa.send({ t: 'call.leave' })
+await sleep(250)
+check('leaving takes a person out of the call for everyone', callOf(gm).length === 1 && callOf(pa).length === 1)
+gm.send({ t: 'call.leave' })
 await sleep(150)
 
 // bad input

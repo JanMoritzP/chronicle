@@ -23,6 +23,7 @@ import { PinDialog } from './PinDialog'
 import { ReadyBanner } from './ReadyBanner'
 import { ThreatBanner } from './ThreatBanner'
 import { DiceTray } from './DiceTray'
+import { CallPanel } from './CallPanel'
 import { Replay } from './Replay'
 import { TokenActions, TokenBars, TokenLook } from './TokenLook'
 import { TablesAndDecks } from './TableDecks'
@@ -384,6 +385,7 @@ export function TableView() {
       {stats && <div className="tt-stats-badge" role="status" aria-label="Performance">{stats}</div>}
       <ThreatBanner />
       <DiceTray />
+      <CallPanel />
       {pinAt && <PinDialog at={pinAt} onClose={() => setPinAt(null)} />}
       <AudioPlayer />
       {narrow && <MyStrip />}

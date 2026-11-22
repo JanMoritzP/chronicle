@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { GridSpec } from './grid'
 import type { Light, Rect, Wall } from './fog'
+import { bindCall, handleCall, handleRtc, setCallIdentity } from './call'
 
 // What the browser knows about the table. The server is the only writer: this store only ever holds what it was told.
 
@@ -122,6 +123,8 @@ export function applyMessage(m: any) {
     case 'draw.cleared': set((s) => (m.sceneId === s.sceneId ? { drawings: [] } : {})); break
     case 'combat': set({ combat: m.combat }); break
     case 'ready': set({ ready: m.check }); break
+    case 'call': setCallIdentity(useTable.getState().you?.id ?? ''); handleCall(m.members, m.ice ?? []); break
+    case 'rtc': void handleRtc(m.from, m.data); break
     case 'threat': set((s) => ({ threats: [...s.threats.filter((t) => !(t.from === m.from && t.target === m.target)), { from: m.from, fromName: m.fromName, target: m.target, targetName: m.targetName }].slice(-6) })); break
     case 'pins': set((s) => (m.sceneId === s.sceneId ? { pins: m.pins } : {})); break
     case 'reveals': set((s) => (m.sceneId === s.sceneId ? { reveals: m.reveals } : {})); break
@@ -203,3 +206,5 @@ export function sendTable(m: Record<string, unknown>) {
   socket.send(JSON.stringify({ ...m, op: `o${++opSeq}` }))
   return true
 }
+
+bindCall(sendTable)

@@ -241,6 +241,10 @@ export const clientMessage = z.discriminatedUnion('t', [
   z.object({ t: z.literal('user.mute'), user: id, muted: z.boolean() }),
   z.object({ t: z.literal('ready.start') }),
   z.object({ t: z.literal('ready.answer'), yes: z.boolean() }),
+  /** voice and video: who is in the call, and the messages two browsers send each other to connect (the server only passes them on) */
+  z.object({ t: z.literal('call.join'), video: z.boolean() }),
+  z.object({ t: z.literal('call.leave') }),
+  z.object({ t: z.literal('rtc'), to: id, data: z.object({ kind: z.enum(['offer', 'answer', 'ice']), sdp: z.string().max(30000).optional(), candidate: z.object({ candidate: z.string().max(2000), sdpMid: z.string().max(100).nullable().optional(), sdpMLineIndex: z.number().int().min(0).max(100).nullable().optional(), usernameFragment: z.string().max(100).nullable().optional() }).optional() }).strict() }),
   z.object({ t: z.literal('ready.end') }),
   z.object({ t: z.literal('handout.save'), id: id.optional(), title: z.string().trim().min(1).max(120), text: z.string().max(20000), image: imageUrl }),
   z.object({ t: z.literal('handout.delete'), id }),

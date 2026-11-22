@@ -481,6 +481,9 @@ areas:
       - id: table.dice3d
         name: "Dice that tumble across the map when someone rolls"
         files: [web/src/components/DiceTray.tsx, web/src/lib/dicefaces.ts]
+      - id: table.call
+        name: "Voice and video between the people at the table"
+        files: [web/src/tabletop/call.ts, web/src/components/CallPanel.tsx, server/src/table.ts]
       - id: table.stats
         name: "Hit points, damage, healing and conditions on a token, with a linked page's sheet"
         files: [web/src/components/TableParts.tsx, web/src/components/TableSheet.tsx]
