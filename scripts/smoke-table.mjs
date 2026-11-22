@@ -811,6 +811,10 @@ const mdDoc = { v: 1, cols: 6, rows: 5, floor: ['000000', '011100', '011100', '0
 check('a scene has no map document until the editor made one', (await call('GET', mdUrl, null, gmCookie)).data.doc === null)
 check('the GM saves one', (await call('PUT', mdUrl, { doc: mdDoc }, gmCookie)).status === 200)
 check('and reads it back as it was saved', JSON.stringify((await call('GET', mdUrl, null, gmCookie)).data.doc) === JSON.stringify(mdDoc))
+const mdKinds = { ...mdDoc, doors: [{ x: 2, y: 1, side: 'n', kind: 'window' }, { x: 1, y: 2, side: 'w', kind: 'secret' }] }
+check('a map keeps its windows and secret doors', (await call('PUT', mdUrl, { doc: mdKinds }, gmCookie)).status === 200 && JSON.stringify((await call('GET', mdUrl, null, gmCookie)).data.doc.doors) === JSON.stringify(mdKinds.doors))
+check('but not a kind of opening that does not exist', (await call('PUT', mdUrl, { doc: { ...mdDoc, doors: [{ x: 2, y: 1, side: 'n', kind: 'lava' }] } }, gmCookie)).status === 400)
+check('the map the other checks use is saved again', (await call('PUT', mdUrl, { doc: mdDoc }, gmCookie)).status === 200)
 check('a document that does not fit its own size is refused', (await call('PUT', mdUrl, { doc: { ...mdDoc, floor: ['0'] } }, gmCookie)).status === 400)
 check('so is one with a bad kind of theme or an oversized grid', (await call('PUT', mdUrl, { doc: { ...mdDoc, theme: 'lava' } }, gmCookie)).status === 400 && (await call('PUT', mdUrl, { doc: { ...mdDoc, cols: 500 } }, gmCookie)).status === 400)
 check('a player can neither read nor write it', (await call('GET', mdUrl, null, alice.cookie)).status === 403 && (await call('PUT', mdUrl, { doc: mdDoc }, alice.cookie)).status === 403)

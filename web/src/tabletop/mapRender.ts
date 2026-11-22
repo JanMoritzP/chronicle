@@ -49,9 +49,16 @@ export function drawMap(ctx: CanvasRenderingContext2D, d: MapDoc, px: number, op
   // walls: a dark line with a light edge, and doors as small wooden slabs across their edge
   ctx.lineCap = 'round'
   for (const w of wallSegments(d, px)) {
-    if (w.kind === 'wall') {
+    if (w.kind === 'wall' || w.kind === 'secret') {
       ctx.strokeStyle = t.wall; ctx.lineWidth = Math.max(3, px * 0.16)
       ctx.beginPath(); ctx.moveTo(w.x1, w.y1); ctx.lineTo(w.x2, w.y2); ctx.stroke()
+    } else if (w.kind === 'window') {
+      // a window: the wall with a pale pane in it
+      ctx.strokeStyle = t.wall; ctx.lineWidth = Math.max(3, px * 0.16)
+      ctx.beginPath(); ctx.moveTo(w.x1, w.y1); ctx.lineTo(w.x2, w.y2); ctx.stroke()
+      ctx.strokeStyle = '#9fd6ee'; ctx.lineWidth = Math.max(2, px * 0.07)
+      const dx = w.x2 - w.x1, dy = w.y2 - w.y1
+      ctx.beginPath(); ctx.moveTo(w.x1 + dx * 0.15, w.y1 + dy * 0.15); ctx.lineTo(w.x2 - dx * 0.15, w.y2 - dy * 0.15); ctx.stroke()
     } else {
       const horizontal = w.y1 === w.y2
       ctx.save()

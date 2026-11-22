@@ -1,8 +1,8 @@
-import { Eraser, Lamp, Redo2, Square, Undo2, X, DoorOpen, Route, Armchair, Trash2 } from 'lucide-react'
+import { Eraser, Lamp, Redo2, Square, Undo2, X, DoorOpen, Route, Armchair, Trash2, Brush, Wand2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../api'
 import { alertDialog, confirmDialog } from '../lib/dialog'
-import { cleanDoc, emptyDoc, paintCorridor, paintRect, PROPS, PROP_NAMES, resizeDoc, THEMES, toggleDoor, tableLights, wallSegments, type MapDoc, type PropKind } from '../tabletop/mapdoc'
+import { cellsBetween, cleanDoc, emptyDoc, generateDungeon, paintBrush, paintCorridor, paintRect, PROPS, PROP_NAMES, resizeDoc, THEMES, toggleDoor, tableLights, wallSegments, type MapDoc, type Opening, type PropKind } from '../tabletop/mapdoc'
 import { drawMap, mapPicture } from '../tabletop/mapRender'
 import { sendTable, useTable, type Scene } from '../tabletop/state'
 import { uploadImage } from '../tabletop/upload'
@@ -11,7 +11,7 @@ import { Select } from './Select'
 // The map editor: draw rooms and corridors on a grid, put doors on their edges, set props and lights, and make the scene from it: the picture,
 // the walls (worked out from where the floor ends), the doors and the lights. The map is kept so it can be opened and changed again.
 
-type Tool = 'floor' | 'erase' | 'corridor' | 'door' | 'prop' | 'light' | 'remove'
+type Tool = 'floor' | 'erase' | 'corridor' | 'cave' | 'door' | 'prop' | 'light' | 'remove'
 const SCENE_PX = 70
 const nearestEdge = (doc: MapDoc, fx: number, fy: number) => {
   // which edge of the cell the pointer is closest to: top and left are the cell's own, bottom and right belong to the cell below and to the right
@@ -30,6 +30,12 @@ export function MapEditor({ scene, wsId, onClose }: { scene: Scene; wsId: string
   const [radius, setRadius] = useState(4)
   const [color, setColor] = useState('#ffd9a0')
   const [width, setWidth] = useState(1)
+  const [opening, setOpening] = useState<Opening>('door')
+  const [brush, setBrush] = useState(3)
+  const [brushClears, setBrushClears] = useState(false)
+  const [seed, setSeed] = useState('')
+  const [rooms, setRooms] = useState(8)
+  const [last, setLast] = useState<{ x: number; y: number } | null>(null)
   const [zoom, setZoom] = useState(28)
   const [drag, setDrag] = useState<{ a: { x: number; y: number }; b: { x: number; y: number } } | null>(null)
   const [busy, setBusy] = useState(false)
@@ -91,15 +97,24 @@ export function MapEditor({ scene, wsId, onClose }: { scene: Scene; wsId: string
   const down = (e: React.PointerEvent) => {
     if (e.button !== 0) return
     const c = cell(e)
-    if (tool === 'door') { const { fx, fy } = at(e); change(toggleDoor(doc, nearestEdge(doc, fx, fy))); return }
+    if (tool === 'door') { const { fx, fy } = at(e); change(toggleDoor(doc, { ...nearestEdge(doc, fx, fy), ...(opening !== 'door' ? { kind: opening } : {}) })); return }
+    if (tool === 'cave') { setPast((p) => [...p.slice(-60), doc]); setFuture([]); setDoc(paintBrush(doc, c.x, c.y, brush, !brushClears)); setLast(c); (e.target as HTMLElement).setPointerCapture(e.pointerId); return }
     if (tool === 'prop') { change({ ...doc, props: [...doc.props.filter((p) => !(p.x === c.x && p.y === c.y && (p.kind === 'rug') === (prop === 'rug'))), { x: c.x, y: c.y, kind: prop, turn }] }); return }
     if (tool === 'light') { change({ ...doc, lights: [...doc.lights.filter((l) => !(l.x === c.x && l.y === c.y)), { x: c.x, y: c.y, radius, color }] }); return }
     if (tool === 'remove') { change({ ...doc, props: doc.props.filter((p) => !(p.x === c.x && p.y === c.y)), lights: doc.lights.filter((l) => !(l.x === c.x && l.y === c.y)), doors: doc.doors.filter((d) => !(d.x === c.x && d.y === c.y)) }); return }
     ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
     setDrag({ a: c, b: c })
   }
-  const move = (e: React.PointerEvent) => { if (drag) setDrag({ ...drag, b: cell(e) }) }
+  const move = (e: React.PointerEvent) => {
+    if (last) {
+      const c = cell(e)
+      if (c.x === last.x && c.y === last.y) return
+      setDoc((cur) => (cur ? cellsBetween(last.x, last.y, c.x, c.y).reduce((d, p) => paintBrush(d, p.x, p.y, brush, !brushClears), cur) : cur))
+      setLast(c)
+    } else if (drag) setDrag({ ...drag, b: cell(e) })
+  }
   const up = () => {
+    if (last) { setLast(null); return }
     if (!drag) return
     if (tool === 'floor' || tool === 'erase') change(paintRect(doc, drag.a.x, drag.a.y, drag.b.x, drag.b.y, tool === 'floor'))
     else if (tool === 'corridor') change(paintCorridor(doc, drag.a.x, drag.a.y, drag.b.x, drag.b.y, width))
@@ -129,6 +144,7 @@ export function MapEditor({ scene, wsId, onClose }: { scene: Scene; wsId: string
 
   const tools: { id: Tool; label: string; icon: React.ReactNode }[] = [
     { id: 'floor', label: 'Room', icon: <Square size={14} /> }, { id: 'erase', label: 'Erase floor', icon: <Eraser size={14} /> }, { id: 'corridor', label: 'Corridor', icon: <Route size={14} /> },
+    { id: 'cave', label: 'Cave brush', icon: <Brush size={14} /> },
     { id: 'door', label: 'Door', icon: <DoorOpen size={14} /> }, { id: 'prop', label: 'Prop', icon: <Armchair size={14} /> }, { id: 'light', label: 'Light', icon: <Lamp size={14} /> }, { id: 'remove', label: 'Remove item', icon: <Trash2 size={14} /> },
   ]
   return (
@@ -140,7 +156,7 @@ export function MapEditor({ scene, wsId, onClose }: { scene: Scene; wsId: string
         </span>
         {tool === 'prop' && (
           <>
-            <Select className="input" value={prop} onChange={(v) => setProp(v as PropKind)} title="Kind of prop">{PROPS.map((p) => <option key={p} value={p}>{PROP_NAMES[p]}</option>)}</Select>
+            <Select className="input" style={{ width: 150 }} value={prop} onChange={(v) => setProp(v as PropKind)} title="Kind of prop">{PROPS.map((p) => <option key={p} value={p}>{PROP_NAMES[p]}</option>)}</Select>
             <button className="btn sm" title="Turn it a quarter (R)" onClick={() => setTurn((turn + 1) % 4)}>Turn</button>
           </>
         )}
@@ -148,6 +164,15 @@ export function MapEditor({ scene, wsId, onClose }: { scene: Scene; wsId: string
           <>
             <label className="sv-mini">Radius<input className="input tt-num" type="number" min={1} max={30} aria-label="Light radius in cells" value={radius} onChange={(e) => setRadius(Math.min(30, Math.max(1, Number(e.target.value) || 1)))} /></label>
             <input className="tt-color" type="color" aria-label="Light colour for new lights" value={color} onChange={(e) => setColor(e.target.value)} />
+          </>
+        )}
+        {tool === 'door' && <Select className="input tt-type" style={{ width: 150 }} value={opening} onChange={(v) => setOpening(v as Opening)} title="Kind of opening">
+          <option value="door">Door</option><option value="secret">Secret door</option><option value="window">Window</option>
+        </Select>}
+        {tool === 'cave' && (
+          <>
+            <label className="sv-mini">Brush<input className="input tt-num" type="number" min={1} max={9} aria-label="Brush size in cells" value={brush} onChange={(e) => setBrush(Math.min(9, Math.max(1, Number(e.target.value) || 1)))} /></label>
+            <label className="tt-check"><input type="checkbox" checked={brushClears} onChange={(e) => setBrushClears(e.target.checked)} />The brush clears floor</label>
           </>
         )}
         {tool === 'corridor' && <label className="sv-mini">Width<input className="input tt-num" type="number" min={1} max={6} aria-label="Corridor width in cells" value={width} onChange={(e) => setWidth(Math.min(6, Math.max(1, Number(e.target.value) || 1)))} /></label>}
@@ -165,8 +190,15 @@ export function MapEditor({ scene, wsId, onClose }: { scene: Scene; wsId: string
         <label className="sv-mini">high<input className="input tt-num" type="number" min={5} max={100} aria-label="Cells high" value={size.rows} onChange={(e) => setSize({ ...size, rows: e.target.value })} /></label>
         <button className="btn sm" onClick={() => change(resizeDoc(doc, Number(size.cols), Number(size.rows)))}>Resize</button>
         <label className="sv-mini">Zoom<input type="range" min={14} max={48} aria-label="Zoom" value={zoom} onChange={(e) => setZoom(Number(e.target.value))} /></label>
+        <label className="sv-mini">Rooms<input className="input tt-num" type="number" min={2} max={30} aria-label="Rooms to generate" value={rooms} onChange={(e) => setRooms(Math.min(30, Math.max(2, Number(e.target.value) || 2)))} /></label>
+        <label className="sv-mini">Seed<input className="input tt-num" aria-label="Seed of the dungeon" placeholder="random" value={seed} onChange={(e) => setSeed(e.target.value.replace(/\D/g, '').slice(0, 9))} /></label>
+        <button className="btn sm" title="Makes rooms, corridors, doors and lights by itself, which can then be changed by hand" onClick={async () => {
+          if (doc.floor.some((r) => r.includes('1')) && !(await confirmDialog('The rooms, doors and lights on this map are replaced by a new dungeon. Undo brings them back.', { title: 'Generate a dungeon', okLabel: 'Generate' }))) return
+          const n = seed ? Number(seed) : Math.floor(Math.random() * 1e9)
+          setSeed(String(n)); change(generateDungeon(n, doc.cols, doc.rows, rooms, doc.theme))
+        }}><Wand2 size={13} /> Generate a dungeon</button>
         <button className="btn sm" onClick={async () => { if (await confirmDialog('Every room, door, prop and light on this map is removed.', { title: 'Clear the map', okLabel: 'Clear', danger: true })) change(emptyDoc(doc.cols, doc.rows, doc.theme)) }}>Clear</button>
-        <span className="muted" style={{ fontSize: 12 }}>{doc.floor.join('').split('1').length - 1} cells of floor, {wallSegments(doc, 1).filter((w) => w.kind === 'door').length} doors, {doc.lights.length} lights</span>
+        <span className="muted" style={{ fontSize: 12 }}>{doc.floor.join('').split('1').length - 1} cells of floor, {wallSegments(doc, 1).filter((w) => w.kind === 'door').length} doors, {wallSegments(doc, 1).filter((w) => w.kind === 'window').length} windows, {wallSegments(doc, 1).filter((w) => w.kind === 'secret').length} secret doors, {doc.lights.length} lights</span>
       </div>
       <div className="map-editor-scroll">
         <canvas ref={canvas} aria-label="Map" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={() => setDrag(null)} onContextMenu={(e) => e.preventDefault()} style={{ touchAction: 'none', cursor: 'crosshair' }} />

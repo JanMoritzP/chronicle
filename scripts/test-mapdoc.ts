@@ -1,4 +1,4 @@
-import { cleanDoc, emptyDoc, isFloor, paintCorridor, paintRect, resizeDoc, tableLights, toggleDoor, wallSegments, type MapDoc } from '../web/src/tabletop/mapdoc'
+import { cellsBetween, cleanDoc, emptyDoc, generateDungeon, paintBrush, isFloor, paintCorridor, paintRect, resizeDoc, tableLights, toggleDoor, wallSegments, type MapDoc } from '../web/src/tabletop/mapdoc'
 
 let failed = 0
 const check = (name: string, ok: boolean, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name} ${extra}`); if (!ok) failed++ }
@@ -44,5 +44,28 @@ check('a document that does not fit is refused', cleanDoc(null) === null && clea
 const small = resizeDoc({ ...room, doors: [{ x: 3, y: 2, side: 'n' }], lights: [{ x: 8, y: 6, radius: 3, color: '#ffffff' }] }, 6, 5)
 check('resizing keeps what fits and drops what does not', small.cols === 6 && small.rows === 5 && isFloor(small, 4, 3) && small.doors.length === 1 && small.lights.length === 0 && small.floor.every((r) => r.length === 6) && resizeDoc(room, 20, 12).floor[11].length === 20)
 
+// windows and secret doors
+const hall2 = paintRect(emptyDoc(10, 8), 2, 2, 5, 4, true)
+const win = toggleDoor(hall2, { x: 3, y: 2, side: 'n', kind: 'window' })
+check('a window is a piece of wall that is a window', wallSegments(win, 10).filter((x) => x.kind === 'window').length === 1 && wallSegments(win, 10).filter((x) => x.kind === 'door').length === 0)
+const sec = toggleDoor(win, { x: 3, y: 2, side: 'n', kind: 'secret' })
+check('putting another kind on the same edge changes it', wallSegments(sec, 10).filter((x) => x.kind === 'secret').length === 1 && sec.doors.length === 1)
+check('the same kind again takes it away', toggleDoor(sec, { x: 3, y: 2, side: 'n', kind: 'secret' }).doors.length === 0)
+check('a door without a kind is a door, and kinds survive cleaning', wallSegments(toggleDoor(hall2, { x: 3, y: 2, side: 'n' }), 10).some((x) => x.kind === 'door') && cleanDoc(JSON.parse(JSON.stringify(sec)))!.doors[0].kind === 'secret' && cleanDoc(JSON.parse(JSON.stringify({ ...sec, doors: [{ x: 3, y: 2, side: 'n', kind: 'lava' }] })))!.doors[0].kind === undefined)
+
+// freehand caves
+const cave = paintBrush(emptyDoc(12, 12), 6, 6, 3, true)
+check('a brush of one is one cell', paintBrush(emptyDoc(12, 12), 4, 4, 1, true).floor.join('').split('1').length - 1 === 1)
+check('a round brush paints a blob around the cell', isFloor(cave, 6, 6) && isFloor(cave, 5, 6) && isFloor(cave, 6, 7) && !isFloor(cave, 9, 6) && cave.floor.join('').split('1').length - 1 >= 5)
+check('and clears one', !isFloor(paintBrush(cave, 6, 6, 3, false), 6, 6))
+check('a brush at the edge stays inside the map', paintBrush(emptyDoc(12, 12), 0, 0, 5, true).floor.every((r) => r.length === 12))
+check('a stroke has no gaps', cellsBetween(0, 0, 5, 2).length === 6 && cellsBetween(2, 2, 2, 2).length === 1 && cellsBetween(5, 5, 0, 5).length === 6)
+
+// a dungeon made by itself
+const a = generateDungeon(7), b = generateDungeon(7), c = generateDungeon(8)
+check('the same seed makes the same dungeon and another seed another', JSON.stringify(a) === JSON.stringify(b) && JSON.stringify(a) !== JSON.stringify(c))
+check('it has rooms, doors and lights, all inside the map', a.floor.join('').split('1').length - 1 > 60 && a.doors.length > 0 && a.lights.length > 0 && a.doors.every((d) => d.x >= 0 && d.y >= 0 && d.x < a.cols && d.y < a.rows) && cleanDoc(JSON.parse(JSON.stringify(a))) !== null)
+check('a small map still works', cleanDoc(generateDungeon(3, 12, 10, 3)) !== null && generateDungeon(3, 5, 5, 20).floor.length === 5)
+check('it can be turned into walls', wallSegments(a, 70).length > 10)
 console.log(failed ? `\n${failed} failed` : '\nall passed')
 process.exit(failed ? 1 : 0)

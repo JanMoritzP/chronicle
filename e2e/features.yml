@@ -475,6 +475,9 @@ areas:
       - id: table.videomap
         name: "A looping video as the map"
         files: [web/src/tabletop/engine.ts, server/src/routes/uploads.ts, web/src/components/Tabletop.tsx]
+      - id: table.map-editor-more
+        name: "Map editor: cave brush, windows, secret doors and a generated dungeon"
+        files: [web/src/tabletop/mapdoc.ts, web/src/components/MapEditor.tsx, web/src/tabletop/mapRender.ts]
       - id: table.stats
         name: "Hit points, damage, healing and conditions on a token, with a linked page's sheet"
         files: [web/src/components/TableParts.tsx, web/src/components/TableSheet.tsx]
