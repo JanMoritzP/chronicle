@@ -2,6 +2,11 @@
 
 Newest first. The version in `electron/package.json` is the app version; the release notes on GitHub are what the in-app update dialog shows, so keep each entry short and in plain words. Sections after 0.2.0 are written by `scripts/release.mjs` from the commit subjects, so the commit messages carry the release notes.
 
+## 0.78.0 (2026-11-22)
+
+### Features
+- keep the adventure's folders and drop ids from names in image administration
+
 ## 0.77.1 (2026-11-22)
 
 ### Bug Fixes
