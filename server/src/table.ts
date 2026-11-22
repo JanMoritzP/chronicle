@@ -1781,7 +1781,7 @@ export function resetTable() {
 
 export const tableSlots = {
   /** Scenes with their background (empty when none) and exact size. */
-  scenes: () => (db.prepare('SELECT s.id, s.workspace_id AS ws, s.name, s.bg, s.width, s.height FROM scenes s JOIN workspaces w ON w.id = s.workspace_id WHERE w.deleted_at IS NULL ORDER BY s.created_at').all() as { id: string; ws: string; name: string; bg: string; width: number; height: number }[]),
+  scenes: () => (db.prepare('SELECT s.id, s.workspace_id AS ws, s.name, s.folder, s.bg, s.width, s.height FROM scenes s JOIN workspaces w ON w.id = s.workspace_id WHERE w.deleted_at IS NULL ORDER BY s.created_at').all() as { id: string; ws: string; name: string; folder: string; bg: string; width: number; height: number }[]),
   tokens: () => (db.prepare('SELECT t.id, t.workspace_id AS ws, t.name, t.image FROM tokens t JOIN workspaces w ON w.id = t.workspace_id WHERE w.deleted_at IS NULL ORDER BY t.created_at').all() as { id: string; ws: string; name: string; image: string }[]),
   handouts: () => (db.prepare('SELECT h.id, h.workspace_id AS ws, h.title, h.image FROM handouts h JOIN workspaces w ON w.id = h.workspace_id WHERE w.deleted_at IS NULL ORDER BY h.created_at').all() as { id: string; ws: string; title: string; image: string }[]),
   setSceneBackground(id: string, url: string) {

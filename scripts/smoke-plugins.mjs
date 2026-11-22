@@ -193,12 +193,13 @@ const sizeBefore = requests.size
 r = await call('POST', '/api/plugins/image-administration/request', {})
 const fresh = [...requests.values()].slice(sizeBefore)
 check('scene, two token names and a handout are requested', r.status === 200 && /4 new/.test(r.data.message) && fresh.length === 4, JSON.stringify(r.data))
-const sceneReq = fresh.find((s) => s.id.includes('/scenes/'))
-const orcReq = fresh.find((s) => s.id.includes('/tokens/orc-'))
-const ariaReq = fresh.find((s) => s.id.includes('/tokens/aria-'))
-const handReq = fresh.find((s) => s.id.includes('/handouts/'))
+const sceneReq = fresh.find((s) => s.id.includes('/tabletop/scenes/'))
+const orcReq = fresh.find((s) => s.id.includes('/tabletop/tokens/orc'))
+const ariaReq = fresh.find((s) => s.id.includes('/tabletop/tokens/aria'))
+const handReq = fresh.find((s) => s.id.includes('/tabletop/handouts/'))
 check('the scene is requested at its own size', sceneReq?.spec.width === sceneMsg.scene.width && sceneReq.spec.height === sceneMsg.scene.height, JSON.stringify(sceneReq?.spec))
 check('tokens are square and handouts have their own size', orcReq?.spec.width === 256 && orcReq.spec.height === 256 && handReq?.spec.width === 1024 && handReq.spec.height === 768)
+check('names carry no ids: no hash anywhere in a request id', [...requests.keys()].every((id) => !/-[0-9a-f]{6,8}(\/|$)/.test(id.split('/').slice(2).join('/'))), [...requests.keys()].join(' '))
 check('all four targets end in the format', fresh.every((s) => s.target.endsWith('.webp')))
 r = await upload(sceneReq.id, png(9, 9))
 const bgMsg = await wait((m) => m.t === 'scene' && m.scene?.id === sceneId && m.scene.bg?.startsWith('/api/uploads/'))
@@ -219,9 +220,11 @@ await call('PATCH', '/api/plugins/image-administration', { config: { requestScen
 
 // 5. pictures inside page text, further image blocks of a custom page type, and detail maps behind pins
 const doc = (...paras) => ({ type: 'doc', content: paras.map((t) => ({ type: 'paragraph', content: [{ type: 'text', text: t }] })) })
-const story = (await call('POST', `/api/workspaces/${ws}/pages`, { title: 'Harbour Tale', content: doc('It was dusk.', '[image: harbour at dusk]', 'The end.') })).data
+const campaign = (await call('POST', `/api/workspaces/${ws}/folders`, { name: 'Campaign' })).data
+const npcs = (await call('POST', `/api/workspaces/${ws}/folders`, { name: 'NPCs', parentId: campaign.id })).data
+const story = (await call('POST', `/api/workspaces/${ws}/pages`, { title: 'Harbour Tale', folderId: campaign.id, content: doc('It was dusk.', '[image: harbour at dusk]', 'The end.') })).data
 const pt = (await call('POST', `/api/workspaces/${ws}/page-types`, { name: 'Shrine', definition: { top: [], side: [{ type: 'image', key: 'portrait', shape: 'tall' }, { type: 'image', key: 'banner', shape: 'wide' }], main: [{ type: 'body' }], bottom: [] } })).data
-const shrine = await mk('Moon Shrine', { type: pt.id })
+const shrine = (await call('POST', `/api/workspaces/${ws}/pages`, { title: 'Moon Shrine', folderId: npcs.id, props: { type: pt.id } })).data
 const town = await mk('Harbour Town', { type: 'location', portrait: r0.url })
 const mapFd = new FormData()
 mapFd.append('name', 'World map')
@@ -232,15 +235,15 @@ const before5 = requests.size
 r = await call('POST', '/api/plugins/image-administration/request', {})
 const fresh5 = [...requests.values()].slice(before5)
 check('text line, two shrine pictures and a detail map are requested', r.status === 200 && fresh5.length === 4, JSON.stringify(r.data) + fresh5.map((s) => s.id).join(' '))
-const textReq = fresh5.find((s) => s.id.includes('/text/'))
+const textReq = fresh5.find((s) => s.description.startsWith('Illustration'))
 const tallReq = fresh5.find((s) => s.id.endsWith('/portrait') && s.description.includes('Moon Shrine'))
 const bannerReq = fresh5.find((s) => s.id.endsWith('/banner'))
-const mapReq = fresh5.find((s) => s.id.includes('/maps/'))
+const mapReq = fresh5.find((s) => s.id.endsWith('/map'))
 const world5 = textReq.id.split('/')[1]
-check('everything of a world sits under one folder, sorted by category', fresh5.every((s) => s.id.startsWith(`chronicle/${world5}/`)) && textReq.id.startsWith(`chronicle/${world5}/text/harbour-tale-`) && mapReq.id.startsWith(`chronicle/${world5}/maps/harbour-town-`) && tallReq.id.includes('/pages/moon-shrine-'))
+check('the folders of the adventure are kept, with names only', textReq.id.startsWith(`chronicle/${world5}/pages/campaign/harbour-tale/harbour-at-dusk`) && tallReq.id === `chronicle/${world5}/pages/campaign/npcs/moon-shrine/portrait` && mapReq.id === `chronicle/${world5}/pages/harbour-town/map`, [textReq.id, tallReq.id, mapReq.id].join(' '))
 check('both pictures of one page share its folder', tallReq.id.replace(/\/portrait$/, '') === bannerReq.id.replace(/\/banner$/, ''))
 check('shapes decide the size, a map has its own', tallReq.spec.width === 300 && tallReq.spec.height === 400 && bannerReq.spec.width === 1024 && bannerReq.spec.height === 448 && mapReq.spec.width === 4096 && textReq.spec.width === 800, JSON.stringify([tallReq.spec, bannerReq.spec, mapReq.spec, textReq.spec]))
-check('no map is requested for a page type that was not chosen', !fresh5.some((s) => s.id.includes('/maps/') && s.description.includes('Moon')))
+check('no map is requested for a page type that was not chosen', !fresh5.some((s) => s.id.endsWith('/map') && s.description.includes('Moon')))
 r = await upload(textReq.id, png(6, 4))
 const textUrl = (await call('GET', `/api/pages/${story.id}`)).data.content.content.find((n) => n.type === 'image')?.attrs.src
 check('the [image: ...] line became the picture', r.status === 204 && textUrl?.startsWith('/api/uploads/') && !JSON.stringify((await call('GET', `/api/pages/${story.id}`)).data.content).includes('[image:'), String(textUrl))
@@ -268,6 +271,16 @@ check('a replacement re-tiles the same map', r.status === 204 && ready.width ===
 const again5 = requests.size
 await call('POST', '/api/plugins/image-administration/request', {})
 check('nothing is requested twice', requests.size === again5)
+// two pages with the same title in the same place get a number, nothing else
+await mk('Twin', { type: 'person' })
+await mk('Twin', { type: 'person' })
+await call('POST', '/api/plugins/image-administration/request', {})
+check('equal names are told apart by a number', requests.has(`chronicle/${world5}/pages/twin/portrait`) && requests.has(`chronicle/${world5}/pages/twin-2/portrait`))
+// forgetting starts over: everything still empty is requested again
+r = await call('POST', '/api/plugins/image-administration/forget', {})
+check('forget clears what the plugin remembers', r.status === 200 && /forgot/i.test(r.data.message), JSON.stringify(r.data))
+r = await call('POST', '/api/plugins/image-administration/request', {})
+check('and the empty slots are requested again', /^[1-9]d* new/.test(r.data.message), JSON.stringify(r.data))
 
 // a wrong admin token is reported to the owner; with no webhook token pushes are refused
 await call('PATCH', '/api/plugins/image-administration', { config: { adminToken: 'nope' } })

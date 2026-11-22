@@ -37,6 +37,19 @@ const HOOK_TIMEOUT_MS = 20_000
 
 // ---------- picture slots in pages ----------
 
+/** The folder of every folder id as a path of names ("Campaign/NPCs"); a deleted folder or a cycle ends the path. */
+function folderPaths(): Map<string, string> {
+  const rows = new Map((db.prepare('SELECT id, parent_id AS parent, name FROM folders WHERE deleted_at IS NULL').all() as { id: string; parent: string | null; name: string }[]).map((r) => [r.id, r]))
+  const out = new Map<string, string>()
+  for (const r of rows.values()) {
+    const names: string[] = []
+    const seen = new Set<string>()
+    for (let f: typeof r | undefined = r; f && !seen.has(f.id); f = f.parent ? rows.get(f.parent) : undefined) { seen.add(f.id); names.unshift(f.name) }
+    out.set(r.id, names.join('/'))
+  }
+  return out
+}
+
 interface ImageBlock { key: string; label: string; shape: string }
 const SHAPES = new Set(['square', 'circle', 'wide', 'tall'])
 /** The image blocks of the built-in page types (the layouts themselves live in the web app). */
@@ -232,14 +245,15 @@ function contextFor(p: Loaded) {
         for (const t of db.prepare('SELECT id, definition FROM page_types').all() as { id: string; definition: string }[]) {
           try { custom.set(t.id, imageBlocksOf(JSON.parse(t.definition))) } catch { /* a damaged type has no slots */ }
         }
-        const out: { page: string; ws: string; title: string; type: string; key: string; label: string; shape: string; value: string }[] = []
-        for (const r of db.prepare('SELECT p.id, p.workspace_id AS ws, p.title, p.props FROM pages p JOIN workspaces w ON w.id = p.workspace_id WHERE p.deleted_at IS NULL AND w.deleted_at IS NULL ORDER BY p.created_at').all() as { id: string; ws: string; title: string; props: string }[]) {
+        const folders = folderPaths()
+        const out: { page: string; ws: string; title: string; folder: string; type: string; key: string; label: string; shape: string; value: string }[] = []
+        for (const r of db.prepare('SELECT p.id, p.workspace_id AS ws, p.title, p.folder_id AS folderId, p.props FROM pages p JOIN workspaces w ON w.id = p.workspace_id WHERE p.deleted_at IS NULL AND w.deleted_at IS NULL ORDER BY p.created_at').all() as { id: string; ws: string; title: string; folderId: string | null; props: string }[]) {
           let props: { type?: unknown; portrait?: unknown; data?: Record<string, unknown> } = {}
           try { props = JSON.parse(r.props) } catch { continue }
           const type = typeof props.type === 'string' ? props.type : ''
           for (const b of custom.get(type) ?? BUILTIN_IMAGES[type] ?? []) {
             const v = b.key === 'portrait' ? props.portrait : props.data?.[b.key]
-            out.push({ page: r.id, ws: r.ws, title: r.title, type, key: b.key, label: b.label, shape: b.shape, value: typeof v === 'string' ? v : '' })
+            out.push({ page: r.id, ws: r.ws, title: r.title, folder: (r.folderId && folders.get(r.folderId)) || '', type, key: b.key, label: b.label, shape: b.shape, value: typeof v === 'string' ? v : '' })
           }
         }
         return out
@@ -257,9 +271,10 @@ function contextFor(p: Loaded) {
       },
       /** Paragraphs in page text that consist of just `[image: what it shows]`: a picture the writer wants here. */
       textImages: () => {
-        const out: { page: string; ws: string; title: string; description: string; hash: string }[] = []
-        for (const r of db.prepare("SELECT p.id, p.workspace_id AS ws, p.title, p.content FROM pages p JOIN workspaces w ON w.id = p.workspace_id WHERE p.deleted_at IS NULL AND w.deleted_at IS NULL AND p.text LIKE '%[image:%'").all() as { id: string; ws: string; title: string; content: string }[]) {
-          try { walkPlaceholders(JSON.parse(r.content), (d) => { out.push({ page: r.id, ws: r.ws, title: r.title, description: d, hash: placeholderHash(d) }); return false }) } catch { /* damaged content */ }
+        const folders = folderPaths()
+        const out: { page: string; ws: string; title: string; folder: string; description: string; hash: string }[] = []
+        for (const r of db.prepare("SELECT p.id, p.workspace_id AS ws, p.title, p.folder_id AS folderId, p.content FROM pages p JOIN workspaces w ON w.id = p.workspace_id WHERE p.deleted_at IS NULL AND w.deleted_at IS NULL AND p.text LIKE '%[image:%'").all() as { id: string; ws: string; title: string; folderId: string | null; content: string }[]) {
+          try { walkPlaceholders(JSON.parse(r.content), (d) => { out.push({ page: r.id, ws: r.ws, title: r.title, folder: (r.folderId && folders.get(r.folderId)) || '', description: d, hash: placeholderHash(d) }); return false }) } catch { /* damaged content */ }
         }
         return out
       },
@@ -289,7 +304,11 @@ function contextFor(p: Loaded) {
     },
     /** Detail maps: pins that point at a page but have no map behind them, and making or replacing that map from a picture. */
     maps: {
-      pins: () => mapSlots.pins(),
+      pins: () => {
+        const folders = folderPaths()
+        const folderOf = new Map((db.prepare('SELECT id, folder_id AS folderId FROM pages').all() as { id: string; folderId: string | null }[]).map((r) => [r.id, (r.folderId && folders.get(r.folderId)) || '']))
+        return mapSlots.pins().map((p) => ({ ...p, folder: folderOf.get(p.pageId) ?? '' }))
+      },
       exists: (mapId: string) => mapSlots.exists(mapId),
       create: (ws: string, pageId: string, name: string, bytes: Buffer) => mapSlots.create(ws, pageId, name, bytes),
       replace: (mapId: string, bytes: Buffer) => mapSlots.replace(mapId, bytes),

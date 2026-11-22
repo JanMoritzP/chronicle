@@ -32,6 +32,7 @@
   ],
   "actions": [
     { "label": "Request images now", "route": "/request", "help": "Looks at every page again and requests an image for each one that needs it and was not requested yet." },
+    { "label": "Forget all requests", "route": "/forget", "help": "Starts over: Chronicle forgets what it requested, so the next request files every empty slot again under fresh names. The old sprites stay in image administration; delete them there." },
     { "label": "Fetch new images", "route": "/catchup", "help": "Fetches pictures that were uploaded in image administration since the last one handled." }
   ]
 }

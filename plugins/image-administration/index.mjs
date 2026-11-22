@@ -66,8 +66,10 @@ export function activate(ctx) {
   /** What a slot is, whatever version saved it: version 2.0 slots are page portraits and have no kind or key. */
   const slotKey = (s) => `${s.kind ?? 'page'}|${s.ws}|${s.ref ?? s.page}|${s.key ?? (s.kind && s.kind !== 'page' ? '' : 'portrait')}`
 
-  // Folders in image administration, one tree per world: chronicle/<world>/<category>/...
-  //   pages/<page>/<picture>   text/<page>/<picture>   maps/<page>   tokens/<name>   handouts/<title>   scenes/<scene>
+  // Folders in image administration. Names come from the adventure, with no ids in them; a number is added only when
+  // two things would otherwise share a path. Per world:
+  //   chronicle/<world>/pages/<folders of the adventure>/<page>/<picture>   (text pictures and the detail map sit in the page's folder too)
+  //   chronicle/<world>/tabletop/tokens|handouts/<name>   chronicle/<world>/tabletop/scenes/<scene folder>/<scene>
   function scrape() {
     const cfg = ctx.config.get()
     const types = new Set(String(cfg.pageTypes).split(',').map((t) => t.trim()).filter(Boolean))
@@ -75,65 +77,98 @@ export function activate(ctx) {
     const format = FORMATS.includes(cfg.format) ? cfg.format : 'png'
     const dims = (w, h) => ({ width: Math.max(1, Math.round(w)), height: Math.max(1, Math.round(h)) })
     const sprites = []
-    const known = new Set(Object.values(state.slots).map(slotKey))
+    const slots = Object.entries(state.slots)
+    const known = new Set(slots.map(([, s]) => slotKey(s)))
+    const usedIds = new Set(slots.map(([id]) => id))
+    const usedDirs = new Set(slots.map(([, s]) => s.dir).filter(Boolean))
     const pageTypeOf = new Map(ctx.pages.list().map((p) => [p.id, p.type]))
-    const pageDir = (p, title) => `${slug(title, 'page')}-${p.slice(0, 8)}`
-    // one request for one empty slot; `path` is its place inside the world's folder, `ref`/`key` what the picture goes to
-    const want = (kind, ws, ref, key, folderPath, label, size, what) => {
+    const segments = (path) => String(path ?? '').split('/').filter((x) => x.trim()).map((x) => slug(x, 'folder'))
+
+    // the world's folder, kept once chosen; two worlds with the same name get a number
+    const roots = new Map()
+    for (const [id, s] of slots) if (!roots.has(s.ws)) roots.set(s.ws, id.split('/')[1])
+    const rootOf = (ws) => {
+      if (roots.has(ws)) return roots.get(ws)
+      const base = slug(ctx.worldName(ws) ?? 'World', 'world')
+      const taken = new Set(roots.values())
+      let root = base, n = 2
+      while (taken.has(root)) root = `${base}-${n++}`
+      roots.set(ws, root)
+      return root
+    }
+    // a page keeps its folder for all its pictures, even if it is renamed or moved later
+    const pageDirs = new Map()
+    for (const [, s] of slots) if (s.dir && s.ref) pageDirs.set(`${s.ws}|${s.ref}`, s.dir)
+    const dirOf = (ws, page, title, folder) => {
+      const k = `${ws}|${page}`
+      if (pageDirs.has(k)) return pageDirs.get(k)
+      const base = ['chronicle', rootOf(ws), 'pages', ...segments(folder), slug(title, 'page')].join('/')
+      let dir = base, n = 2
+      while (usedDirs.has(dir)) dir = `${base}-${n++}`
+      usedDirs.add(dir)
+      pageDirs.set(k, dir)
+      return dir
+    }
+
+    // one request for one empty slot: `dir` is where it lives, `leaf` the picture's own name (none: the folder itself)
+    const want = (kind, ws, ref, key, dir, leaf, label, size, what, remember) => {
       const k = slotKey({ kind, ws, ref, key })
       if (known.has(k)) return // already requested; the same id again would only replace the request
       known.add(k)
+      const base = leaf ? `${dir}/${leaf}` : dir
+      let id = base, n = 2
+      while (usedIds.has(id)) id = `${base}-${n++}`
+      usedIds.add(id)
       const world = ctx.worldName(ws) ?? 'World'
-      const root = `${slug(world, 'world')}-${ws.slice(0, 8)}`
       sprites.push({
-        id: `chronicle/${root}/${folderPath}`,
+        id,
         description: literal(`${what} "${label.trim() || 'Untitled'}" in the world "${world}", from Chronicle, a worldbuilding notebook for tabletop role-playing campaigns. No text in the picture.`),
         spec: { ...size, formats: [format] },
-        target: `${cfg.targetFolder || 'chronicle'}/${root}/${folderPath}.${format}`,
-        _slot: { kind, ws, ref, key, name: slug(folderPath.split('/').slice(-2).join('-'), 'image'), title: label.trim() },
+        target: `${cfg.targetFolder || 'chronicle'}/${id.split('/').slice(1).join('/')}.${format}`,
+        _slot: { kind, ws, ref, key, name: slug(id.split('/').slice(-2).join('-'), 'image'), title: label.trim(), ...(remember ? { dir } : {}) },
       })
     }
+
     if (cfg.requestPages) {
       // every image block of a page's special page type: the thumbnail ("portrait") and any further picture of a custom type
       const side = Math.round(cfg.width), tall = Math.round(cfg.width * 4 / 3), wide = Math.round(cfg.wideWidth)
       for (const s of ctx.pages.imageSlots()) {
         if (s.value || (types.size && !types.has(s.type))) continue
         const size = s.shape === 'wide' ? dims(wide, wide * 7 / 16) : s.shape === 'tall' ? dims(side, tall) : dims(side, cfg.height)
-        want('page', s.ws, s.page, s.key, `pages/${pageDir(s.page, s.title)}/${slug(s.key, 'picture')}`, s.title, size, `${s.label || s.key} picture (${s.shape}) for the ${s.type} page`)
+        want('page', s.ws, s.page, s.key, dirOf(s.ws, s.page, s.title, s.folder), slug(s.key, 'picture'), s.title, size, `${s.label || s.key} picture (${s.shape}) for the ${s.type} page`, true)
       }
     }
     if (cfg.requestText) {
       // a paragraph that is only "[image: what it shows]" asks for a picture right there in the text
       for (const t of ctx.pages.textImages()) {
-        want('text', t.ws, t.page, t.hash, `text/${pageDir(t.page, t.title)}/${slug(t.description, 'picture')}-${t.hash}`, t.description, dims(cfg.textWidth, cfg.textHeight), `Illustration in the text of the page "${t.title}", showing`)
+        want('text', t.ws, t.page, t.hash, dirOf(t.ws, t.page, t.title, t.folder), slug(t.description, 'picture'), t.description, dims(cfg.textWidth, cfg.textHeight), `Illustration in the text of the page "${t.title}", showing`, true)
       }
     }
     if (cfg.requestMaps) {
       // a pin on a map that points at a page, with no map behind it: a detail map of that place
       for (const pin of ctx.maps.pins()) {
-        const type = pageTypeOf.get(pin.pageId) ?? ''
-        if (mapTypes.size && !mapTypes.has(type)) continue
-        want('map', pin.ws, pin.pageId, '', `maps/${pageDir(pin.pageId, pin.title)}`, pin.title, dims(cfg.mapWidth, cfg.mapHeight), 'Top-down detail map of')
+        if (mapTypes.size && !mapTypes.has(pageTypeOf.get(pin.pageId) ?? '')) continue
+        want('map', pin.ws, pin.pageId, '', dirOf(pin.ws, pin.pageId, pin.title, pin.folder), 'map', pin.title, dims(cfg.mapWidth, cfg.mapHeight), 'Top-down detail map of', true)
       }
     }
+    const tabletop = (ws, ...rest) => ['chronicle', rootOf(ws), 'tabletop', ...rest].join('/')
     if (cfg.requestTokens) {
       // tokens of one name share a picture, so a name is requested once
       for (const t of ctx.table.tokens()) {
         const name = t.name.trim()
         if (t.image || !name) continue
-        const hash = crypto.createHash('sha1').update(name.toLowerCase()).digest('hex').slice(0, 6)
-        want('token', t.ws, name.toLowerCase(), '', `tokens/${slug(name, 'token')}-${hash}`, name, dims(cfg.tokenSize, cfg.tokenSize), 'Top-down game token picture, centred on a transparent or plain background, for the token')
+        want('token', t.ws, name.toLowerCase(), '', tabletop(t.ws, 'tokens'), slug(name, 'token'), name, dims(cfg.tokenSize, cfg.tokenSize), 'Top-down game token picture, centred on a transparent or plain background, for the token')
       }
     }
     if (cfg.requestHandouts) {
       for (const h of ctx.table.handouts()) {
-        if (!h.image) want('handout', h.ws, h.id, '', `handouts/${slug(h.title, 'handout')}-${h.id.slice(0, 8)}`, h.title, dims(cfg.handoutWidth, cfg.handoutHeight), 'Picture for the handout')
+        if (!h.image) want('handout', h.ws, h.id, '', tabletop(h.ws, 'handouts'), slug(h.title, 'handout'), h.title, dims(cfg.handoutWidth, cfg.handoutHeight), 'Picture for the handout')
       }
     }
     if (cfg.requestScenes) {
-      // the frame is the scene's own size, so the background fits it exactly
+      // the frame is the scene's own size, so the background fits it exactly; the scene's folder is kept
       for (const s of ctx.table.scenes()) {
-        if (!s.bg) want('scene', s.ws, s.id, '', `scenes/${slug(s.name, 'scene')}-${s.id.slice(0, 8)}`, s.name, dims(s.width, s.height), 'Battle map background for the scene')
+        if (!s.bg) want('scene', s.ws, s.id, '', tabletop(s.ws, 'scenes', ...segments(s.folder)), slug(s.name, 'scene'), s.name, dims(s.width, s.height), 'Battle map background for the scene')
       }
     }
     return sprites
@@ -261,6 +296,12 @@ export function activate(ctx) {
   ctx.config.onChange(() => { refreshStatus(); schedule() })
 
   ctx.route('POST', '/request', async () => ({ message: `${await requestImages()} new images requested.` }))
+  ctx.route('POST', '/forget', async () => {
+    const n = Object.keys(state.slots).length
+    state.slots = {}
+    save(); refreshStatus()
+    return { message: `Forgot ${n} requests. Request images again to file them anew; delete the old ones in image administration.` }
+  })
   ctx.route('POST', '/catchup', async () => ({ message: `${await catchUp()} new images received.` }))
 
   refreshStatus()
