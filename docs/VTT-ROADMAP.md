@@ -283,10 +283,10 @@ Rules that apply: migrations append only; backup restore, export and copy get up
 
 ## What is still missing, by phase
 
-Spatial sound (sound that fades with distance) is cut. Arbitrary GM scripts stay out on purpose. Everything else not built yet is numbered here and done in this order.
+Spatial sound (sound that fades with distance) is cut. Arbitrary GM scripts stay out on purpose. Everything is done except what is marked below: further rule systems (phase 4) and difficult terrain (phase 9) are left for later, and there is no screen for drawing a character sheet by hand.
 
 1. **Rules at the table.** Opportunity attacks (done). Drag ruler with movement cost (done). Roll templates (done). Subclass and feat choices on level up (done).
-2. **Map and light.** User-defined layers (done, for tiles). Light angle (cones, done). Light through windows (already worked). Night vision tint (done). Terrain walls (done).
+2. **Map and light.** User-defined layers (done, for tiles and tokens). Light angle (cones, done). Light through windows (already worked). Night vision tint (done). Terrain walls (done).
 3. **Sheets.** Custom sheet fields and section layout from packs (done; no screen to draw a sheet by hand). Compendium onto a sheet (done, as a search box). Containers for inventory (done). Magic item effects beyond armor class (done: saves and spells). Light sources as inventory items (done).
 4. **More systems.** Further rule systems after D&D 5e, 2024 and Pathfinder 2e. Pathfinder importing (done, from Pathbuilder; spell lists come across as text). 2024 species and backgrounds (done, from the library).
 5. **Table comfort.** Rebindable table shortcuts (done, for the single keys). Macros from chat and from sheets (done, as Save as macro and a right click). Linking chat to session notes (done, as an Add to notes button). Playlists (done). "See through" tokens (done, as shared sight per token). Fog update on drop and performance modes (done). Performance measurement (done, a frames per second readout).
