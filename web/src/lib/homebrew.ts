@@ -19,6 +19,10 @@ export interface ClassRules {
   saves: Ability[]
   skills: { count: number; from: string[] | 'any' }
   spell?: Ability | ''
+  /** how its spell slots grow: like a wizard (full), a paladin (half), an eldritch knight (third), a warlock (pact), or none */
+  caster?: 'full' | 'half' | 'third' | 'pact' | ''
+  /** the class level at which it chooses its subclass */
+  subclassLevel?: number
   /** armor class of the starting kit: a base, plus the Dexterity modifier (all of it, at most 2, or none), plus one more ability, plus a shield */
   armor: { base: number; dex: 'full' | 'max2' | 'none'; plus?: Ability | ''; shield?: boolean; note: string }
   kit: { name: string; qty?: number; weight?: number; equipped?: boolean }[]
@@ -38,7 +42,7 @@ export type RulesCategory = 'class' | 'species' | 'background'
 export const hasRules = (c: string): c is RulesCategory => c === 'class' || c === 'species' || c === 'background'
 
 export const emptyRules = (c: RulesCategory): Rules => c === 'class'
-  ? { die: 8, primary: [], saves: [], skills: { count: 2, from: [] }, spell: '', armor: { base: 10, dex: 'full', plus: '', shield: false, note: 'no armor' }, kit: [], features: [], attacks: [], spells: '' }
+  ? { die: 8, primary: [], saves: [], skills: { count: 2, from: [] }, spell: '', caster: '', subclassLevel: 3, armor: { base: 10, dex: 'full', plus: '', shield: false, note: 'no armor' }, kit: [], features: [], attacks: [], spells: '' }
   : c === 'species'
     ? { size: 'Medium', speed: 30, darkvision: 0, languages: 'Common and one more', asi: {}, freeAsi: 0, hpPerLevel: 0, traits: [], skills: [] }
     : { skills: [], tools: '', abilities: [], feat: '' }
@@ -60,6 +64,9 @@ export function cleanRules(c: RulesCategory, raw: any): Rules {
       primary: abilities(r.primary, 2), saves: abilities(r.saves, 2),
       skills: { count: num(r.skills?.count, 0, 18, 2), from },
       spell: isAbility(r.spell) ? r.spell : '',
+      // rules from before slots could be set: a class that casts gets them like a full caster
+      caster: !isAbility(r.spell) ? '' : ['full', 'half', 'third', 'pact'].includes(r.caster) ? r.caster : 'full',
+      subclassLevel: num(r.subclassLevel, 1, 20, 3),
       armor: { base: num(r.armor?.base, 0, 30, 10), dex: ['full', 'max2', 'none'].includes(r.armor?.dex) ? r.armor.dex : 'full', plus: isAbility(r.armor?.plus) ? r.armor.plus : '', shield: !!r.armor?.shield, note: str(r.armor?.note, 80) },
       kit: named(r.kit).map((k) => ({ name: str(k.name, 80), ...(Number(k.qty) > 1 ? { qty: num(k.qty, 1, 999, 1) } : {}), ...(Number(k.weight) > 0 ? { weight: Math.min(999, Number(k.weight)) } : {}), ...(k.equipped ? { equipped: true } : {}) })),
       features: named(r.features).map((f) => ({ name: str(f.name, 120), text: str(f.text) })),
@@ -92,7 +99,7 @@ export function classDef(id: string, name: string, raw: any): ClassDef {
     id, name, die: r.die, primary: r.primary.length ? r.primary : ['str'], saves: r.saves, skills: r.skills, ...(r.spell ? { spell: r.spell } : {}),
     ac: armorOf(r.armor), kit: r.kit,
     features: r.features,
-    attacks: r.attacks, ...(r.spells ? { spells: r.spells } : {}),
+    attacks: r.attacks, ...(r.spells ? { spells: r.spells } : {}), ...(r.caster ? { caster: r.caster } : {}), subclassLevel: r.subclassLevel ?? 3,
   }
 }
 export function speciesDef(id: string, name: string, raw: any, ruleset: Ruleset): SpeciesDef {

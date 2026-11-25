@@ -11,6 +11,9 @@ export interface ClassDef {
   id: string; name: string; die: number; primary: Ability[]; saves: Ability[]
   skills: { count: number; from: string[] | 'any' }
   spell?: Ability
+  /** how its spell slots grow; the classes of the rules are known by name */
+  caster?: 'full' | 'half' | 'third' | 'pact'
+  subclassLevel?: number
   /** armor class of the starting kit, from the final ability scores */
   ac: (m: Record<Ability, number>) => { value: number; note: string }
   kit: { name: string; qty?: number; weight?: number; equipped?: boolean; note?: string }[]
@@ -291,7 +294,7 @@ export function buildCharacter(c: Choices, cat: Catalog = catalogFor(c.ruleset))
     ...(bg.feat ? [{ name: `${bg.feat} (feat)`, text: `Origin feat from the ${bg.name.toLowerCase()} background.` }] : []),
   ]
   const kit: InventoryItem[] = cls.kit.map((k) => ({ name: k.name, qty: k.qty ?? 1, equipped: !!k.equipped, note: k.note ?? '', ...(k.weight ? { weight: k.weight } : {}) }))
-  const slots = allSlots([{ name: cls.name, level: 1 }]) ?? []
+  const slots = allSlots([{ name: cls.name, level: 1 }], c.ruleset, { [cls.name.trim().toLowerCase()]: { die: cls.die, caster: cls.caster ?? null } }) ?? []
   const base = emptyCharacter(c.ruleset)
   return {
     ...base,

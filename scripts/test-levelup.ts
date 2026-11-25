@@ -1,4 +1,4 @@
-import { givesAsi, needsSubclass, allSlots, pactSlots, attunedCount, capacityOf, carriedWeight, classFeaturesAt, hitDieOf, levelUp, loadOf, slotsFor } from '../web/src/lib/levelup'
+import { givesAsi, givesEpicBoon, subclassLevel, needsSubclass, allSlots, pactSlots, attunedCount, capacityOf, carriedWeight, classFeaturesAt, hitDieOf, levelUp, loadOf, slotsFor } from '../web/src/lib/levelup'
 import { lightItems, lightOf } from '../web/src/lib/lightitems'
 import { emptyCharacter } from '../web/src/lib/sheet'
 
@@ -73,5 +73,28 @@ check('a rope gives none', lightOf('Hempen rope') === null)
 check('only carried items that glow are listed', lightItems([{ name: 'Torch', qty: 3 }, { name: 'Rope', qty: 1 }, { name: 'Candle', qty: 0 }]).map((x) => x.name).join() === 'Torch')
 check('what is in a bag of holding is not carried weight', carriedWeight([{ name: 'Bag of holding', qty: 1, equipped: false, weight: 15, weightless: true }, { name: 'Plate', qty: 1, equipped: false, weight: 65, in: 'bag of holding' }, { name: 'Rope', qty: 1, equipped: false, weight: 10 }]) === 25)
 check('a plain bag does not lighten what is in it', carriedWeight([{ name: 'Backpack', qty: 1, equipped: false, weight: 5 }, { name: 'Plate', qty: 1, equipped: false, weight: 65, in: 'Backpack' }]) === 70)
+// the 2024 rules
+const modern = (over: Record<string, unknown> = {}) => ({ ...emptyCharacter('5e-2024'), abilities: { str: 10, dex: 10, con: 14, int: 10, wis: 10, cha: 10 }, ...over })
+check('2024: every class chooses its subclass at 3', subclassLevel('Cleric', '5e-2024') === 3 && subclassLevel('Wizard', '5e-2024') === 3 && subclassLevel('Cleric', '5e') === 1 && subclassLevel('Druid', '5e') === 2)
+check('2024: a cleric is not asked for a subclass at 1, but at 3', !needsSubclass('Cleric', 1, '', '5e-2024') && needsSubclass('Cleric', 3, '', '5e-2024') && needsSubclass('Cleric', 1, '', '5e'))
+check('2024: a paladin casts from level 1, in 2014 from 2', slotsFor([{ name: 'Paladin', level: 1 }], '5e-2024')!.join() === '2' && slotsFor([{ name: 'Paladin', level: 1 }], '5e') === null && slotsFor([{ name: 'Ranger', level: 3 }], '5e-2024')!.join() === '3')
+check('2024: half casters round up when multiclassing, 2014 down', slotsFor([{ name: 'Paladin', level: 3 }, { name: 'Wizard', level: 1 }], '5e-2024')!.join() === '4,2' && slotsFor([{ name: 'Paladin', level: 3 }, { name: 'Wizard', level: 1 }], '5e')!.join() === '3')
+check('2024: level 19 is an Epic Boon', givesEpicBoon(19, '5e-2024') && !givesEpicBoon(19, '5e') && !givesEpicBoon(16, '5e-2024'))
+const p0 = levelUp(modern({ classes: [{ name: 'Fighter', level: 1 }] }) as any, 'Paladin') as any
+check('2024: a level of paladin gives slots at once', p0.patch['spellcasting.slots']?.[0]?.total === 2, JSON.stringify(p0.patch['spellcasting.slots']))
+check('2024: a subclass for a cleric at 1 is refused', 'error' in (levelUp(modern() as any, 'Cleric', { subclass: 'Life Domain' }) as any))
+const boon = levelUp(modern({ classes: [{ name: 'Wizard', level: 18 }] }) as any, 'Wizard', { feat: { name: 'Boon of Fate' } }) as any
+check('2024: the feat at 19 is an Epic Boon', boon.lines.includes('Epic Boon: Boon of Fate'))
+
+// classes the tables do not know bring their own hit die, slots and subclass level
+const infos = { 'storm knight': { die: 12, caster: 'half' as const, subclassLevel: 2 }, hexblade: { die: 8, caster: 'pact' as const } }
+check('a homebrew class has its hit die', hitDieOf('Storm knight', infos['storm knight']) === 12)
+const sk = levelUp(ch({ classes: [{ name: 'Storm knight', level: 1 }] }) as any, 'Storm knight', { infos }) as any
+check('a homebrew half caster gets slots at 2', sk.patch.hitDice[0].sides === 12 && sk.patch['spellcasting.slots']?.[0]?.total === 2 && sk.lines.some((l: string) => l.startsWith('Spell slots')))
+check('and chooses its subclass when it says', needsSubclass('Storm knight', 2, '', '5e', infos['storm knight']) && !needsSubclass('Storm knight', 3, '', '5e', infos['storm knight']) && subclassLevel('Unknown', '5e') === 3)
+const hx = levelUp(ch({ classes: [{ name: 'Hexblade', level: 2 }] }) as any, 'Hexblade', { infos }) as any
+check('a homebrew pact caster gets pact magic', hx.lines.some((l: string) => l.startsWith('Pact Magic: 2 slots of level 2')))
+check('a name of the rules keeps its own tables over homebrew of the same name', hitDieOf('Wizard', { die: 12 }) === 6)
+
 console.log(failed ? `\n${failed} failed` : '\nall passed')
 process.exit(failed ? 1 : 0)

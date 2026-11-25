@@ -182,10 +182,18 @@ export function RulesForm({ category, rules, onChange, ruleset }: { category: Ru
           <div className="cb-row"><b className="hb-label">Main abilities</b><Toggles label="Main abilities" options={abilityOptions} value={r.primary} max={2} onChange={(v) => set({ primary: v })} /></div>
           <div className="cb-row"><b className="hb-label">Saving throws</b><Toggles label="Saving throws" options={abilityOptions} value={r.saves} max={2} onChange={(v) => set({ saves: v })} /></div>
           <div className="cb-row"><b className="hb-label">Spellcasting</b>
-            <Select className="input" title="Spellcasting ability" value={r.spell ?? ''} onChange={(v) => set({ spell: v as Ability | '' })}>
+            <Select className="input" title="Spellcasting ability" value={r.spell ?? ''} onChange={(v) => set({ spell: v as Ability | '', caster: v ? (r.caster || 'full') : '' })}>
               <option value="">Casts no spells</option>{ABILITIES.map((a) => <option key={a} value={a}>{an[a].name}</option>)}
             </Select>
           </div>
+          {r.spell && (
+            <div className="cb-row"><b className="hb-label">Spell slots</b>
+              <Select className="input" title="How the spell slots grow" value={r.caster || 'full'} onChange={(v) => set({ caster: v as ClassRules['caster'] })}>
+                <option value="full">Like a wizard (full caster)</option><option value="half">Like a paladin (half caster)</option><option value="third">Like an eldritch knight (a third)</option><option value="pact">Like a warlock (pact magic)</option>
+              </Select>
+            </div>
+          )}
+          <div className="cb-row"><b className="hb-label">Subclass at level</b><NumIn label="Class level of the subclass" value={r.subclassLevel ?? 3} min={1} max={20} onChange={(n) => set({ subclassLevel: n })} /></div>
         </Section>
         <Section title="Skills">
           <div className="cb-row"><b className="hb-label">Choose</b><NumIn label="Number of skills to choose" value={r.skills.count} max={18} onChange={(n) => set({ skills: { ...r.skills, count: n } })} />
@@ -363,7 +371,7 @@ export function RulesPanel({ category, rules, readOnly, ruleset, onSave }: { cat
   const [editing, setEditing] = useState<Rules | null>(null)
   const r = cleanRules(category, rules)
   const names = (l: Ability[]) => l.map((a) => an[a].name).join(' and ') || 'none'
-  const facts: [string, string][] = category === 'class' ? (() => { const k = r as ClassRules; return [['Hit die', `d${k.die}`], ['Main abilities', names(k.primary)], ['Saving throws', names(k.saves)], ['Skills', `${k.skills.count} from ${k.skills.from === 'any' ? 'any skill' : k.skills.from.map(titleCase).join(', ')}`], ['Armor class', `${k.armor.base}${k.armor.dex === 'full' ? ' + Dexterity' : k.armor.dex === 'max2' ? ' + Dexterity (at most 2)' : ''}${k.armor.plus ? ` + ${an[k.armor.plus].name}` : ''}${k.armor.shield ? ' + 2 (shield)' : ''}${k.armor.note ? `, ${k.armor.note}` : ''}`], ['Spellcasting', k.spell ? an[k.spell].name : 'none'], ['Features', k.features.map((f) => f.name).join(', ') || 'none'], ['Gear', k.kit.map((i) => i.name).join(', ') || 'none']] as [string, string][] })()
+  const facts: [string, string][] = category === 'class' ? (() => { const k = r as ClassRules; return [['Hit die', `d${k.die}`], ['Main abilities', names(k.primary)], ['Saving throws', names(k.saves)], ['Skills', `${k.skills.count} from ${k.skills.from === 'any' ? 'any skill' : k.skills.from.map(titleCase).join(', ')}`], ['Armor class', `${k.armor.base}${k.armor.dex === 'full' ? ' + Dexterity' : k.armor.dex === 'max2' ? ' + Dexterity (at most 2)' : ''}${k.armor.plus ? ` + ${an[k.armor.plus].name}` : ''}${k.armor.shield ? ' + 2 (shield)' : ''}${k.armor.note ? `, ${k.armor.note}` : ''}`], ['Spellcasting', k.spell ? `${an[k.spell].name}, ${({ full: 'slots like a wizard', half: 'slots like a paladin', third: 'slots like an eldritch knight', pact: 'pact magic like a warlock' } as Record<string, string>)[k.caster || 'full']}` : 'none'], ['Subclass', `at level ${k.subclassLevel ?? 3}`], ['Features', k.features.map((f) => f.name).join(', ') || 'none'], ['Gear', k.kit.map((i) => i.name).join(', ') || 'none']] as [string, string][] })()
     : category === 'species' ? (() => { const s = r as SpeciesRules; return [['Size and speed', `${s.size}, ${s.speed} ft`], ['Darkvision', s.darkvision ? `${s.darkvision} ft` : 'none'], ...(ruleset !== '5e-2024' ? [['Raises', Object.entries(s.asi ?? {}).map(([a, n]) => `${an[a as Ability].short} +${n}`).join(', ') + (s.freeAsi ? `${Object.keys(s.asi ?? {}).length ? ', ' : ''}+1 to ${s.freeAsi} of choice` : '') || 'nothing']] : []), ['Languages', s.languages || 'none'], ['Skills', (s.skills ?? []).map(titleCase).join(', ') || 'none'], ['Traits', s.traits.map((t) => t.name).join(', ') || 'none']] as [string, string][] })()
       : (() => { const b = r as BackgroundRules; return [['Skills', b.skills.map(titleCase).join(' and ') || 'none'], ['Tools and languages', b.tools || 'none'], ...(ruleset === '5e-2024' ? [['Raises', b.abilities?.map((a) => an[a].short).join(', ') || 'nothing'], ['Feat', b.feat || 'none']] : [])] as [string, string][] })()
   return (

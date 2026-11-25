@@ -244,10 +244,10 @@ export interface BuilderEntry {
   open5e?: Record<string, unknown>
 }
 
-/** What a class keeps for the builder: its tables of proficiencies and gear, and the features of level 1. */
+/** What a class keeps for the builder: its tables of proficiencies and gear, the features of level 1, and the one that names when its subclass comes. */
 const BUILDER_FEATURES = new Set(['CORE_TRAITS_TABLE', 'PROFICIENCIES', 'STARTING_EQUIPMENT'])
 function trimClass(d: any) {
-  const features = (Array.isArray(d.features) ? d.features : []).filter((f: any) => BUILDER_FEATURES.has(f?.feature_type) || (f?.feature_type === 'CLASS_LEVEL_FEATURE' && (f.gained_at ?? []).some((g: any) => g?.level === 1)))
+  const features = (Array.isArray(d.features) ? d.features : []).filter((f: any) => BUILDER_FEATURES.has(f?.feature_type) || (f?.feature_type === 'CLASS_LEVEL_FEATURE' && ((f.gained_at ?? []).some((g: any) => g?.level === 1) || /subclass|archetype/i.test(String(f.name)))))
     .map((f: any) => ({ name: f.name, desc: f.desc, feature_type: f.feature_type, gained_at: (f.gained_at ?? []).map((g: any) => ({ level: g?.level })) }))
   return { system: d.system, hit_dice: d.hit_dice, saving_throws: d.saving_throws, primary_abilities: d.primary_abilities, caster_type: d.caster_type, features }
 }

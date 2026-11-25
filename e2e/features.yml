@@ -526,6 +526,9 @@ areas:
       - id: table.effects
         name: "Spell effects with a duration on a token: armor class and roll bonuses, ended by hand, by the rounds or by concentration"
         files: [web/src/components/TableParts.tsx, server/src/effects.ts, server/src/table.ts]
+      - id: sheet.levelup-rules
+        name: "Level up follows the rules edition (2024 subclasses at 3, paladins casting at 1, Epic Boon) and the rules of homebrew and Open5e classes"
+        files: [web/src/lib/levelup.ts, web/src/components/LevelUpPanel.tsx]
       - id: sheet.levelup
         name: "Level up a character with hit points, hit dice, spell slots and class features, and count weight and attunement"
         files: [web/src/components/LevelUpPanel.tsx, web/src/lib/levelup.ts, web/src/components/CharacterSheet.tsx]

@@ -43,6 +43,7 @@ check('2024: a score the background does not list is not raised', finalScores({ 
 check('2024: the background feat is on the sheet', buildCharacter(modern).features.traits.some((f) => f.name.startsWith('Savage Attacker')))
 check('2024: the choice of raised scores is asked for', problems({ ...modern, bonus: {} }).some((p) => p.includes('background raises')))
 check('2024 dwarves see 120 feet', buildCharacter(modern).senses.darkvision === 120)
+check('2024 paladins have spell slots at level 1, 2014 ones do not', buildCharacter({ ...modern, classId: 'paladin', skills: ['insight', 'medicine'] }).spellcasting?.slots[0]?.total === 2 && !buildCharacter({ ...base, classId: 'paladin', skills: ['insight', 'medicine'] }).spellcasting?.slots.length)
 
 check('point buy counts 27 points for 15, 15, 15, 8, 8, 8', pointsSpent({ str: 15, dex: 15, con: 15, int: 8, wis: 8, cha: 8 }) === 27)
 let i = 0

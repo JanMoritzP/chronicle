@@ -61,6 +61,16 @@ export function classSkills(text: string): ClassRules['skills'] {
   return { count, from: from.length && !/\bany\b/i.test(text.replace(/any of the following/i, '')) ? from : 'any' }
 }
 
+/** Open5e's caster types; 2014 classes have none, and one that casts counts as a full caster then. */
+const CASTER_TYPE: Record<string, ClassRules['caster']> = { FULL: 'full', HALF: 'half', THIRD: 'third', PACT: 'pact', NONE: '' }
+
+/** The level of the feature that gives the subclass ("Fighter Subclass", "Martial Archetype"), 3 when there is none. */
+export function subclassLevelOf(d: any): number {
+  const f = (Array.isArray(d?.features) ? d.features : []).find((x: any) => x?.feature_type === 'CLASS_LEVEL_FEATURE' && /subclass|archetype/i.test(String(x.name)) && x.gained_at?.length)
+  const levels = (f?.gained_at ?? []).map((g: any) => Number(g?.level)).filter((n: number) => n >= 1 && n <= 20)
+  return levels.length ? Math.min(...levels) : 3
+}
+
 const isLevel1Feature = (f: any) => f?.feature_type === 'CLASS_LEVEL_FEATURE' && (f.gained_at ?? []).some((g: any) => g?.level === 1)
 
 /** The gear of the first choice: option (A) of a 2024 class, the (a) of each line of a 2014 class. Gold is left out. */
@@ -137,6 +147,8 @@ export function classRulesFromOpen5e(d: any, fallbackPrimary: Ability[] = []): C
     features: features.map((f: { name: string; desc: string }) => ({ name: f.name, text: firstParagraph(f.desc) })),
     attacks: [],
     spells: casting ? 'Choose your cantrips and spells with the class’s list.' : '',
+    caster: CASTER_TYPE[String(d?.caster_type ?? '').toUpperCase()] ?? (spellAbility ? 'full' : ''),
+    subclassLevel: subclassLevelOf(d),
   }
 }
 

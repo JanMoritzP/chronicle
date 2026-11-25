@@ -87,6 +87,34 @@ test('the builder offers Open5e species it does not have and homebrew without ru
   await expect(d.getByLabel('The finished character')).toContainText("Hunter's Senses")
 })
 
+test('level up follows the 2024 rules and a homebrew class brings its own', { tag: '@feature:sheet.levelup-rules' }, async ({ app, api, world, makePage }) => {
+  await api.json('patch', `/api/workspaces/${world.id}`, { settings: { system: '5e-2024' } })
+  const sheet = (name: string, cls: string) => ({ v: 1, kind: 'character', ruleset: '5e-2024', name, size: 'Medium', type: 'humanoid', alignment: '', abilities: { str: 14, dex: 12, con: 14, int: 10, wis: 15, cha: 10 }, ac: { value: 16, note: '' }, hp: { max: 10, formula: '', current: 10, temp: 0 }, speed: { walk: 30 }, saves: {}, skills: {}, senses: {}, vulnerabilities: '', resistances: '', immunities: '', conditionImmunities: '', languages: '', features: { traits: [], actions: [], bonus: [], reactions: [], legendary: [] }, classes: [{ name: cls, level: 1 }], hitDice: [], profs: { saves: [], skills: {} } })
+  await makePage('Storm knight', { props: { type: 'class', rules: { die: 12, primary: ['str'], saves: ['str', 'con'], skills: { count: 2, from: 'any' }, spell: 'wis', caster: 'half', subclassLevel: 2, armor: { base: 16, dex: 'none', note: 'chain mail' } } } })
+  await makePage('Ilse', { props: { type: 'person', sheet: sheet('Ilse', 'Paladin') } })
+  await makePage('Vex', { props: { type: 'person', sheet: sheet('Vex', 'Storm knight') } })
+  await app.reload()
+
+  // a 2024 paladin of level 2: slots as a half caster from level 1, no subclass yet (that is level 3 in 2024)
+  await openPage(app, 'Ilse')
+  await app.getByRole('button', { name: 'Level up' }).click()
+  const panel = app.getByRole('dialog', { name: 'Level up' })
+  await expect(panel).toContainText('2024 rules')
+  await expect(panel.getByLabel('What changes')).toContainText('Spell slots: 2')
+  await expect(panel.getByLabel('Subclass')).toHaveCount(0)
+  await panel.getByRole('button', { name: 'Cancel' }).click()
+
+  // the homebrew class: its d12, its half caster slots, its subclass at level 2
+  await openPage(app, 'Vex')
+  await app.getByRole('button', { name: 'Level up' }).click()
+  const changes = panel.getByLabel('What changes')
+  await expect(changes).toContainText('One more d12 hit die')
+  await expect(changes).toContainText('Spell slots: 2')
+  await panel.getByLabel('Subclass').fill('Order of the Gale')
+  await panel.getByRole('button', { name: 'Level up to 2' }).click()
+  await expect(app.getByLabel('Character sheet')).toContainText('Storm knight 2 (Order of the Gale)')
+})
+
 test('a page goes into a library, comes out as a file, and goes away again', { tag: '@feature:library.homebrew-push' }, async ({ app, api, makePage }) => {
   const lib = await api.json<{ id: string; name: string }>('post', '/api/library/collections', { name: unique('Push brew') })
   await makePage('The drowned god', { props: { type: 'rule' } })
