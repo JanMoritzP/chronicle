@@ -1,6 +1,6 @@
 import { Node, mergeAttributes } from '@tiptap/core'
 import { NodeViewContent, NodeViewWrapper, ReactNodeViewRenderer, type NodeViewProps } from '@tiptap/react'
-import { ChevronDown, ChevronRight, Lock } from 'lucide-react'
+import { ChevronDown, ChevronRight, Lock, PanelLeft, PanelRight } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 export const CALLOUT_KINDS = ['info', 'warning', 'aloud', 'secret'] as const
@@ -131,4 +131,43 @@ export const Toc = Node.create({
   parseHTML() { return [{ tag: 'div[data-toc]' }] },
   renderHTML({ HTMLAttributes }) { return ['div', mergeAttributes(HTMLAttributes, { 'data-toc': '' })] },
   addNodeView() { return ReactNodeViewRenderer(TocView) },
+})
+
+const ASIDE_SIZES = [{ id: 's', label: 'S', title: 'Narrow' }, { id: 'm', label: 'M', title: 'Medium' }, { id: 'l', label: 'L', title: 'Wide' }] as const
+
+function AsideView({ node, updateAttributes, editor }: NodeViewProps) {
+  const side = node.attrs.side === 'left' ? 'left' : 'right'
+  const size = ASIDE_SIZES.some((s) => s.id === node.attrs.size) ? node.attrs.size : 'm'
+  return (
+    <NodeViewWrapper className={`aside aside-${side} aside-${size}`} data-aside="" data-side={side} data-size={size}>
+      {editor.isEditable && (
+        <div className="aside-tools" contentEditable={false}>
+          <button type="button" className={`icon-btn${side === 'left' ? ' on' : ''}`} title="Box on the left, text on the right" aria-pressed={side === 'left'} onMouseDown={(e) => e.preventDefault()} onClick={() => updateAttributes({ side: 'left' })}><PanelLeft size={14} /></button>
+          <button type="button" className={`icon-btn${side === 'right' ? ' on' : ''}`} title="Box on the right, text on the left" aria-pressed={side === 'right'} onMouseDown={(e) => e.preventDefault()} onClick={() => updateAttributes({ side: 'right' })}><PanelRight size={14} /></button>
+          {ASIDE_SIZES.map((s) => (
+            <button key={s.id} type="button" className={`icon-btn text${size === s.id ? ' on' : ''}`} title={s.title} aria-pressed={size === s.id} onMouseDown={(e) => e.preventDefault()} onClick={() => updateAttributes({ size: s.id })}>{s.label}</button>
+          ))}
+        </div>
+      )}
+      <NodeViewContent className="aside-body" />
+    </NodeViewWrapper>
+  )
+}
+
+/** A box beside the text, like an infobox: a picture, a few facts, a quote. The text flows around it. */
+export const Aside = Node.create({
+  name: 'aside',
+  group: 'block',
+  content: 'block+',
+  defining: true,
+  isolating: true,
+  addAttributes() {
+    return {
+      side: { default: 'right', parseHTML: (el) => (el.getAttribute('data-side') === 'left' ? 'left' : 'right'), renderHTML: (a) => ({ 'data-side': a.side }) },
+      size: { default: 'm', parseHTML: (el) => el.getAttribute('data-size') || 'm', renderHTML: (a) => ({ 'data-size': a.size }) },
+    }
+  },
+  parseHTML() { return [{ tag: 'div[data-aside]' }] },
+  renderHTML({ HTMLAttributes }) { return ['div', mergeAttributes(HTMLAttributes, { 'data-aside': '' }), 0] },
+  addNodeView() { return ReactNodeViewRenderer(AsideView) },
 })

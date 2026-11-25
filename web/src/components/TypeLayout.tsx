@@ -25,7 +25,7 @@ interface Props {
 function ImageBlock({ b, value, readOnly, set, pick }: { b: Extract<Block, { type: 'image' }>; value?: string; readOnly: boolean; set: (v: string | null) => void; pick: () => Promise<string | null> }) {
   if (!value && readOnly) return null
   return (
-    <div className={`tl-image ${b.shape}`}>
+    <div className={`tl-image ${value ? b.shape : 'empty'}`}>
       {value ? (
         <>
           <img src={value} alt={b.label ?? b.key} draggable={false} />
@@ -38,7 +38,7 @@ function ImageBlock({ b, value, readOnly, set, pick }: { b: Extract<Block, { typ
         </>
       ) : (
         <button className="tl-image-empty" onClick={async () => { const u = await pick(); if (u) set(u) }}>
-          <ImagePlus size={22} /> <span>{b.label ?? 'Add image'}</span>
+          <ImagePlus size={16} /> <span>Add {(b.label ?? (b.key === 'portrait' ? 'portrait' : 'picture')).toLowerCase()}</span>
         </button>
       )}
     </div>

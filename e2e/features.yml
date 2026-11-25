@@ -140,6 +140,9 @@ areas:
       - id: pages.type
         name: "Change the page type"
         files: [web/src/components/PageView.tsx]
+      - id: pages.width
+        name: "Normal, wide and full page width"
+        files: [web/src/lib/pageWidth.ts]
       - id: pages.trash
         name: "Trash and restore"
         files: [web/src/components/Views.tsx]
@@ -207,6 +210,18 @@ areas:
       - id: editor.image
         name: "Upload an image"
         files: [web/src/components/PageView.tsx]
+      - id: editor.image-flow
+        name: "Pictures that the text flows around, with a size and a caption"
+        files: [web/src/editor/ImageNode.tsx]
+      - id: editor.sidebox
+        name: "Side box beside the text"
+        files: [web/src/editor/blocks.tsx]
+      - id: editor.move-blocks
+        name: "Move blocks with Alt+Up/Down and the block handle"
+        files: [web/src/editor/blockMove.ts, web/src/editor/BlockHandle.tsx]
+      - id: editor.format-bubble
+        name: "Formatting bubble on selected text"
+        files: [web/src/editor/FormatBubble.tsx]
       - id: editor.statblock
         name: "Stat block in a page"
         files: [web/src/editor/StatBlock.tsx]

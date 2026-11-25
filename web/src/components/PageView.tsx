@@ -1,5 +1,5 @@
 import { EditorContent, useEditor } from '@tiptap/react'
-import { BookMarked, BookUp, Clock, Copy, Globe, LayoutTemplate, Maximize2, MoreHorizontal, PanelRightOpen, Trash2 } from 'lucide-react'
+import { BookMarked, BookUp, Clock, Copy, Globe, LayoutTemplate, Maximize2, MoreHorizontal, MoveHorizontal, PanelRightOpen, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, ApiError } from '../api'
 import { buildExtensions } from '../editor/extensions'
@@ -30,6 +30,9 @@ import { Select } from './Select'
 import { PlayedBy } from './PlayedBy'
 import type { FullPage, PageVersion } from '../types'
 import { ReadOnlyDoc } from '../editor/Embed'
+import { BlockHandle } from '../editor/BlockHandle'
+import { FormatBubble } from '../editor/FormatBubble'
+import { PAGE_WIDTHS, setPageWidth, usePageWidth } from '../lib/pageWidth'
 
 type SaveState = 'saved' | 'saving' | 'dirty' | 'error'
 
@@ -189,19 +192,30 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
   useEffect(() => {
     if (!editor || readOnly) return
     const dom = editor.view.dom
-    const onPaste = async (e: ClipboardEvent) => {
-      const f = [...(e.clipboardData?.files ?? [])].find((x) => x.type.startsWith('image/'))
-      if (!f) return
-      e.preventDefault()
-      const url = await upload(f)
-      if (url) editor.chain().focus().setImage({ src: url, alt: f.name }).run()
+    /** Uploads the images and puts them in at `at` (a document position), or at the cursor. */
+    const insertImages = async (files: File[], at?: number) => {
+      const nodes = []
+      for (const f of files) {
+        const url = await upload(f)
+        if (url) nodes.push({ type: 'image', attrs: { src: url, alt: f.name } })
+      }
+      if (!nodes.length || editor.isDestroyed) return
+      const c = editor.chain().focus()
+      ;(at != null ? c.insertContentAt(Math.min(at, editor.state.doc.content.size), nodes) : c.insertContent(nodes)).run()
     }
-    const onDrop = async (e: DragEvent) => {
-      const f = [...(e.dataTransfer?.files ?? [])].find((x) => x.type.startsWith('image/'))
-      if (!f) return
+    const onPaste = (e: ClipboardEvent) => {
+      const files = [...(e.clipboardData?.files ?? [])].filter((x) => x.type.startsWith('image/'))
+      if (!files.length) return
       e.preventDefault()
-      const url = await upload(f)
-      if (url) editor.chain().focus().setImage({ src: url, alt: f.name }).run()
+      insertImages(files).catch((err) => alertDialog(err.message))
+    }
+    const onDrop = (e: DragEvent) => {
+      const files = [...(e.dataTransfer?.files ?? [])].filter((x) => x.type.startsWith('image/'))
+      if (!files.length) return
+      e.preventDefault()
+      // where the pictures were let go, not where the cursor happened to be
+      const at = editor.view.posAtCoords({ left: e.clientX, top: e.clientY })?.pos
+      insertImages(files, at).catch((err) => alertDialog(err.message))
     }
     dom.addEventListener('paste', onPaste)
     dom.addEventListener('drop', onDrop)
@@ -340,6 +354,16 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
   }
 
   const nav = useStore.getState().navigate
+  const width = usePageWidth()
+  const nextWidth = PAGE_WIDTHS[(PAGE_WIDTHS.findIndex((w) => w.id === width) + 1) % PAGE_WIDTHS.length]
+  const hasSide = !!pageType && pageType.layout.columns !== 'single' && pageType.layout.side.length > 0
+  const surface = (
+    <div className="editor-surface">
+      <BlockHandle editor={editor} />
+      <EditorContent editor={editor} />
+      {!readOnly && <FormatBubble editor={editor} />}
+    </div>
+  )
   const folderName = folders.find((f) => f.id === meta?.folderId)?.name
 
   return (
@@ -354,6 +378,7 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
             </span>
           )}
           <span className="save-state">{readOnly ? (conn === 'offline' ? 'Offline' : 'Read-only') : conn === 'offline' ? 'Offline, changes sync later' : !live ? 'Connecting…' : save === 'saved' ? 'Saved' : save === 'saving' ? 'Saving…' : save === 'error' ? 'Offline, retrying…' : 'Unsaved'}</span>
+          <button className="icon-btn" aria-label="Page width" title={`Page width: ${PAGE_WIDTHS.find((w) => w.id === width)?.label}. Click for ${nextWidth.label.toLowerCase()}.`} onClick={() => setPageWidth(nextWidth.id)}><MoveHorizontal size={16} /></button>
           <button className="icon-btn" title="Zen mode (Alt+Z)" onClick={() => useStore.getState().setUi({ zen: true })}><Maximize2 size={16} /></button>
           <button className="icon-btn" title="Open in split view" onClick={() => nav({ type: 'page', id: page.id }, { split: true })}><PanelRightOpen size={16} /></button>
           <button className="icon-btn" title="Version history" onClick={() => setShowHistory(true)}><Clock size={16} /></button>
@@ -401,7 +426,7 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
           <button className="btn sm" onClick={() => useStore.getState().setUi({ zen: false })}>Exit (Esc)</button>
         </div>
       )}
-      <div className="page">
+      <div className={zen ? 'page' : `page width-${width}${hasSide ? ' has-side' : ''}`}>
         <input
           ref={titleRef}
           className="page-title"
@@ -472,9 +497,9 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
           : <div className="cs-start"><div><b>Not in the character builder yet</b><span className="muted">Give this {pageType.name.toLowerCase()} the numbers the builder needs, and it can be chosen there.</span></div><button className="btn sm" onClick={() => setRules(emptyRules(pageType.id as 'class'))}>Add rules for the builder</button></div>)}
         {pageType ? (
           <TypeLayout layout={pageType.layout} data={typeData} readOnly={readOnly} setValue={setTypeValue} pickImage={pickImage} sheet={{ value: sheetOf(props), set: setSheetFields, createPf2e: system === 'pf2e' ? addPf2eSheet : undefined }}
-            body={<EditorContent editor={editor} />} />
+            body={surface} />
         ) : (
-          <div className="editor"><EditorContent editor={editor} /></div>
+          <div className="editor">{surface}</div>
         )}
 
         {!zen && (
@@ -513,7 +538,7 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
           e.target.value = ''
           if (!f || !editor) return
           const url = await upload(f)
-          if (url) editor.chain().focus().setImage({ src: url, alt: f.name }).run()
+          if (url) editor.chain().focus().insertContent({ type: 'image', attrs: { src: url, alt: f.name } }).run()
         }} />
 
       {worldDialog === 'pin' && <PinDialog pageId={page.id} onClose={() => setWorldDialog(null)} />}

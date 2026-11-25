@@ -3,7 +3,7 @@ import Suggestion from '@tiptap/suggestion'
 import { PluginKey } from '@tiptap/pm/state'
 import {
   AlignLeft, CalendarDays, CheckSquare, Code, FileInput, Heading1, Heading2, Heading3, Image as ImageIcon, LayoutTemplate, List, ListOrdered, ListTodo,
-  BookOpen, CalendarClock, CircleHelp, ChevronsRight, ChevronsUpDown, Columns2, Dices, Info, Landmark, ListTree, Lock, MapPin, Swords, TriangleAlert, User, Minus, Quote, Shield, Sparkles, Users, Table as TableIcon,
+  BookOpen, CalendarClock, CircleHelp, ChevronsRight, ChevronsUpDown, Columns2, Dices, Info, Landmark, ListTree, Lock, MapPin, PanelRight, Swords, TriangleAlert, User, Minus, Quote, Shield, Sparkles, Users, Table as TableIcon,
 } from 'lucide-react'
 import { createElement } from 'react'
 import { fuzzy } from '../lib/fuzzy'
@@ -49,7 +49,7 @@ const COMMANDS: Cmd[] = [
   { id: 'code', label: 'Code block', sub: 'Monospace', icon: Code, run: (e, r) => e.chain().focus().deleteRange(r).toggleCodeBlock().run() },
   { id: 'divider', label: 'Divider', sub: 'Horizontal rule', keywords: 'hr line', icon: Minus, run: (e, r) => e.chain().focus().deleteRange(r).setHorizontalRule().run() },
   { id: 'table', label: 'Table', sub: '3 × 3 table', icon: TableIcon, run: (e, r) => e.chain().focus().deleteRange(r).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
-  { id: 'image', label: 'Image', sub: 'Upload from your device', keywords: 'picture photo portrait', icon: ImageIcon, run: (e, r) => { e.chain().focus().deleteRange(r).run(); imagePicker.pick?.(e) } },
+  { id: 'image', label: 'Image', sub: 'Upload from your device', keywords: 'picture photo portrait float wrap', icon: ImageIcon, run: (e, r) => { e.chain().focus().deleteRange(r).run(); imagePicker.pick?.(e) } },
   { id: 'embed', label: 'Embed page', sub: 'Show another page or section here', keywords: 'transclude include', icon: FileInput, run: (e, r) => embedPicker.pick?.(e, r) },
   { id: 'pin', label: 'Pin on map', sub: 'Mark where this page is on a map', keywords: 'map marker location place', icon: MapPin, run: (e, r) => { e.chain().focus().deleteRange(r).run(); worldPicker.pin?.(e, r) } },
   { id: 'teven', label: 'Timeline event', sub: 'Give this page a date on the timeline', keywords: 'date calendar time when', icon: CalendarDays, run: (e, r) => { e.chain().focus().deleteRange(r).run(); worldPicker.event?.(e, r) } },
@@ -60,6 +60,7 @@ const COMMANDS: Cmd[] = [
   { id: 'secret', label: 'Secret', sub: 'Only you see it: shared pages keep it closed', keywords: 'callout gm hidden private spoiler', icon: Lock, run: viaChain('secret') },
   { id: 'fold', label: 'Collapsible section', sub: 'A titled section that can be closed', keywords: 'toggle accordion details spoiler', icon: ChevronsUpDown, run: viaChain('fold') },
   { id: 'columns', label: 'Columns', sub: 'Two columns side by side (cols3 for three)', keywords: 'layout side', icon: Columns2, run: viaChain('cols') },
+  { id: 'sidebox', label: 'Side box', sub: 'A box beside the text, like an infobox. The text flows around it.', keywords: 'aside infobox float sidebar facts wrap', icon: PanelRight, run: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'aside', attrs: { side: 'right', size: 'm' }, content: [{ type: 'paragraph' }] }).run() },
   { id: 'toc', label: 'Table of contents', sub: 'Links to the headings of this page', keywords: 'outline contents headings', icon: ListTree, run: viaChain('toc') },
   { id: 'date', label: 'Date today', sub: 'The real date, e.g. for session notes', keywords: 'day time now', icon: CalendarClock, run: viaChain('date') },
   { id: 'roll', label: 'Roll table', sub: 'A d6 table to fill in (roll20 for a d20)', keywords: 'random dice table', icon: Dices, run: viaChain('roll') },

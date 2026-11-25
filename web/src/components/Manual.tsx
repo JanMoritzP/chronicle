@@ -66,6 +66,17 @@ const SECTIONS: Section[] = [
     ),
   },
   {
+    id: 'layout', title: 'Pictures and layout', text: 'image picture float wrap flow resize caption side box infobox aside drag move block handle width',
+    body: () => (
+      <>
+        <p>Click a picture to change how it sits in the text: on the left or right with the text flowing beside it, centred, or across the full width. <b>S</b>, <b>M</b> and <b>L</b> set its size, or drag its corner. A picture can have a caption. Drop several pictures at once and they land where you let go.</p>
+        <p>A <b>Side box</b> (<Code>/sidebox</Code>) is a box beside the text, like the infobox of a wiki: put a picture, a few facts or a quote in it and the text flows around it. Hover over it to move it to the other side or change its width. A divider (<Code>/divider</Code>) always starts below pictures and boxes.</p>
+        <p>Hover left of any block to see its handle. Drag the handle to move the block, click it to select the whole block, or press <b>+</b> to add a block below with the slash menu open. <K>Alt + ↑</K> and <K>Alt + ↓</K> move the block the cursor is in, or the list item.</p>
+        <p>Select text to format it, make it a heading or link it to a web address. The arrows button at the top of a page switches between normal, wide and full width. Pages with a side column, such as people, are drawn wider.</p>
+      </>
+    ),
+  },
+  {
     id: 'slash', title: 'The slash menu', text: 'slash commands menu insert block',
     body: () => (
       <>
