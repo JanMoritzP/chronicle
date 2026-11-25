@@ -29,14 +29,15 @@ function useDraggableRolls() {
   return { ref, onContextMenu }
 }
 
-const cache = new Map<string, Promise<{ sheet: Sheet | null; type: string | null; portrait: string | null }>>()
+type PageInfo = { sheet: Sheet | null; type: string | null; portrait: string | null; /** the page's own token picture */ token: string | null }
+const cache = new Map<string, Promise<PageInfo>>()
 
 /** The sheet of a page, read once. A page that is not a creature has none. */
 export function loadSheet(pageId: string, fresh = false) {
   if (fresh) cache.delete(pageId)
   let p = cache.get(pageId)
   if (!p) {
-    p = api.getPage(pageId, fresh).then((pg) => ({ sheet: sheetOf(pg.props), type: (pg.props?.type as string) ?? null, portrait: (pg.props?.portrait as string) ?? null })).catch(() => ({ sheet: null, type: null, portrait: null }))
+    p = api.getPage(pageId, fresh).then((pg) => ({ sheet: sheetOf(pg.props), type: (pg.props?.type as string) ?? null, portrait: (pg.props?.portrait as string) ?? null, token: typeof pg.props?.data?.token === 'string' ? pg.props.data.token : null })).catch(() => ({ sheet: null, type: null, portrait: null, token: null }))
     cache.set(pageId, p)
   }
   return p

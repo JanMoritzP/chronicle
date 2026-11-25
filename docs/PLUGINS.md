@@ -91,7 +91,7 @@ More hooks are added by calling `runHook(name, payload)` from `server/src/plugin
 Works with the image administration program over HTTP only (see its `PLUGIN_INTEGRATION.md` and `CONTRACT.md`). The plugin never touches that program's files. The flow:
 
 1. **Request.** The plugin scrapes Chronicle for empty picture slots; each becomes one sprite in `POST <address>/api/requests`. Each kind can be switched off in Settings:
-   - **Page type pictures** (square 512 x 512, tall 3:4, wide 1024 x 448): every empty image block of a page's special page type, built in (person, monster, item, location: the portrait or banner) or custom (all its image blocks). Can be limited to some page types.
+   - **Page type pictures** (square 512 x 512, tall 3:4, wide 1024 x 448): every empty image block of a page's special page type, built in (person, monster, item, location: the portrait or banner) or custom (all its image blocks). A player character (a sheet of kind `character`) also has a banner (wide), a portrait and a token picture (square at the token size), whatever its page type. Can be limited to some page types.
    - **Pictures in text**: a paragraph that is only `[image: what it shows]` (800 x 450). When the picture arrives the line is replaced by it; a later replacement swaps that picture.
    - **Detail maps** (4096 x 3072): a map pin that points at a page (default type `location`) but opens no map. The pushed picture becomes a tiled map, a child of the map holding the pin, and the pin opens it. A replacement re-tiles that map. The map keeps its own copy, so it is not in the asset library.
    - **Tokens** (square, 256): tokens without a picture, one request per token name; the picture goes to every token of that name in the world that has none.

@@ -52,14 +52,35 @@ function open() {
     CREATE INDEX IF NOT EXISTS entries_category ON entries(category);
     CREATE TABLE IF NOT EXISTS sources (key TEXT PRIMARY KEY, name TEXT NOT NULL, license TEXT NOT NULL, published TEXT NOT NULL, permalink TEXT NOT NULL DEFAULT '');
     CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL);
+    -- libraries people make themselves (homebrew), their entries and the pictures the entries use; never touched by a refresh
+    CREATE TABLE IF NOT EXISTS collections (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', author TEXT NOT NULL DEFAULT '', license TEXT NOT NULL DEFAULT '',
+      created_by TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS homebrew (
+      key TEXT PRIMARY KEY, collection_id TEXT NOT NULL, category TEXT NOT NULL, name TEXT NOT NULL, sub TEXT NOT NULL DEFAULT '',
+      data TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS homebrew_collection ON homebrew(collection_id);
+    CREATE TABLE IF NOT EXISTS assets (id TEXT PRIMARY KEY, mime TEXT NOT NULL, data BLOB NOT NULL, created_at INTEGER NOT NULL);
   `)
   return lib
 }
+
+/** The library database, for the homebrew libraries kept next to the Open5e data (homebrew.ts). */
+export const libDb = () => open()
+
+const metaNum = (db: Database.Database, k: string) => { const r = db.prepare('SELECT v FROM meta WHERE k = ?').get(k) as { v: string } | undefined; return r ? Number(r.v) : null }
+/** Changes whenever Open5e is refreshed or a homebrew library changes: the client keeps the index until it does. */
+const versionOf = (db: Database.Database) => Math.max(metaNum(db, 'updatedAt') ?? 0, metaNum(db, 'homebrewAt') ?? 0)
 
 export function closeLibrary() { lib?.close(); lib = null }
 
 export interface LibraryStatus {
   count: number
+  /** entries from Open5e alone; the rest are homebrew */
+  open5e: number
+  version: number
   byCategory: Record<string, number>
   updatedAt: number | null
   running: boolean
@@ -73,28 +94,34 @@ export function libraryStatus(): LibraryStatus {
   const byCategory: Record<string, number> = {}
   let count = 0
   for (const r of db.prepare('SELECT category, COUNT(*) AS n FROM entries GROUP BY category').all() as { category: string; n: number }[]) { byCategory[r.category] = r.n; count += r.n }
-  const at = db.prepare("SELECT v FROM meta WHERE k = 'updatedAt'").get() as { v: string } | undefined
-  return { count, byCategory, updatedAt: at ? Number(at.v) : null, running: state.running, phase: state.phase, error: state.error }
+  const open5e = count
+  for (const r of db.prepare('SELECT category, COUNT(*) AS n FROM homebrew GROUP BY category').all() as { category: string; n: number }[]) { byCategory[r.category] = (byCategory[r.category] ?? 0) + r.n; count += r.n }
+  return { count, open5e, version: versionOf(db), byCategory, updatedAt: metaNum(db, 'updatedAt'), running: state.running, phase: state.phase, error: state.error }
 }
 
 export function libraryIndex() {
   const db = open()
   const sources: Record<string, string> = {}
   for (const s of db.prepare('SELECT key, name FROM sources').all() as { key: string; name: string }[]) sources[s.key] = s.name
-  const rows = (db.prepare('SELECT key, category, name, source, sub FROM entries ORDER BY name COLLATE NOCASE').all() as { key: string; category: string; name: string; source: string; sub: string }[])
+  for (const c of db.prepare('SELECT id, name FROM collections').all() as { id: string; name: string }[]) sources[`hb:${c.id}`] = c.name
+  const rows = (db.prepare(`SELECT key, category, name, source, sub FROM entries
+    UNION ALL SELECT key, category, name, 'hb:' || collection_id, sub FROM homebrew ORDER BY name COLLATE NOCASE`).all() as { key: string; category: string; name: string; source: string; sub: string }[])
     .map((r) => [r.key, r.category, r.name, r.source, r.sub])
-  const at = db.prepare("SELECT v FROM meta WHERE k = 'updatedAt'").get() as { v: string } | undefined
-  return { version: at ? Number(at.v) : 0, sources, rows }
+  return { version: versionOf(db), sources, rows }
 }
 
 export function libraryHas(key: string): boolean {
-  return !!open().prepare('SELECT 1 FROM entries WHERE key = ?').get(key)
+  return !!open().prepare('SELECT 1 FROM entries WHERE key = ? UNION ALL SELECT 1 FROM homebrew WHERE key = ?').get(key, key)
 }
 
 export function libraryEntry(key: string) {
   const db = open()
   const r = db.prepare('SELECT key, category, name, source, data FROM entries WHERE key = ?').get(key) as { key: string; category: string; name: string; source: string; data: string } | undefined
-  if (!r) return null
+  if (!r) {
+    const h = db.prepare('SELECT h.key, h.category, h.name, h.collection_id AS lib, h.data, c.name AS libName, c.license FROM homebrew h JOIN collections c ON c.id = h.collection_id WHERE h.key = ?').get(key) as { key: string; category: string; name: string; lib: string; data: string; libName: string; license: string } | undefined
+    if (!h) return null
+    return { key: h.key, category: h.category, name: h.name, source: `hb:${h.lib}`, sourceName: h.libName, license: h.license, permalink: '', homebrew: h.lib, data: JSON.parse(h.data) }
+  }
   const s = db.prepare('SELECT name, license, permalink FROM sources WHERE key = ?').get(r.source) as { name: string; license: string; permalink: string } | undefined
   return { key: r.key, category: r.category, name: r.name, source: r.source, sourceName: s?.name ?? r.source, license: s?.license ?? '', permalink: s?.permalink ?? '', data: JSON.parse(r.data) }
 }

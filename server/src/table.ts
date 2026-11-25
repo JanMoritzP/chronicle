@@ -1848,6 +1848,16 @@ export const tableSlots = {
     }
     return rows.length
   },
+  /** Tokens linked to the page that have no picture, or still the page's earlier token picture, get the new one. */
+  setPageTokenImages(ws: string, pageId: string, url: string, before = '') {
+    const rows = db.prepare("SELECT id FROM tokens WHERE workspace_id = ? AND page_id = ? AND (image = '' OR image = ?)").all(ws, pageId, before) as { id: string }[]
+    for (const r of rows) {
+      const old = tokenRow(r.id, ws)!
+      db.prepare('UPDATE tokens SET image = ?, updated_at = ? WHERE id = ?').run(url, now(), r.id)
+      emitToken(ws, old, tokenRow(r.id, ws)!)
+    }
+    return rows.length
+  },
   setHandoutImage(id: string, url: string) {
     const row = db.prepare('SELECT workspace_id AS ws FROM handouts WHERE id = ?').get(id) as { ws: string } | undefined
     if (!row) return false

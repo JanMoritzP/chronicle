@@ -24,6 +24,7 @@ export const LIBRARY_CATEGORIES: { id: LibraryCategory; label: string; plural: s
   { id: 'alignment', label: 'Alignment', plural: 'Alignments' },
   { id: 'size', label: 'Size', plural: 'Sizes' },
   { id: 'rule', label: 'Rule', plural: 'Rules' },
+  { id: 'page', label: 'Page', plural: 'Pages' },
 ]
 const entries = new Map<string, LibraryEntry>()
 
@@ -67,8 +68,10 @@ export const useLibrary = create<LibraryState>((set, get) => ({
   async load() {
     const status = await api.libraryStatus()
     set({ status })
-    if (status.count > 0 && get().index?.version !== status.updatedAt) {
-      const index = await loadIndex(status.updatedAt ?? 0)
+    // the version moves with every Open5e refresh and every change to a homebrew library
+    const version = status.version ?? status.updatedAt ?? 0
+    if (!status.count) { lower = []; set({ index: null }) } else if (get().index?.version !== version) {
+      const index = await loadIndex(version)
       lower = index ? index.rows.map((r) => r[2].toLowerCase()) : []
       set({ index })
     }

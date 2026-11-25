@@ -147,7 +147,8 @@ export function activate(ctx) {
       const side = Math.round(cfg.width), tall = Math.round(cfg.width * 4 / 3), wide = Math.round(cfg.wideWidth)
       for (const s of ctx.pages.imageSlots()) {
         if (s.value || (types.size && !types.has(s.type))) continue
-        const size = s.shape === 'wide' ? dims(wide, wide * 7 / 16) : s.shape === 'tall' ? dims(side, tall) : dims(side, cfg.height)
+        // a player character's token picture is square at the token size, like the pictures of tokens on the table
+        const size = s.shape === 'token' ? dims(cfg.tokenSize, cfg.tokenSize) : s.shape === 'wide' ? dims(wide, wide * 7 / 16) : s.shape === 'tall' ? dims(side, tall) : dims(side, cfg.height)
         want('page', s.ws, s.page, s.key, dirOf(s.ws, s.page, s.title, s.folder), slug(s.key, 'picture'), s.title, size, `${s.label || s.key} picture (${s.shape}) for the ${s.type} page`, true)
       }
     }

@@ -29,7 +29,7 @@ import { Replay } from './Replay'
 import { TokenActions, TokenBars, TokenLook } from './TokenLook'
 import { TablesAndDecks } from './TableDecks'
 import { LIGHT_PRESETS, LightSourcePanel, SceneLights } from './TableLight'
-import { ChatPanel, CombatPanel, LinkPage, SightLight, TokenSheet, TokenStats } from './TableParts'
+import { ChatPanel, CombatPanel, LinkPage, PagePicture, SightLight, TokenSheet, TokenStats } from './TableParts'
 import { Select } from './Select'
 import { blockedPath } from '../tabletop/movement'
 
@@ -593,6 +593,7 @@ function TokenPanel({ token, count }: { token: Token | null; count: number }) {
               <button className="btn sm" onClick={async () => { const f = await pickImage(); if (f) { const url = await uploadImage(wsId, f); if (url) patch({ image: url }) } }}>Set picture</button>
               {token.image && <button className="btn ghost sm" onClick={() => patch({ image: '' })}>Remove picture</button>}
             </div>
+            <PagePicture token={token} />
             <TokenLook token={token} />
             <TokenLayer token={token} />
             <button className="btn sm" title="Roll the hit points from the dice on the sheet" onClick={() => sendTable({ t: 'token.rollhp', ids: [token.id] })}>Roll hit points</button>

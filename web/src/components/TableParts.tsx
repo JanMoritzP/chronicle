@@ -4,7 +4,7 @@ import { api } from '../api'
 import { inTemplate } from '../tabletop/grid'
 import { useStore } from '../store'
 import { sendTable, useTable, type ChatMsg, type RollJson, type Token } from '../tabletop/state'
-import { askText } from '../lib/dialog'
+import { alertDialog, askText } from '../lib/dialog'
 import { PagePicker } from './PagePicker'
 import { MacroBar, addToSessionNotes, draftRecap, saveMessageAsMacro } from './TableMacros'
 import { macroLineOf, noteLineOf } from '../lib/macro'
@@ -182,6 +182,23 @@ export function TokenStats({ token }: { token: Token }) {
   )
 }
 
+/**
+ * The picture of a token linked to a page and the page's own token picture, kept in step from the table: take the page's, or make
+ * this one the page's (every token of the page that still wore the old one follows).
+ */
+export function PagePicture({ token }: { token: Token }) {
+  const [own, setOwn] = useState<string | null>(null)
+  const [tick, setTick] = useState(0)
+  useEffect(() => { let live = true; if (token.pageId) loadSheet(token.pageId, tick > 0).then((i) => live && setOwn(i.token)); else setOwn(null); return () => { live = false } }, [token.pageId, tick])
+  if (!token.pageId) return null
+  return (
+    <div className="tt-row">
+      {own && own !== token.image && <button className="btn sm" title="The picture set on the page as its token" onClick={() => sendTable({ t: 'token.update', id: token.id, patch: { image: own } })}>Use the page’s token picture</button>}
+      {token.image && token.image !== own && <button className="btn sm" title="The page keeps this picture as its token picture, for the next tokens too" onClick={() => api.patchPage(token.pageId!, { propsPatch: { data: { token: token.image } } }).then(() => setTick((t) => t + 1)).catch((e) => alertDialog(e.message))}>Make it the page’s token picture</button>}
+    </div>
+  )
+}
+
 /** Gives a token the name, picture, hit points and armor class of a page, and keeps the page for its sheet. */
 export function LinkPage({ token }: { token: Token }) {
   const [open, setOpen] = useState(false)
@@ -189,7 +206,9 @@ export function LinkPage({ token }: { token: Token }) {
   const link = async (id: string, title: string) => {
     setOpen(false)
     const info = await loadSheet(id)
-    sendTable({ t: 'token.update', id: token.id, patch: { pageId: id, ...(token.name ? {} : { name: title }), ...(!token.image && info.portrait && /^\/api\/uploads\/[A-Za-z0-9-]+$/.test(info.portrait) ? { image: info.portrait } : {}) } })
+    // the character's own token picture first, else its portrait
+    const picture = [info.token, info.portrait].find((u) => u && /^\/api\/uploads\/[A-Za-z0-9-]+$/.test(u))
+    sendTable({ t: 'token.update', id: token.id, patch: { pageId: id, ...(token.name ? {} : { name: title }), ...(!token.image && picture ? { image: picture } : {}) } })
     if (info.sheet) sendTable({ t: 'token.stat', id: token.id, stat: { hp: { value: info.sheet.hp.current ?? info.sheet.hp.max, max: info.sheet.hp.max, temp: info.sheet.hp.temp ?? 0 }, ac: info.sheet.ac.value, hpPrivate: info.type === 'monster' } })
   }
   return (

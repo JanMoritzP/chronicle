@@ -1,5 +1,5 @@
 import { EditorContent, useEditor } from '@tiptap/react'
-import { BookMarked, Clock, Copy, Globe, LayoutTemplate, Maximize2, MoreHorizontal, PanelRightOpen, Trash2 } from 'lucide-react'
+import { BookMarked, BookUp, Clock, Copy, Globe, LayoutTemplate, Maximize2, MoreHorizontal, PanelRightOpen, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, ApiError } from '../api'
 import { buildExtensions } from '../editor/extensions'
@@ -22,7 +22,9 @@ import { TypeLayout } from './TypeLayout'
 import type { SheetPatch } from './SheetView'
 import { emptyCharacter, emptyPf2eCharacter, emptyPf2eCreature, pfDerived, patchSheetLocal, sheetOf, wholeSheetPatch, type Sheet } from '../lib/sheet'
 import { CharacterBuilder } from './CharacterBuilder'
-import { CharacterSheet } from './CharacterSheet'
+import { CharacterSheet, type PictureKey } from './CharacterSheet'
+import { PushDialog, RulesPanel } from './Homebrew'
+import { emptyRules, hasRules, isHomebrewKey } from '../lib/homebrew'
 import { Pf2eCharacterSheet } from './Pf2eCharacterSheet'
 import { Select } from './Select'
 import { PlayedBy } from './PlayedBy'
@@ -48,7 +50,7 @@ export function PageView({ id, anchor }: { id: string; anchor?: string }) {
   return <PageEditor key={`${id}:${epoch}`} page={page} anchor={anchor} onReload={() => setEpoch((e) => e + 1)} />
 }
 
-type PropsPatch = { data?: Record<string, any>; portrait?: string | null; type?: string | null; sheet?: Record<string, unknown>; players?: string[] }
+type PropsPatch = { data?: Record<string, any>; portrait?: string | null; type?: string | null; sheet?: Record<string, unknown>; players?: string[]; rules?: Record<string, any> | null; library?: string | null }
 type Pending = { title?: string; tags?: string[]; propsPatch?: PropsPatch }
 
 function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: string; onReload: () => void }) {
@@ -70,6 +72,7 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
   const [showHistory, setShowHistory] = useState(false)
   const [showMenu, setShowMenu] = useState(false)
   const [showShare, setShowShare] = useState(false)
+  const [pushing, setPushing] = useState(false)
   const pending = useRef<Pending>({})
   const [props, setProps] = useState<Record<string, any>>(page.props ?? {})
   const players: string[] = Array.isArray(props.players) ? props.players : []
@@ -293,6 +296,11 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
     setProps({ ...props, sheet })
     schedule({ propsPatch: { sheet: wholeSheetPatch(sheet) } }, 200)
   }
+  /** The rules a homebrew class, species or background gives the character builder. */
+  const setRules = (rules: Record<string, any>) => {
+    setProps({ ...props, rules })
+    schedule({ propsPatch: { rules } }, 100)
+  }
   const [building, setBuilding] = useState(false)
   const createBuilt = (sheet: Sheet) => {
     setBuilding(false)
@@ -377,6 +385,7 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
                     editor.chain().setContent(doc, { emitUpdate: true }).run()
                     alertDialog(`${count === 1 ? '1 name is' : `${count} names are`} now linked to the library.`, 'Links added')
                   }}><BookMarked size={15} /> Link library terms</button>
+                  <button title="Copies the page into one of your libraries, so every world on this server can add it" onClick={async () => { setShowMenu(false); await flush(); setPushing(true) }}><BookUp size={15} /> {isHomebrewKey(meta?.library) ? 'Update in the library…' : 'Put in a library…'}</button>
                   <button onClick={() => { setShowMenu(false); setShowShare(true) }}><Globe size={15} /> Share publicly…</button>
                   <button onClick={async () => { await flush(); await useStore.getState().deletePage(page.id) }}><Trash2 size={15} /> Move to trash</button>
                 </div>
@@ -439,7 +448,12 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
         {sheetOf(props)?.kind === 'character' ? (
           sheetOf(props)!.pf2e?.char
             ? <Pf2eCharacterSheet sheet={sheetOf(props)!} set={readOnly ? undefined : setSheetFields} />
-            : <CharacterSheet sheet={sheetOf(props)!} set={readOnly ? undefined : setSheetFields} />
+            : <CharacterSheet sheet={sheetOf(props)!} set={readOnly ? undefined : setSheetFields} pictures={{
+              banner: typeof props.data?.banner === 'string' ? props.data.banner : undefined,
+              portrait: typeof props.portrait === 'string' ? props.portrait : undefined,
+              token: typeof props.data?.token === 'string' ? props.data.token : undefined,
+              ...(readOnly ? {} : { set: (k: PictureKey, url: string | null) => setTypeValue(k, url), pick: pickImage }),
+            }} />
         ) : pageType?.id === 'person' && !readOnly && !zen ? (
           <div className="cs-start">
             <div>
@@ -453,6 +467,9 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
             </div>
           </div>
         ) : null}
+        {pageType && hasRules(pageType.id) && (props.rules || !readOnly) && !zen && (props.rules
+          ? <RulesPanel category={pageType.id} rules={props.rules} readOnly={readOnly} ruleset={system === '5e-2024' ? '5e-2024' : '5e'} onSave={setRules} />
+          : <div className="cs-start"><div><b>Not in the character builder yet</b><span className="muted">Give this {pageType.name.toLowerCase()} the numbers the builder needs, and it can be chosen there.</span></div><button className="btn sm" onClick={() => setRules(emptyRules(pageType.id as 'class'))}>Add rules for the builder</button></div>)}
         {pageType ? (
           <TypeLayout layout={pageType.layout} data={typeData} readOnly={readOnly} setValue={setTypeValue} pickImage={pickImage} sheet={{ value: sheetOf(props), set: setSheetFields, createPf2e: system === 'pf2e' ? addPf2eSheet : undefined }}
             body={<EditorContent editor={editor} />} />
@@ -507,6 +524,7 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
         setEmbedFor(null)
       }} />}
       {showShare && <ShareDialog pageId={page.id} title={title} onClose={() => setShowShare(false)} />}
+      {pushing && <PushDialog pageId={page.id} onClose={() => setPushing(false)} />}
       {building && <CharacterBuilder ruleset={system === '5e-2024' ? '5e-2024' : '5e'} name={title} onCreate={createBuilt} onClose={() => setBuilding(false)} />}
       {showHistory && <History pageId={page.id} readOnly={viewer} onClose={() => setShowHistory(false)}
         onRestore={async (vid) => {

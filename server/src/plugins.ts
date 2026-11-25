@@ -59,6 +59,11 @@ const BUILTIN_IMAGES: Record<string, ImageBlock[]> = {
   item: [{ key: 'portrait', label: 'Portrait', shape: 'square' }],
   location: [{ key: 'portrait', label: 'Banner', shape: 'wide' }],
 }
+/**
+ * The pictures of a player character, whatever the page type: the wide banner behind the sheet, the portrait (the page
+ * thumbnail) and the token picture the tabletop uses. They live where image blocks keep theirs: portrait in props, the rest in data.
+ */
+const CHARACTER_IMAGES: ImageBlock[] = [{ key: 'banner', label: 'Banner', shape: 'wide' }, { key: 'portrait', label: 'Portrait', shape: 'square' }, { key: 'token', label: 'Token', shape: 'token' }]
 function imageBlocksOf(definition: any): ImageBlock[] {
   const out: ImageBlock[] = []
   for (const zone of ['top', 'side', 'main', 'bottom']) {
@@ -248,10 +253,12 @@ function contextFor(p: Loaded) {
         const folders = folderPaths()
         const out: { page: string; ws: string; title: string; folder: string; type: string; key: string; label: string; shape: string; value: string }[] = []
         for (const r of db.prepare('SELECT p.id, p.workspace_id AS ws, p.title, p.folder_id AS folderId, p.props FROM pages p JOIN workspaces w ON w.id = p.workspace_id WHERE p.deleted_at IS NULL AND w.deleted_at IS NULL ORDER BY p.created_at').all() as { id: string; ws: string; title: string; folderId: string | null; props: string }[]) {
-          let props: { type?: unknown; portrait?: unknown; data?: Record<string, unknown> } = {}
+          let props: { type?: unknown; portrait?: unknown; data?: Record<string, unknown>; sheet?: { kind?: unknown } } = {}
           try { props = JSON.parse(r.props) } catch { continue }
           const type = typeof props.type === 'string' ? props.type : ''
-          for (const b of custom.get(type) ?? BUILTIN_IMAGES[type] ?? []) {
+          const blocks = [...(custom.get(type) ?? BUILTIN_IMAGES[type] ?? [])]
+          if (props.sheet?.kind === 'character') for (const b of CHARACTER_IMAGES) if (!blocks.some((x) => x.key === b.key)) blocks.push(b)
+          for (const b of blocks) {
             const v = b.key === 'portrait' ? props.portrait : props.data?.[b.key]
             out.push({ page: r.id, ws: r.ws, title: r.title, folder: (r.folderId && folders.get(r.folderId)) || '', type, key: b.key, label: b.label, shape: b.shape, value: typeof v === 'string' ? v : '' })
           }
@@ -263,10 +270,13 @@ function contextFor(p: Loaded) {
         const row = db.prepare('SELECT workspace_id AS ws, props FROM pages WHERE id = ? AND deleted_at IS NULL').get(pageId) as { ws: string; props: string } | undefined
         if (!row) return false
         const props = JSON.parse(row.props || '{}')
+        const before = key === 'portrait' ? props.portrait : props.data?.[key]
         if (key === 'portrait') props.portrait = url
         else props.data = { ...(props.data ?? {}), [key]: url }
         db.prepare('UPDATE pages SET props = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(props), Date.now(), pageId)
         publishWorld(row.ws, { k: 'refresh', area: 'pages', pageId })
+        // a character's tokens wear its token picture, unless someone gave them another one
+        if (key === 'token') tableSlots.setPageTokenImages(row.ws, pageId, url, typeof before === 'string' ? before : '')
         return true
       },
       /** Paragraphs in page text that consist of just `[image: what it shows]`: a picture the writer wants here. */

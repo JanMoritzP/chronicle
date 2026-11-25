@@ -4,8 +4,44 @@ import { StatBlockBody, richText } from '../editor/StatBlock'
 import { templateById } from '../editor/templates'
 import { useLibrary } from '../lib/library'
 import { entryText, statBlockFor, textBlocks } from '../lib/open5e'
-import type { LibraryEntry } from '../types'
+import { ReadOnlyDoc } from '../editor/Embed'
+import { docText } from '../lib/docText'
+import { hasRules } from '../lib/homebrew'
+import { sheetOf } from '../lib/sheet'
+import type { HomebrewEntry, LibraryEntry } from '../types'
+import { RulesPanel } from './Homebrew'
+import { SheetView } from './SheetView'
 import { makeLinker, useAutoLinks, type Linker } from './useAutoLinks'
+
+/** A homebrew entry: its picture, stat block or sheet, the rules the character builder uses, and its text. */
+function HomebrewBody({ entry, preview }: { entry: LibraryEntry; preview?: boolean }) {
+  const d = entry.data as HomebrewEntry
+  const stat = d.fields?.main && typeof d.fields.main === 'object' ? d.fields.main as { template?: string; data?: Record<string, string> } : null
+  const template = stat?.template ? templateById(stat.template) : undefined
+  const sheet = d.sheet ? sheetOf({ sheet: d.sheet }) : null
+  const excerpt = useMemo(() => (preview ? (d.content ? docText(d.content) : d.text ?? '').slice(0, 450) : ''), [d, preview])
+  const credit = `${entry.sourceName}${entry.license ? `. ${entry.license}.` : ''}`
+  if (preview) {
+    return (
+      <>
+        <h4>{entry.name}</h4>
+        {d.sub && <div className="muted"><i>{d.sub}</i></div>}
+        {excerpt && <p>{excerpt}{excerpt.length >= 450 ? '…' : ''}</p>}
+        <div className="muted lib-credit">{entry.sourceName}</div>
+      </>
+    )
+  }
+  return (
+    <>
+      {d.sub && <p className="muted"><i>{d.sub}</i></p>}
+      {d.portrait && <img src={d.portrait} alt="" style={{ maxWidth: 320, borderRadius: 10 }} />}
+      {stat && template && stat.data ? <StatBlockBody template={template} data={stat.data} libraryLinks /> : sheet && sheet.kind !== 'character' ? <SheetView sheet={sheet} libraryLinks /> : null}
+      {d.rules && hasRules(entry.category) && <RulesPanel category={entry.category} rules={d.rules} readOnly ruleset="5e" onSave={() => {}} />}
+      {d.content?.type === 'doc' ? <div className="editor"><ReadOnlyDoc doc={d.content} /></div> : d.text ? <Markdownish text={d.text} /> : null}
+      <p className="muted lib-credit">Homebrew from {credit}</p>
+    </>
+  )
+}
 
 function Markdownish({ text, lk }: { text: string; lk?: Linker }) {
   return (
@@ -28,6 +64,10 @@ function Markdownish({ text, lk }: { text: string; lk?: Linker }) {
 
 /** A library entry as a read-only page. Used in the Library view and on public shared pages. */
 export function EntryBody({ entry }: { entry: LibraryEntry }) {
+  return entry.homebrew ? <HomebrewBody entry={entry} /> : <Open5eBody entry={entry} />
+}
+
+function Open5eBody({ entry }: { entry: LibraryEntry }) {
   const index = useLibrary((s) => s.index)
   const links = useAutoLinks()
   const t = useMemo(() => entryText(entry), [entry])
@@ -55,6 +95,10 @@ export function EntryBody({ entry }: { entry: LibraryEntry }) {
 
 /** The card shown when the mouse rests on a link to an entry: the stat block for creatures, spells and items, else the facts and the start of the text. */
 export function EntryPreview({ entry }: { entry: LibraryEntry }) {
+  return entry.homebrew ? <HomebrewBody entry={entry} preview /> : <Open5ePreview entry={entry} />
+}
+
+function Open5ePreview({ entry }: { entry: LibraryEntry }) {
   const index = useLibrary((s) => s.index)
   const t = useMemo(() => entryText(entry), [entry])
   const sb = useMemo(() => statBlockFor(entry, index), [entry, index])

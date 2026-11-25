@@ -1,7 +1,7 @@
 import { get, set } from 'idb-keyval'
 import type { Calendar } from './lib/calendar'
 import type { PackData } from './lib/systems'
-import type { CommentItem, Macro, Encounter, EncounterBody, Invite, Person, LibraryEntry, LibraryIndex, LibraryStatus, BackupInfo, PluginInfo, Bootstrap, EventRow, FullPage, MapFull, MapItem, MapLayer, CopyPreview, CopyResult, GameSession, MapMeta, PageType, PageVersion, Relation, StatsResult, StatTemplateRow, Template, TodoItem, User, Workspace, WorldSettings } from './types'
+import type { BuilderEntry, HomebrewEntry, LibraryCollection, LibraryCollectionEntry, CommentItem, Macro, Encounter, EncounterBody, Invite, Person, LibraryEntry, LibraryIndex, LibraryStatus, BackupInfo, PluginInfo, Bootstrap, EventRow, FullPage, MapFull, MapItem, MapLayer, CopyPreview, CopyResult, GameSession, MapMeta, PageType, PageVersion, Relation, StatsResult, StatTemplateRow, Template, TodoItem, User, Workspace, WorldSettings } from './types'
 
 export interface StatTemplateBody { name: string; sections: any[]; look?: Record<string, any> }
 export interface PageTypeBody { name: string; icon: string; tag: string; source: string; definition: Record<string, any> }
@@ -69,6 +69,22 @@ export const api = {
   libraryIndex: () => req<LibraryIndex>('GET', '/api/library/index'),
   libraryRepoint: (ws: string, libKey: string, pageId: string) => req<{ changed: number }>('POST', `/api/workspaces/${ws}/library-links/repoint`, { libKey, pageId }),
   libraryEntry: (key: string) => req<LibraryEntry>('GET', `/api/library/entries/${encodeURIComponent(key)}`),
+  libraryCollections: () => req<LibraryCollection[]>('GET', '/api/library/collections'),
+  libraryCollection: (id: string) => req<LibraryCollection & { entries: LibraryCollectionEntry[] }>('GET', `/api/library/collections/${encodeURIComponent(id)}`),
+  createLibraryCollection: (body: { name: string; description?: string; author?: string; license?: string }) => req<LibraryCollection>('POST', '/api/library/collections', body),
+  updateLibraryCollection: (id: string, body: { name?: string; description?: string; author?: string; license?: string }) => req<LibraryCollection>('PATCH', `/api/library/collections/${encodeURIComponent(id)}`, body),
+  deleteLibraryCollection: (id: string) => req<{ ok: true }>('DELETE', `/api/library/collections/${encodeURIComponent(id)}`),
+  putLibraryEntry: (collection: string, entry: HomebrewEntry, key?: string) => req<{ key: string }>('PUT', `/api/library/collections/${encodeURIComponent(collection)}/entries`, { entry, ...(key ? { key } : {}) }),
+  deleteLibraryEntry: (key: string) => req<{ ok: true }>('DELETE', `/api/library/entries/${encodeURIComponent(key)}`),
+  exportLibraryCollection: (id: string) => req<unknown>('GET', `/api/library/collections/${encodeURIComponent(id)}/export`),
+  importLibrary: (file: unknown, replace = false) => req<{ collection: LibraryCollection; entries: number }>('POST', '/api/library/import', { file, replace }),
+  libraryBuilder: () => req<BuilderEntry[]>('GET', '/api/library/builder'),
+  async libraryAsset(bytes: Blob): Promise<string> {
+    const r = await fetch('/api/library/assets', { method: 'POST', headers: { 'content-type': 'application/octet-stream', 'x-client-id': clientId }, body: bytes })
+    const data = await r.json().catch(() => null)
+    if (!r.ok) throw new ApiError(r.status, data?.error ?? r.statusText)
+    return data.url as string
+  },
   todos: (ws: string) => req<TodoItem[]>('GET', `/api/workspaces/${ws}/todos`),
   patchTodo: async (pageId: string, todoId: string, b: { done?: boolean; message?: string }) => {
     const r = await req('PATCH', `/api/pages/${pageId}/todos/${todoId}`, b)

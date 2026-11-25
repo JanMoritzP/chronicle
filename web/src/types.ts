@@ -91,8 +91,19 @@ export interface BackupInfo { name: string; size: number; createdAt: number; kin
 
 export type LibraryCategory = 'creature' | 'magicitem' | 'item' | 'spell' | 'class' | 'species' | 'background' | 'feat' | 'condition'
   | 'weaponproperty' | 'damagetype' | 'skill' | 'ability' | 'school' | 'language' | 'creaturetype' | 'alignment' | 'size' | 'rule'
-export interface LibraryStatus { count: number; byCategory: Record<string, number>; updatedAt: number | null; running: boolean; phase: string; error: string | null }
+  /** homebrew only: any other page (a place, a god, a piece of lore) */
+  | 'page'
+export interface LibraryStatus { count: number; /** entries from Open5e, the rest is homebrew */ open5e: number; version: number; byCategory: Record<string, number>; updatedAt: number | null; running: boolean; phase: string; error: string | null }
 /** One row per entry: key, category, name, source key, short description. */
 export type LibraryRow = [string, LibraryCategory, string, string, string]
 export interface LibraryIndex { version: number; sources: Record<string, string>; rows: LibraryRow[] }
-export interface LibraryEntry { key: string; category: LibraryCategory; name: string; source: string; sourceName: string; license: string; permalink: string; data: any }
+export interface LibraryEntry { key: string; category: LibraryCategory; name: string; source: string; sourceName: string; license: string; permalink: string; /** the homebrew library it is in */ homebrew?: string; data: any }
+/** A homebrew library: entries people made or pushed from their pages. */
+export interface LibraryCollection { id: string; name: string; description: string; author: string; license: string; createdBy: string; createdAt: number; updatedAt: number; count: number }
+export interface LibraryCollectionEntry { key: string; category: LibraryCategory; name: string; sub: string; updatedAt: number }
+/** A homebrew entry as stored and as written in a library file (docs/LIBRARY.md). */
+export interface HomebrewEntry {
+  id?: string; category: LibraryCategory; name: string; sub?: string; type?: string
+  fields?: Record<string, any>; sheet?: Record<string, any>; rules?: Record<string, any>; content?: any; text?: string; portrait?: string; tags?: string[]
+}
+export interface BuilderEntry { key: string; category: 'class' | 'species' | 'background'; name: string; library: string; rules: Record<string, any> }

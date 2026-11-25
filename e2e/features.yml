@@ -359,6 +359,15 @@ areas:
         files: [web/src/editor/wikilink.tsx]
       - id: library.link-terms
         name: "Link library terms in a page"
+      - id: library.homebrew-builder
+        name: "Make a class, species or background in the character builder, as a page, in a library or both"
+        files: [web/src/components/Homebrew.tsx, web/src/lib/homebrew.ts, web/src/components/CharacterBuilder.tsx]
+      - id: library.homebrew-push
+        name: "Put a page into a library of your own, export the library as a file, delete an entry"
+        files: [web/src/components/Homebrew.tsx, web/src/components/Library.tsx, server/src/homebrew.ts]
+      - id: library.homebrew-field
+        name: "Make a new entry from a linked field and link it there"
+        files: [web/src/components/LibraryField.tsx]
 
   - id: sharing
     name: Sharing and copying
@@ -410,6 +419,9 @@ areas:
         files: [web/src/components/CharacterSheet.tsx]
       - id: sheet.character-more
         name: "A character sheet tracks rests, hit dice, death saves, spell slots, items and coins"
+        files: [web/src/components/CharacterSheet.tsx]
+      - id: sheet.pictures
+        name: "A character's banner behind the sheet, portrait and token picture"
         files: [web/src/components/CharacterSheet.tsx]
       - id: sheet.builder
         name: "Build a character step by step: class, species, background, scores, skills, and a sheet with the numbers worked out"

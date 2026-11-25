@@ -1,6 +1,6 @@
 import { useRules } from '../lib/pack'
 import type { SheetSection } from '../lib/systems'
-import { Heart, Moon, Plus, Shield, Trash2 } from 'lucide-react'
+import { Heart, ImageIcon, Moon, Plus, Shield, Trash2, X } from 'lucide-react'
 import { useState } from 'react'
 import {
   ABILITIES, SKILLS, abilityMod, characterLevel, initiativeBonus, longRestPatch, passivePerception, proficiency, saveBonus, signed, skillBonus, spellAttack, spellDC,
@@ -10,6 +10,10 @@ import { attunedCount, capacityOf, carriedWeight, loadOf, MAX_ATTUNED } from '..
 import { LevelUpPanel } from './LevelUpPanel'
 import { LibraryAdd } from './LibraryAdd'
 import { backgroundPatch, speciesPatch } from '../lib/origin'
+import { homebrewBackgroundPatch, homebrewSpeciesPatch } from '../lib/homebrew'
+import { useStore } from '../store'
+import type { LibraryEntry } from '../types'
+import { HomebrewDialog } from './Homebrew'
 import { exportCharacter } from '../lib/importers'
 import { FeatureEditor, type SheetPatch } from './SheetView'
 import { Select } from './Select'
@@ -46,7 +50,33 @@ const next = (p: Proficiency | undefined): Proficiency | null => (p === undefine
 
 export type RollFn = (expr: string, label: string) => void
 
-export function CharacterSheet({ sheet, set, roll }: { sheet: Sheet; set?: (patch: SheetPatch) => void; roll?: RollFn }) {
+/** The three pictures of a character: the wide banner behind the sheet, the portrait (the page thumbnail) and the token picture. */
+export type PictureKey = 'banner' | 'portrait' | 'token'
+export interface Pictures {
+  banner?: string; portrait?: string; token?: string
+  /** missing for people who may only look */
+  set?: (key: PictureKey, url: string | null) => void
+  pick?: () => Promise<string | null>
+}
+const PICTURE_LABEL: Record<PictureKey, string> = { banner: 'Banner', portrait: 'Portrait', token: 'Token' }
+
+function PictureSlots({ pictures }: { pictures: Pictures }) {
+  const choose = async (k: PictureKey) => { const url = await pictures.pick?.(); if (url) pictures.set?.(k, url) }
+  return (
+    <div className="cs-pics" role="group" aria-label="Pictures">
+      {(['banner', 'portrait', 'token'] as const).map((k) => (
+        <span key={k} className={`cs-pic${k === 'banner' ? ' wide' : ''}`}>
+          <button className="cs-pic-main" title={pictures[k] ? `Change the ${PICTURE_LABEL[k].toLowerCase()}` : `Add a ${PICTURE_LABEL[k].toLowerCase()}`} onClick={() => void choose(k)}>
+            {pictures[k] ? <img src={pictures[k]} alt="" /> : <span className="cs-pic-empty"><ImageIcon size={13} /></span>}{PICTURE_LABEL[k]}
+          </button>
+          {pictures[k] && <button className="icon-btn" aria-label={`Remove the ${PICTURE_LABEL[k].toLowerCase()}`} title="Remove" onClick={() => pictures.set?.(k, null)}><X size={11} /></button>}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+export function CharacterSheet({ sheet, set, roll, pictures }: { sheet: Sheet; set?: (patch: SheetPatch) => void; roll?: RollFn; pictures?: Pictures }) {
   const rules = useRules()
   // where each section goes, and which are left out, as the system pack says
   const place = (id: SheetSection) => ({ style: { order: rules.sheetLayout.order[id], ...(rules.sheetLayout.hidden.has(id) ? { display: 'none' } : {}) } as React.CSSProperties })
@@ -70,10 +100,21 @@ export function CharacterSheet({ sheet, set, roll }: { sheet: Sheet; set?: (patc
   const check = (n: number, label: string) => roll?.(`1d20${bonus(n)}`, label)
   const setItems = (list: InventoryItem[]) => act({ inventory: list })
   const features = (g: 'traits' | 'actions'): Feature[] => sheet.features[g]
+  // a new species or background made right here, from the sheet
+  const canMake = useStore((s) => s.user?.role !== 'viewer')
+  const [making, setMaking] = useState<'species' | 'background' | null>(null)
+  const pickOrigin = (kind: 'species' | 'background', e: LibraryEntry) => {
+    if (e.homebrew && e.data?.rules) act(kind === 'species' ? homebrewSpeciesPatch(sheet, e.name, e.data.rules) : homebrewBackgroundPatch(sheet, e.name, e.data.rules))
+    else act(kind === 'species' ? speciesPatch(sheet, e.data, e.name) : backgroundPatch(sheet, e.data, e.name))
+  }
 
   return (
-    <div className="cs" aria-label="Character sheet">
+    <div className={`cs${pictures?.banner ? ' has-banner' : ''}`} aria-label="Character sheet">
+      {pictures?.banner && <div className="cs-banner" aria-hidden style={{ backgroundImage: `url("${pictures.banner}")` }} />}
       <header className="cs-head">
+        <div className="cs-top">
+          {pictures?.portrait && <img className="cs-portrait" src={pictures.portrait} alt={`Portrait of ${sheet.name || 'the character'}`} />}
+          <div className="cs-who">
         {edit ? <input className="cs-name" aria-label="Character name" placeholder="Character name" value={sheet.name} onChange={(e) => act({ name: e.target.value })} /> : <h2 className="cs-name">{sheet.name || 'Unnamed'}</h2>}
         <div className="cs-line">
           {edit ? (
@@ -85,12 +126,20 @@ export function CharacterSheet({ sheet, set, roll }: { sheet: Sheet; set?: (patc
             </>
           ) : <span className="muted">{[sheet.species, sheet.background, sheet.alignment, sheet.player && `played by ${sheet.player}`].filter(Boolean).join(' · ')}</span>}
         </div>
+          </div>
+        </div>
         {edit && (
           <div className="cs-line">
-            <LibraryAdd label="Choose a species from the library" categories={['species']} onPick={(e) => act(speciesPatch(sheet, e.data, e.name))} />
-            <LibraryAdd label="Choose a background from the library" categories={['background']} onPick={(e) => act(backgroundPatch(sheet, e.data, e.name))} />
+            <LibraryAdd label="Choose a species from the library" categories={['species']} onPick={(e) => pickOrigin('species', e)} />
+            {canMake && <button className="btn sm" onClick={() => setMaking('species')}><Plus size={12} /> New species</button>}
+            <LibraryAdd label="Choose a background from the library" categories={['background']} onPick={(e) => pickOrigin('background', e)} />
+            {canMake && <button className="btn sm" onClick={() => setMaking('background')}><Plus size={12} /> New background</button>}
           </div>
         )}
+        {making && <HomebrewDialog category={making} ruleset={sheet.ruleset === '5e-2024' ? '5e-2024' : '5e'} onClose={() => setMaking(null)} onDone={(m) => {
+          setMaking(null)
+          if (m.rules) act(making === 'species' ? homebrewSpeciesPatch(sheet, m.name, m.rules) : homebrewBackgroundPatch(sheet, m.name, m.rules))
+        }} />}
         <div className="cs-classes">
           {classes.map((c, i) => (
             <span key={i} className="cs-class">
@@ -116,6 +165,7 @@ export function CharacterSheet({ sheet, set, roll }: { sheet: Sheet; set?: (patc
           {canSet && <button className="btn sm" onClick={() => setLevelling((v) => !v)}>Level up</button>}
           {canSet && <button className="btn sm" title="Full hit points, every spell slot back, half the hit dice back" onClick={() => act(longRestPatch(sheet))}><Moon size={12} /> Long rest</button>}
           <span className="grow" />
+          {edit && pictures?.set && <PictureSlots pictures={pictures} />}
           <button className="btn ghost sm" title="Save this character as a file to share or keep" onClick={() => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(exportCharacter(sheet), null, 2)], { type: 'application/json' })); a.download = `${(sheet.name || 'character').replace(/[^\w\- ]+/g, '').trim() || 'character'}.chronicle-character.json`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000) }}>Export this character</button>
         </div>
       </header>

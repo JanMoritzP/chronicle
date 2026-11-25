@@ -1,14 +1,14 @@
 {
   "id": "image-administration",
   "name": "Image administration",
-  "version": "2.2.0",
-  "description": "Requests a picture from the image administration program for every empty picture slot (page type pictures, pictures in page text, detail maps, tokens, handouts, scene backgrounds), and receives the pictures people upload there. Talks HTTP only; it never needs access to the other program's files.",
+  "version": "2.3.0",
+  "description": "Requests a picture from the image administration program for every empty picture slot (page type pictures, the banner, portrait and token of player characters, pictures in page text, detail maps, tokens, handouts, scene backgrounds), and receives the pictures people upload there. Talks HTTP only; it never needs access to the other program's files.",
   "main": "index.mjs",
   "config": [
     { "key": "url", "label": "Image administration address", "type": "text", "default": "http://127.0.0.1:4870", "help": "Where the image administration server runs, for example http://admin-host:4870." },
     { "key": "adminToken", "label": "Admin token", "type": "text", "help": "Sent as a Bearer token on every call to image administration. Never make that server public." },
     { "key": "webhookToken", "label": "Webhook token", "type": "text", "help": "Image administration must be started with --webhook <this Chronicle address>/api/plugins/image-administration/webhook --webhook-token <this value>. Without it pushed images are refused and pictures arrive by catch-up only." },
-    { "key": "requestPages", "label": "Request page type pictures", "type": "boolean", "default": true, "help": "Every empty image block of a page's special page type: the portrait or banner, and the further pictures of custom types." },
+    { "key": "requestPages", "label": "Request page type pictures", "type": "boolean", "default": true, "help": "Every empty image block of a page's special page type: the portrait or banner, and the further pictures of custom types. Player characters also ask for a banner, a portrait and a token picture." },
     { "key": "requestText", "label": "Request pictures inside page text", "type": "boolean", "default": true, "help": "A paragraph that is only [image: what it shows] asks for a picture; it is replaced by the picture when it arrives." },
     { "key": "requestMaps", "label": "Request detail maps", "type": "boolean", "default": true, "help": "A map pin that points at a page but opens no map gets a tiled detail map, as a child of the map with the pin." },
     { "key": "requestTokens", "label": "Request token pictures", "type": "boolean", "default": true, "help": "One request per token name; the picture goes to every token of that name that has none." },

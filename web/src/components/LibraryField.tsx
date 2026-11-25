@@ -1,7 +1,9 @@
 import { X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { fuzzy, highlight } from '../lib/fuzzy'
+import { typeOfCategory } from '../lib/homebrew'
 import { LIBRARY_CATEGORIES, searchLibrary, useLibrary } from '../lib/library'
+import { HomebrewDialog } from './Homebrew'
 import type { FieldDef } from '../lib/pageTypes'
 import { useStore } from '../store'
 
@@ -63,6 +65,10 @@ export function LibraryField({ def, value, readOnly, onChange }: { def: FieldDef
   const category = def.library!
   const plural = LIBRARY_CATEGORIES.find((c) => c.id === category)?.plural.toLowerCase() ?? 'entries'
   const full = !def.multi && refs.length >= 1
+  const label = LIBRARY_CATEGORIES.find((c) => c.id === category)?.label.toLowerCase() ?? 'entry'
+  const canMake = useStore((s) => s.user?.role !== 'viewer')
+  const system = useStore((s) => s.workspaces.find((w) => w.id === s.wsId)?.settings?.system ?? '5e')
+  const [making, setMaking] = useState<string | null>(null)
 
   useEffect(() => {
     if (!open) return
@@ -76,9 +82,11 @@ export function LibraryField({ def, value, readOnly, onChange }: { def: FieldDef
     const taken = new Set(refs.map((r) => r.pageId ?? r.libKey ?? `t:${r.name.toLowerCase()}`))
     const out: Option[] = []
     const imported = new Set<string>()
+    const ownType = typeOfCategory(category)
     for (const p of pages) {
-      if (!p.library?.startsWith(`${category}:`)) continue
-      imported.add(p.library)
+      // entries brought into the world, and homebrew pages of the same special page type
+      if (!p.library?.startsWith(`${category}:`) && !(ownType && p.type === ownType)) continue
+      if (p.library) imported.add(p.library)
       const h = fuzzy(q, p.title)
       if (!h || taken.has(p.id)) continue
       out.push({ key: `p:${p.id}`, label: p.title, sub: 'Page in this world', indices: h.indices, ref: { name: p.title, pageId: p.id } })
@@ -89,11 +97,14 @@ export function LibraryField({ def, value, readOnly, onChange }: { def: FieldDef
     }
     const text = q.trim()
     if (text && !out.some((o) => o.label.toLowerCase() === text.toLowerCase())) out.push({ key: 'text', label: `Use “${text}” as text`, sub: 'No link', indices: [], ref: { name: text } })
-    return out.slice(0, 10)
-  }, [open, q, pages, lib.index, category, refs])
+    const shown = out.slice(0, canMake ? 9 : 10)
+    if (canMake) shown.push({ key: 'new', label: `New ${label}${text ? ` “${text}”` : ''}…`, sub: 'Make it yourself, as a page of this world or in a library', indices: [], ref: { name: text } })
+    return shown
+  }, [open, q, pages, lib.index, category, refs, canMake, label])
 
   const add = (o?: Option) => {
     if (!o) return
+    if (o.key === 'new') { setMaking(o.ref.name); setOpen(false); return }
     onChange([...refs, o.ref])
     setQ(''); setIdx(0)
     if (!def.multi) setOpen(false)
@@ -129,6 +140,11 @@ export function LibraryField({ def, value, readOnly, onChange }: { def: FieldDef
           ))}
         </div>
       )}
+      {making != null && <HomebrewDialog category={category} initialName={making} ruleset={system === '5e-2024' ? '5e-2024' : '5e'} onClose={() => setMaking(null)} onDone={(m) => {
+        setMaking(null)
+        setQ('')
+        onChange([...refs, m.pageId ? { name: m.name, pageId: m.pageId } : { name: m.name, libKey: m.key }])
+      }} />}
     </div>
   )
 }

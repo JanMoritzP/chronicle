@@ -463,7 +463,7 @@ export interface ImportPlan {
   content: any
 }
 
-const PAGE_TYPE: Record<string, string> = {
+export const PAGE_TYPE: Record<string, string> = {
   creature: 'monster', spell: 'spell', item: 'item', magicitem: 'item', class: 'class', species: 'species', background: 'background', feat: 'feat', condition: 'condition',
   // terms (weapon properties, damage types, skills, rules...) share one page type
   weaponproperty: 'rule', damagetype: 'rule', skill: 'rule', ability: 'rule', school: 'rule', language: 'rule', creaturetype: 'rule', alignment: 'rule', size: 'rule', rule: 'rule',

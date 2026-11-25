@@ -271,6 +271,33 @@ A read-only reference library of everything Open5e publishes (api.open5e.com/v2)
 - Hover cards: resting the mouse on a link to a library entry (a name in text, a chip in a linked field, a library link in a page) shows a card like the one for page links: the stat block for creatures, spells and items, else the facts and the start of the text. Clicking the card opens the entry. Links inside a card do not open further cards. The card is placed from the link's position when it opens; if the list was redrawn in the meantime (a page opened, links refreshed) the link is gone and no card opens, and a card whose link disappears closes by itself (before, it could land in the top left corner and stay there, covering "New page").
 - A class page's saving throws and primary ability are linked fields (ability). Pages imported before this change keep their text; "Link library terms" adds the links.
 
+## Homebrew libraries (built)
+
+Libraries of your own next to Open5e: classes, species, backgrounds, monsters, spells and any other page, made in Chronicle or brought in as a file, and offered to every world on the server.
+
+**What it does.**
+- **Make a library.** The Library view lists "Your libraries" above the search. "+" makes one; the arrow imports a file. A library's page shows its description, author and license (changeable by who made it and by the owner), its entries, "New <kind>" to make an entry right there, **Export** (one file with its pictures) and **Delete**.
+- **Put a page in.** Every page's menu has "Put in a library…": choose a library (or name a new one) and the kind of entry. The page's type, fields, sheet, rules, text and pictures are copied. The page remembers its entry (`props.library`), so the menu then reads "Update in the library…" and pushing again updates the same entry. Links to other pages of the world keep their names and lose their page; todos stay behind.
+- **Homebrew in place.** Wherever a class, species or background is chosen, "New class" (species, background) opens a dialog: the name, a description and, for these three, the numbers the character builder needs (hit die, main abilities, saves, skills, armor class, features, attacks, gear, starting spells; size, speed, darkvision, raised scores, skills, traits; skills, tools, raised scores and feat). It is kept as a page of the world, a page and a library entry, or only a library entry. The places: the character builder (it is chosen at once), the species and background lines of a character sheet in edit mode (applied to the sheet), and every linked field ("New species “Tidekin”…" under the suggestions, linked when made), which covers the Person page's Race and Class / Role.
+- **The builder** offers the rules' own classes, species and backgrounds, then the homebrew ones: pages of this world of type Class, Species or Background that have rules, and library entries with rules. A page made from a library entry stands in for it. A class, species or background page shows its rules ("In the character builder") with "Change the rules", and one without rules offers "Add rules for the builder".
+- **Adding an entry to a world** works as for Open5e. Library pictures are uploaded into the world (so upload hooks and plugins see them) and the page gets them.
+- Search, `{{` links, hover cards and linked fields find homebrew like any entry; the source shows the library's name.
+
+**Data.** In `DATA_DIR/library.db`, outside backups like the Open5e data: `collections` (id, name, description, author, license, created_by), `homebrew` (key `<category>:hb.<library>.<slug>`, the entry as JSON), `assets` (pictures by content hash, served at `/api/library/assets/:id`, removed when no entry uses them). An Open5e refresh never touches them. The index version moves with a homebrew change too (`meta.homebrewAt`), so clients reload it. Pages keep `props.rules` and `props.library`; both are set through `propsPatch`, and players editing their own character cannot change them. The file format is in `docs/LIBRARY.md`.
+
+**API.** `GET/POST /api/library/collections`, `GET/PATCH/DELETE /api/library/collections/:id`, `PUT /api/library/collections/:id/entries` (`{ entry, key? }`), `DELETE /api/library/entries/:key` (homebrew only), `GET /api/library/collections/:id/export`, `POST /api/library/import` (`{ file, replace }`, 409 when the id exists), `POST /api/library/assets` (raw picture bytes), `GET /api/library/assets/:id`, `GET /api/library/builder`. Editors make and add; deleting is for who made the library and the owner. Code: `server/src/homebrew.ts`, `server/src/routes/homebrew.ts`, `web/src/lib/homebrew.ts`, `web/src/components/Homebrew.tsx`.
+
+**Tests.** `scripts/smoke-homebrew.mjs`, homebrew cases in `scripts/test-builder.ts`, `e2e/tests/homebrew.spec.ts`.
+
+**Not done.** Images inside entries on publicly shared pages need a signed-in viewer. Library entries are not part of backups: export a library to keep it. Open5e classes and species are not offered in the builder.
+
+## Character pictures (built)
+
+A player character has three pictures besides the page text: a wide **banner** that fills the top of the sheet and fades out instead of the usual colour, the **portrait** (the page thumbnail, shown round in the sheet's header) and the **token** picture.
+- On the character page: "Edit sheet" shows Banner, Portrait and Token with a picture each; click to upload, × to remove. The Person page's portrait block is the same portrait.
+- Stored in the page props: `portrait` as before, `data.banner` and `data.token` (the same place image blocks keep their pictures), so the image administration plugin requests and fills them: every character page (a sheet of kind `character`) has the slots `banner` (wide), `portrait` (square) and `token` (square at the plugin's token size).
+- The tabletop: linking a token to a page gives it the page's token picture, else its portrait. In the token's Appearance, "Use the page’s token picture" and "Make it the page’s token picture". When the page's token picture changes (in the app or by the plugin), the tokens linked to the page that wore the old one, or none, get the new one.
+
 ## Several people at once (built)
 
 What it does: more than one person works in the same Chronicle at the same time, edits the same page together, and an admin decides who may open which world.

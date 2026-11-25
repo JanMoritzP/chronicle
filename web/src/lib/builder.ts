@@ -8,7 +8,7 @@ import { allSlots } from './levelup'
 export type Ruleset = '5e' | '5e-2024'
 
 export interface ClassDef {
-  id: string; name: string; die: number; primary: Ability[]; saves: [Ability, Ability]
+  id: string; name: string; die: number; primary: Ability[]; saves: Ability[]
   skills: { count: number; from: string[] | 'any' }
   spell?: Ability
   /** armor class of the starting kit, from the final ability scores */
@@ -94,7 +94,9 @@ export const CLASSES: ClassDef[] = [
 ]
 
 export interface SpeciesDef {
-  id: string; name: string; size: 'Small' | 'Medium'; speed: number; darkvision: number
+  id: string; name: string; size: string; speed: number; darkvision: number
+  /** extra hit points per level (the dwarf's toughness) */
+  hpPerLevel?: number
   /** 2014 only: the scores the species raises */
   asi?: Partial<Record<Ability, number>>
   /** 2014 half-elf: two more scores of the player's choice raised by 1 */
@@ -105,7 +107,7 @@ export interface SpeciesDef {
 }
 
 export const SPECIES_2014: SpeciesDef[] = [
-  { id: 'dwarf', name: 'Hill dwarf', size: 'Medium', speed: 25, darkvision: 60, asi: { con: 2, wis: 1 }, languages: 'Common, Dwarvish', traits: [{ name: 'Dwarven Resilience', text: 'Advantage on saves against poison, resistance to poison damage.' }, { name: 'Dwarven Toughness', text: '+1 hit point per level (already added).' }, { name: 'Stonecunning', text: 'Double proficiency on History checks about stonework.' }] },
+  { id: 'dwarf', name: 'Hill dwarf', size: 'Medium', speed: 25, darkvision: 60, hpPerLevel: 1, asi: { con: 2, wis: 1 }, languages: 'Common, Dwarvish', traits: [{ name: 'Dwarven Resilience', text: 'Advantage on saves against poison, resistance to poison damage.' }, { name: 'Dwarven Toughness', text: '+1 hit point per level (already added).' }, { name: 'Stonecunning', text: 'Double proficiency on History checks about stonework.' }] },
   { id: 'elf', name: 'High elf', size: 'Medium', speed: 30, darkvision: 60, asi: { dex: 2, int: 1 }, languages: 'Common, Elvish', skills: ['perception'], traits: [{ name: 'Fey Ancestry', text: 'Advantage on saves against being charmed; magic cannot put you to sleep.' }, { name: 'Trance', text: 'Four hours of meditation instead of sleep.' }, { name: 'Cantrip', text: 'One wizard cantrip, cast with Intelligence.' }] },
   { id: 'halfling', name: 'Lightfoot halfling', size: 'Small', speed: 25, darkvision: 0, asi: { dex: 2, cha: 1 }, languages: 'Common, Halfling', traits: [{ name: 'Lucky', text: 'Reroll a natural 1 on an attack roll, ability check or saving throw.' }, { name: 'Brave', text: 'Advantage on saves against being frightened.' }, { name: 'Naturally Stealthy', text: 'Hide behind a creature at least one size larger.' }] },
   { id: 'human', name: 'Human', size: 'Medium', speed: 30, darkvision: 0, asi: { str: 1, dex: 1, con: 1, int: 1, wis: 1, cha: 1 }, languages: 'Common and one more', traits: [] },
@@ -119,7 +121,7 @@ export const SPECIES_2014: SpeciesDef[] = [
 export const SPECIES_2024: SpeciesDef[] = [
   { id: 'aasimar', name: 'Aasimar', size: 'Medium', speed: 30, darkvision: 60, languages: 'Common and two more', traits: [{ name: 'Celestial Resistance', text: 'Resistance to necrotic and radiant damage.' }, { name: 'Healing Hands', text: 'Heal a touched creature by d4 per proficiency bonus, once per long rest.' }] },
   { id: 'dragonborn', name: 'Dragonborn', size: 'Medium', speed: 30, darkvision: 60, languages: 'Common and two more', traits: [{ name: 'Breath Weapon', text: 'Replace one attack with a 15-foot cone or 30-foot line: 1d10 damage, Dexterity save for half. Proficiency bonus times per long rest.' }, { name: 'Damage Resistance', text: 'Resistance to the damage type of your ancestry.' }] },
-  { id: 'dwarf', name: 'Dwarf', size: 'Medium', speed: 30, darkvision: 120, languages: 'Common and two more', traits: [{ name: 'Dwarven Resilience', text: 'Resistance to poison damage, advantage on saves against being poisoned.' }, { name: 'Dwarven Toughness', text: '+1 hit point per level (already added).' }, { name: 'Stonecunning', text: 'Tremorsense 60 feet as a bonus action, proficiency bonus times per long rest.' }] },
+  { id: 'dwarf', name: 'Dwarf', size: 'Medium', speed: 30, darkvision: 120, hpPerLevel: 1, languages: 'Common and two more', traits: [{ name: 'Dwarven Resilience', text: 'Resistance to poison damage, advantage on saves against being poisoned.' }, { name: 'Dwarven Toughness', text: '+1 hit point per level (already added).' }, { name: 'Stonecunning', text: 'Tremorsense 60 feet as a bonus action, proficiency bonus times per long rest.' }] },
   { id: 'elf', name: 'Elf', size: 'Medium', speed: 30, darkvision: 60, languages: 'Common and two more', skills: ['perception'], traits: [{ name: 'Fey Ancestry', text: 'Advantage on saves against being charmed.' }, { name: 'Trance', text: 'A long rest in four hours.' }, { name: 'Elven Lineage', text: 'A cantrip of your lineage (drow, high elf or wood elf).' }] },
   { id: 'gnome', name: 'Gnome', size: 'Small', speed: 30, darkvision: 60, languages: 'Common and two more', traits: [{ name: 'Gnomish Cunning', text: 'Advantage on Intelligence, Wisdom and Charisma saves.' }] },
   { id: 'goliath', name: 'Goliath', size: 'Medium', speed: 35, darkvision: 0, languages: 'Common and two more', traits: [{ name: 'Giant Ancestry', text: 'A boon of your giant kin, proficiency bonus times per long rest.' }, { name: 'Powerful Build', text: 'Advantage on checks to end being grappled; count as one size larger for carrying.' }] },
@@ -130,9 +132,9 @@ export const SPECIES_2024: SpeciesDef[] = [
 ]
 
 export interface BackgroundDef {
-  id: string; name: string; skills: [string, string]; tools: string
+  id: string; name: string; skills: string[]; tools: string
   /** 2024: the three scores the background may raise (+2/+1 or +1/+1/+1) and its Origin feat */
-  abilities?: [Ability, Ability, Ability]; feat?: string
+  abilities?: Ability[]; feat?: string
 }
 
 export const BACKGROUNDS_2014: BackgroundDef[] = [
@@ -173,6 +175,14 @@ export const BACKGROUNDS_2024: BackgroundDef[] = [
 export const speciesFor = (r: Ruleset) => (r === '5e-2024' ? SPECIES_2024 : SPECIES_2014)
 export const backgroundsFor = (r: Ruleset) => (r === '5e-2024' ? BACKGROUNDS_2024 : BACKGROUNDS_2014)
 
+/** What can be chosen: the rules' own classes, species and backgrounds, and the homebrew ones of the world and its libraries. */
+export interface Catalog { classes: ClassDef[]; species: SpeciesDef[]; backgrounds: BackgroundDef[] }
+export const catalogFor = (r: Ruleset, extra?: Partial<Catalog>): Catalog => ({
+  classes: [...CLASSES, ...(extra?.classes ?? [])],
+  species: [...speciesFor(r), ...(extra?.species ?? [])],
+  backgrounds: [...backgroundsFor(r), ...(extra?.backgrounds ?? [])],
+})
+
 // ---------- ability scores ----------
 
 export const STANDARD_ARRAY = [15, 14, 13, 12, 10, 8]
@@ -212,11 +222,11 @@ export interface Choices {
 }
 
 /** The final scores: the base, plus what the species (2014) or the background (2024) adds. Never above 20. */
-export function finalScores(c: Choices): Record<Ability, number> {
+export function finalScores(c: Choices, cat: Catalog = catalogFor(c.ruleset)): Record<Ability, number> {
   const out = { ...c.base }
   const add = (a: Ability, n: number) => { out[a] = Math.min(20, out[a] + n) }
   if (c.ruleset === '5e-2024') {
-    const bg = BACKGROUNDS_2024.find((b) => b.id === c.backgroundId)
+    const bg = cat.backgrounds.find((b) => b.id === c.backgroundId)
     if (bg?.abilities) {
       if (c.bonus.spread) bg.abilities.forEach((a) => add(a, 1))
       else {
@@ -225,7 +235,7 @@ export function finalScores(c: Choices): Record<Ability, number> {
       }
     }
   } else {
-    const sp = SPECIES_2014.find((s) => s.id === c.speciesId)
+    const sp = cat.species.find((s) => s.id === c.speciesId)
     for (const [a, n] of Object.entries(sp?.asi ?? {})) add(a as Ability, n)
     for (const a of (c.bonus.free ?? []).slice(0, sp?.freeAsi ?? 0)) if (!sp?.asi?.[a]) add(a, 1)
   }
@@ -233,23 +243,24 @@ export function finalScores(c: Choices): Record<Ability, number> {
 }
 
 /** Skills a character gets without choosing: from the background and the species. */
-export function grantedSkills(c: Pick<Choices, 'ruleset' | 'speciesId' | 'backgroundId'>): string[] {
-  const bg = backgroundsFor(c.ruleset).find((b) => b.id === c.backgroundId)
-  const sp = speciesFor(c.ruleset).find((s) => s.id === c.speciesId)
+export function grantedSkills(c: Pick<Choices, 'ruleset' | 'speciesId' | 'backgroundId'>, cat: Catalog = catalogFor(c.ruleset)): string[] {
+  const bg = cat.backgrounds.find((b) => b.id === c.backgroundId)
+  const sp = cat.species.find((s) => s.id === c.speciesId)
   return [...new Set([...(bg?.skills ?? []), ...(sp?.skills ?? [])])]
 }
 
 /** What is still wrong with the choices, as sentences for the person making the character. Empty when it can be made. */
-export function problems(c: Choices): string[] {
+export function problems(c: Choices, cat: Catalog = catalogFor(c.ruleset)): string[] {
   const out: string[] = []
-  const cls = CLASSES.find((x) => x.id === c.classId)
+  const cls = cat.classes.find((x) => x.id === c.classId)
+  const bg = cat.backgrounds.find((b) => b.id === c.backgroundId)
   if (!c.name.trim()) out.push('Give the character a name.')
   if (!cls) out.push('Choose a class.')
-  if (!speciesFor(c.ruleset).some((s) => s.id === c.speciesId)) out.push('Choose a species.')
-  if (!backgroundsFor(c.ruleset).some((b) => b.id === c.backgroundId)) out.push('Choose a background.')
+  if (!cat.species.some((s) => s.id === c.speciesId)) out.push('Choose a species.')
+  if (!bg) out.push('Choose a background.')
   if (ABILITIES.some((a) => !(c.base[a] >= 3 && c.base[a] <= 20))) out.push('Every ability score is between 3 and 20.')
   if (cls && c.skills.length !== cls.skills.count) out.push(`Choose ${cls.skills.count} skills from the ${cls.name.toLowerCase()} list (${c.skills.length} chosen).`)
-  if (c.ruleset === '5e-2024' && !c.bonus.spread && (!c.bonus.plus2 || !c.bonus.plus1 || c.bonus.plus1 === c.bonus.plus2)) out.push('Choose which scores the background raises.')
+  if (c.ruleset === '5e-2024' && bg?.abilities?.length && !c.bonus.spread && (!c.bonus.plus2 || !c.bonus.plus1 || c.bonus.plus1 === c.bonus.plus2)) out.push('Choose which scores the background raises.')
   return out
 }
 
@@ -257,16 +268,16 @@ const attackBonus = (a: 'str' | 'dex' | 'finesse', m: Record<Ability, number>) =
 const sign = (n: number) => (n >= 0 ? `+${n}` : `${n}`)
 
 /** The level 1 character the choices describe, as a sheet. */
-export function buildCharacter(c: Choices): Sheet {
-  const cls = CLASSES.find((x) => x.id === c.classId)!
-  const species = speciesFor(c.ruleset).find((s) => s.id === c.speciesId)!
-  const bg = backgroundsFor(c.ruleset).find((b) => b.id === c.backgroundId)!
-  const scores = finalScores(c)
+export function buildCharacter(c: Choices, cat: Catalog = catalogFor(c.ruleset)): Sheet {
+  const cls = cat.classes.find((x) => x.id === c.classId)!
+  const species = cat.species.find((s) => s.id === c.speciesId)!
+  const bg = cat.backgrounds.find((b) => b.id === c.backgroundId)!
+  const scores = finalScores(c, cat)
   const mods = Object.fromEntries(ABILITIES.map((a) => [a, abilityMod(scores[a])])) as Record<Ability, number>
-  const tough = species.id === 'dwarf' ? 1 : 0
+  const tough = species.hpPerLevel ?? 0
   const hp = Math.max(1, cls.die + mods.con + tough)
   const skills: Record<string, Proficiency> = {}
-  for (const s of [...grantedSkills(c), ...c.skills]) skills[s] = 'p'
+  for (const s of [...grantedSkills(c, cat), ...c.skills]) skills[s] = 'p'
   const ac = cls.ac(mods)
   const fighterDefense = cls.id === 'fighter'
   const pb = 2

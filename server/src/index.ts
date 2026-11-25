@@ -29,6 +29,7 @@ import { pageTypeRoutes } from './routes/pagetypes.js'
 import { statTemplateRoutes } from './routes/stattemplates.js'
 import { uploadRoutes } from './routes/uploads.js'
 import { libraryRoutes } from './routes/library.js'
+import { homebrewRoutes } from './routes/homebrew.js'
 import { encounterRoutes } from './routes/encounters.js'
 import { inviteRoutes } from './routes/invites.js'
 import { macroRoutes } from './routes/macros.js'
@@ -88,6 +89,7 @@ await app.register(pageTypeRoutes)
 await app.register(statTemplateRoutes)
 await app.register(exportRoutes)
 await app.register(libraryRoutes)
+await app.register(homebrewRoutes)
 await app.register(encounterRoutes)
 await app.register(inviteRoutes)
 await app.register(macroRoutes)

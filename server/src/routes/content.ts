@@ -9,6 +9,7 @@ import { templatesOf } from './templates.js'
 import { pageTypesOf } from './pagetypes.js'
 import { statTemplatesOf } from './stattemplates.js'
 import { memberIds, playersOf } from '../players.js'
+import { tableSlots } from '../table.js'
 import { contentHooks, ensureBaseline, pageDerived, pageSummary, portraitOf, recordActivity, recordRevision, reindexLinks, relinkByName, setTags, uid, type PageRow } from '../pages.js'
 
 const docSchema = z.custom<DocNode>((v) => typeof v === 'object' && v !== null && (v as DocNode).type === 'doc')
@@ -274,6 +275,10 @@ export async function contentRoutes(app: FastifyInstance) {
         sheet: z.record(z.string(), z.any()).optional(),
         /** The accounts that play this character: they may change its text and sheet, and move its tokens. */
         players: z.array(z.string().max(64)).max(12).optional(),
+        /** What the character builder needs of a homebrew class, species or background (web/src/lib/homebrew.ts). */
+        rules: z.record(z.string(), z.any()).nullable().optional(),
+        /** The library entry the page was made from or was put into. */
+        library: z.string().max(200).nullable().optional(),
       }).optional(),
     }).safeParse(req.body)
     if (!b.success) return reply.code(400).send({ error: 'bad request' })
@@ -281,7 +286,7 @@ export async function contentRoutes(app: FastifyInstance) {
     if (!p) return reply.code(404).send({ error: 'not found' })
     const d = b.data
     // someone who only reads the world changes the page of their own character: its title, text and sheet, nothing else
-    if (req.playerEdit && (d.icon !== undefined || d.folderId !== undefined || d.aliases || d.tags || d.props || d.propsPatch?.type !== undefined || d.propsPatch?.players)) {
+    if (req.playerEdit && (d.icon !== undefined || d.folderId !== undefined || d.aliases || d.tags || d.props || d.propsPatch?.type !== undefined || d.propsPatch?.players || d.propsPatch?.library !== undefined || d.propsPatch?.rules !== undefined)) {
       return reply.code(403).send({ error: 'Players can change the text and sheet of their own character only.' })
     }
     if (d.propsPatch?.players) {
@@ -289,6 +294,7 @@ export async function contentRoutes(app: FastifyInstance) {
       if (d.propsPatch.players.some((u) => !members.has(u))) return reply.code(400).send({ error: 'Only members of this world can play a character in it.' })
     }
     const playersBefore = playersOf(p.props)
+    const tokenBefore = (() => { try { const t = JSON.parse(p.props)?.data?.token; return typeof t === 'string' ? t : '' } catch { return '' } })()
     if (d.folderId && !sameWorld('folders', d.folderId, p.workspace_id)) return reply.code(400).send({ error: 'bad request' })
     if (d.props && !validSheetProps(d.props)) return reply.code(400).send({ error: 'bad request' })
     if (d.propsPatch) {
@@ -305,11 +311,12 @@ export async function contentRoutes(app: FastifyInstance) {
         if (!sheet) return reply.code(400).send({ error: 'bad request' })
         merged.sheet = sheet
       }
-      for (const k of ['portrait', 'type'] as const) {
+      for (const k of ['portrait', 'type', 'library'] as const) {
         if (pp[k] === undefined) continue
         if (pp[k]) merged[k] = pp[k]; else delete merged[k]
       }
       if (pp.players) { if (pp.players.length) merged.players = [...new Set(pp.players)]; else delete merged.players }
+      if (pp.rules !== undefined) { if (pp.rules) merged.rules = pp.rules; else delete merged.rules }
       d.props = merged
     }
     if (d.content) ensureHeadingIds(d.content)
@@ -341,6 +348,9 @@ export async function contentRoutes(app: FastifyInstance) {
     if (d.content) contentHooks.replaced(id)
     const playersAfter = playersOf(d.props ?? p.props)
     if (playersAfter.join() !== playersBefore.join()) contentHooks.playersChanged(p.workspace_id, id, playersBefore, playersAfter)
+    // the character's tokens on the table follow a new token picture
+    const tokenAfter = d.propsPatch?.data?.token
+    if (typeof tokenAfter === 'string' && tokenAfter && tokenAfter !== tokenBefore) tableSlots.setPageTokenImages(p.workspace_id, id, tokenAfter, tokenBefore)
     return pageDerived(id)
   })
 

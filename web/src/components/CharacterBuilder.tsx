@@ -1,9 +1,12 @@
-import { Check, ChevronLeft, ChevronRight, Dices, X } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, Dices, Plus, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import {
-  backgroundsFor, buildCharacter, CLASSES, finalScores, grantedSkills, POINT_BUDGET, POINT_COST, pointsSpent, problems, rollScores, speciesFor, STANDARD_ARRAY, suggestedScores,
+  buildCharacter, finalScores, grantedSkills, POINT_BUDGET, POINT_COST, pointsSpent, problems, rollScores, STANDARD_ARRAY, suggestedScores,
   type Choices, type Ruleset,
 } from '../lib/builder'
+import { classDef, homebrewCatalog, loadHomebrew, type HomebrewOption, type RulesCategory } from '../lib/homebrew'
+import { useStore } from '../store'
+import { HomebrewDialog } from './Homebrew'
 import { ABILITIES, abilityMod, signed, SKILLS, type Ability, type Sheet } from '../lib/sheet'
 import { useRules } from '../lib/pack'
 import { Select } from './Select'
@@ -28,58 +31,72 @@ export function CharacterBuilder({ ruleset, name, onCreate, onClose }: { ruleset
     base: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 }, bonus: {}, skills: [], alignment: '',
   })
   const set = (patch: Partial<Choices>) => setC((x) => ({ ...x, ...patch }))
-  const cls = CLASSES.find((x) => x.id === c.classId)
-  const species = speciesFor(ruleset).find((s) => s.id === c.speciesId)
-  const bg = backgroundsFor(ruleset).find((b) => b.id === c.backgroundId)
-  const granted = grantedSkills(c)
-  const scores = finalScores(c)
-  const issues = problems(c)
-  const preview = useMemo(() => (issues.length ? null : buildCharacter(c)), [c, issues.length])
+  // homebrew classes, species and backgrounds of the world and of the libraries sit next to the rules' own
+  const pages = useStore((s) => s.data.pages)
+  const canMake = useStore((s) => s.user?.role !== 'viewer')
+  const [homebrew, setHomebrew] = useState<HomebrewOption[]>([])
+  const [making, setMaking] = useState<RulesCategory | null>(null)
+  useEffect(() => { let live = true; loadHomebrew(pages).then((h) => live && setHomebrew(h)).catch(() => {}); return () => { live = false } }, [])
+  const cat = useMemo(() => homebrewCatalog(ruleset, homebrew), [ruleset, homebrew])
+  const fromOf = (id: string) => homebrew.find((h) => h.id === id)?.from
+  const cls = cat.classes.find((x) => x.id === c.classId)
+  const species = cat.species.find((s) => s.id === c.speciesId)
+  const bg = cat.backgrounds.find((b) => b.id === c.backgroundId)
+  const granted = grantedSkills(c, cat)
+  const scores = finalScores(c, cat)
+  const issues = problems(c, cat)
+  const preview = useMemo(() => (issues.length ? null : buildCharacter(c, cat)), [c, cat, issues.length])
 
   useEffect(() => { const on = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }; window.addEventListener('keydown', on); return () => window.removeEventListener('keydown', on) }, [onClose])
 
   const pickClass = (id: string) => {
-    const k = CLASSES.find((x) => x.id === id)!
+    const k = cat.classes.find((x) => x.id === id)!
     // the scores follow the class until the person places them by hand
     set({ classId: id, skills: [], ...(method === 'standard' && !c.classId ? { base: suggestedScores(k) } : {}) })
   }
-  const done = [!!cls, !!species, !!bg, ABILITIES.every((a) => c.base[a] >= 3) && (ruleset !== '5e-2024' || !!c.bonus.spread || (!!c.bonus.plus2 && !!c.bonus.plus1 && c.bonus.plus1 !== c.bonus.plus2)), !!cls && c.skills.length === cls.skills.count, !issues.length]
+  const done = [!!cls, !!species, !!bg, ABILITIES.every((a) => c.base[a] >= 3) && (ruleset !== '5e-2024' || !bg?.abilities?.length || !!c.bonus.spread || (!!c.bonus.plus2 && !!c.bonus.plus1 && c.bonus.plus1 !== c.bonus.plus2)), !!cls && c.skills.length === cls.skills.count, !issues.length]
   const canNext = done[step]
 
   // ---- the steps ----
   const classStep = (
     <div className="cb-cards" role="radiogroup" aria-label="Class">
-      {CLASSES.map((k) => (
+      {cat.classes.map((k) => (
         <button key={k.id} role="radio" aria-checked={c.classId === k.id} className={`cb-card${c.classId === k.id ? ' on' : ''}`} onClick={() => pickClass(k.id)}>
           <b>{k.name}</b>
+          {fromOf(k.id) && <span className="hb-from">Homebrew · {fromOf(k.id)}</span>}
           <span className="muted">d{k.die} hit die · {k.primary.map((a) => an[a].name).join(' and ')}{k.spell ? ' · casts spells' : ''}</span>
-          <small>{k.features[0].name}: {k.features[0].text}</small>
+          <small>{k.features[0] ? `${k.features[0].name}: ${k.features[0].text}` : 'No features yet'}</small>
         </button>
       ))}
+      {canMake && <button className="cb-card hb-new" onClick={() => setMaking('class')}><Plus size={16} /><b>New class</b><small>Make a class of your own, right here.</small></button>}
     </div>
   )
   const speciesStep = (
     <div className="cb-cards" role="radiogroup" aria-label="Species">
-      {speciesFor(ruleset).map((s) => (
+      {cat.species.map((s) => (
         <button key={s.id} role="radio" aria-checked={c.speciesId === s.id} className={`cb-card${c.speciesId === s.id ? ' on' : ''}`} onClick={() => set({ speciesId: s.id, bonus: { ...c.bonus, free: [] } })}>
           <b>{s.name}</b>
+          {fromOf(s.id) && <span className="hb-from">Homebrew · {fromOf(s.id)}</span>}
           <span className="muted">{s.size}, speed {s.speed} ft{s.darkvision ? `, darkvision ${s.darkvision} ft` : ''}</span>
           {s.asi && <small>{Object.entries(s.asi).map(([a, n]) => `${an[a as Ability].short} +${n}`).join(', ')}{s.freeAsi ? `, and +1 to two others` : ''}</small>}
-          <small>{s.traits.map((t) => t.name).join(', ') || 'Versatile: +1 to every score'}</small>
+          <small>{s.traits.map((t) => t.name).join(', ') || (s.asi ? 'Versatile: +1 to every score' : 'No traits')}</small>
         </button>
       ))}
+      {canMake && <button className="cb-card hb-new" onClick={() => setMaking('species')}><Plus size={16} /><b>New species</b><small>Make a species of your own, right here.</small></button>}
     </div>
   )
   const backgroundStep = (
     <div className="cb-cards" role="radiogroup" aria-label="Background">
-      {backgroundsFor(ruleset).map((b) => (
+      {cat.backgrounds.map((b) => (
         <button key={b.id} role="radio" aria-checked={c.backgroundId === b.id} className={`cb-card${c.backgroundId === b.id ? ' on' : ''}`} onClick={() => set({ backgroundId: b.id, skills: c.skills.filter((s) => !b.skills.includes(s)), bonus: { ...c.bonus, plus2: undefined, plus1: undefined } })}>
           <b>{b.name}</b>
+          {fromOf(b.id) && <span className="hb-from">Homebrew · {fromOf(b.id)}</span>}
           <span className="muted">{b.skills.map(titleCase).join(' and ')}</span>
           {b.abilities && <small>Raises {b.abilities.map((a) => an[a].short).join(', ')}; feat: {b.feat}</small>}
           <small>{b.tools}</small>
         </button>
       ))}
+      {canMake && <button className="cb-card hb-new" onClick={() => setMaking('background')}><Plus size={16} /><b>New background</b><small>Make a background of your own, right here.</small></button>}
     </div>
   )
 
@@ -198,7 +215,7 @@ export function CharacterBuilder({ ruleset, name, onCreate, onClose }: { ruleset
           <div className="cb-stats">{ABILITIES.map((a) => <span key={a}><b>{preview.abilities[a]}</b>{an[a].short} {signed(abilityMod(preview.abilities[a]))}</span>)}</div>
           <p><b>Saves:</b> {preview.profs!.saves.map((a) => an[a].name).join(', ')}. <b>Skills:</b> {Object.keys(preview.profs!.skills).map(titleCase).join(', ')}.</p>
           <p><b>Features:</b> {preview.features.traits.map((f) => f.name).join(', ')}.</p>
-          <p><b>Gear:</b> {preview.inventory!.map((i) => (i.qty > 1 ? `${i.qty} ${i.name.toLowerCase()}` : i.name.toLowerCase())).join(', ')}.</p>
+          <p><b>Gear:</b> {preview.inventory!.length ? preview.inventory!.map((i) => (i.qty > 1 ? `${i.qty} ${i.name.toLowerCase()}` : i.name.toLowerCase())).join(', ') : 'none'}.</p>
           {preview.spellcasting?.ability && <p><b>Spells:</b> {an[preview.spellcasting.ability].name}; {(preview.spellcasting.slots[0]?.total ?? 0) || 'no'} first-level slots. A starting list is on the sheet to change.</p>}
         </div>
       )}
@@ -231,6 +248,17 @@ export function CharacterBuilder({ ruleset, name, onCreate, onClose }: { ruleset
             ? <button className="btn primary" disabled={!canNext} onClick={() => setStep(step + 1)}>Next <ChevronRight size={14} /></button>
             : <button className="btn primary" disabled={!preview} onClick={() => preview && onCreate(preview)}><Dices size={14} /> Create the character</button>}
         </footer>
+        {making && <HomebrewDialog category={making} ruleset={ruleset} onClose={() => setMaking(null)} onDone={(m) => {
+          const category = making
+          setMaking(null)
+          if (!m.rules) return
+          const opt: HomebrewOption = { id: m.pageId ? `page:${m.pageId}` : `lib:${m.key}`, category, name: m.name, rules: m.rules, from: m.pageId ? 'this world' : 'a library', pageId: m.pageId, libKey: m.key }
+          setHomebrew((h) => [...h, opt])
+          // what was just made is chosen
+          if (category === 'class') set({ classId: opt.id, skills: [], ...(method === 'standard' && !c.classId ? { base: suggestedScores(classDef(opt.id, m.name, m.rules)) } : {}) })
+          if (category === 'species') set({ speciesId: opt.id, bonus: { ...c.bonus, free: [] } })
+          if (category === 'background') set({ backgroundId: opt.id, bonus: { ...c.bonus, plus2: undefined, plus1: undefined } })
+        }} />}
       </div>
     </div>
   )

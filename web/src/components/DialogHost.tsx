@@ -18,7 +18,7 @@ function Current({ req }: { req: DialogRequest }) {
   }, [req])
 
   return (
-    <div className="overlay dialog-overlay" onMouseDown={() => finish(false)}>
+    <div className="overlay dialog-overlay dialog-host" onMouseDown={() => finish(false)}>
       <form
         className="dialog small-dialog" role="dialog" aria-modal="true"
         onMouseDown={(e) => e.stopPropagation()}
