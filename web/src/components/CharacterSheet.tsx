@@ -18,7 +18,7 @@ import { Select } from './Select'
 // everything derived (modifiers, saves, skills, spell save DC) is worked out from the level and the proficiencies.
 
 const ABILITY_NAME: Record<Ability, string> = { str: 'Strength', dex: 'Dexterity', con: 'Constitution', int: 'Intelligence', wis: 'Wisdom', cha: 'Charisma' }
-const title = (s: string) => s.replace(/\b\w/g, (c) => c.toUpperCase())
+const title = (s: string) => s.replace(/\b\w+/g, (w) => (w === 'of' || w === 'and' ? w : w[0].toUpperCase() + w.slice(1)))
 
 export function Num({ value, onChange, label, min = 0, max, width = 56, placeholder }: { value: number | undefined; onChange: (n: number) => void; label: string; min?: number; max?: number; width?: number; placeholder?: string }) {
   return (
@@ -51,7 +51,10 @@ export function CharacterSheet({ sheet, set, roll }: { sheet: Sheet; set?: (patc
   // where each section goes, and which are left out, as the system pack says
   const place = (id: SheetSection) => ({ style: { order: rules.sheetLayout.order[id], ...(rules.sheetLayout.hidden.has(id) ? { display: 'none' } : {}) } as React.CSSProperties })
   const an = rules.abilities
-  const edit = !!set
+  // people who may change the sheet see it as a sheet to play from; the form opens with Edit sheet (a new, empty sheet opens as a form)
+  const canSet = !!set
+  const [editing, setEditing] = useState(() => !(sheet.classes ?? []).some((c) => c.name.trim()))
+  const edit = canSet && editing
   const pb = proficiency(sheet)
   const level = characterLevel(sheet)
   const classes = sheet.classes ?? []
@@ -104,16 +107,20 @@ export function CharacterSheet({ sheet, set, roll }: { sheet: Sheet; set?: (patc
           {edit && classes.length < 6 && <button className="btn sm" onClick={() => act({ classes: [...classes, { name: '', level: 1 }] })}><Plus size={12} /> Class</button>}
         </div>
         <div className="cs-line cs-facts">
-          <span><b>Level</b> {level}</span><span><b>Proficiency</b> {signed(pb)}</span>
-          <label className="sv-mini"><input type="checkbox" disabled={!edit} checked={!!sheet.inspiration} onChange={(e) => act({ inspiration: e.target.checked })} />{sheet.ruleset === '5e-2024' ? 'Heroic Inspiration' : 'Inspiration'}</label>
-          <label className="sv-mini">XP<Num label="Experience points" value={sheet.xp} width={80} onChange={(n) => act({ xp: n })} /></label>
-          {edit && <button className="btn sm" onClick={() => setLevelling((v) => !v)}>Level up</button>}
-          <button className="btn sm" title="Save this character as a file to share or keep" onClick={() => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(exportCharacter(sheet), null, 2)], { type: 'application/json' })); a.download = `${(sheet.name || 'character').replace(/[^\w\- ]+/g, '').trim() || 'character'}.chronicle-character.json`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000) }}>Export this character</button>
-          {edit && <button className="btn sm" title="Full hit points, every spell slot back, half the hit dice back" onClick={() => act(longRestPatch(sheet))}><Moon size={12} /> Long rest</button>}
+          <span className="cs-pill"><b>Level</b> {level}</span><span className="cs-pill"><b>Proficiency</b> {signed(pb)}</span>
+          <label className="cs-pill cs-insp"><input type="checkbox" disabled={!canSet} checked={!!sheet.inspiration} onChange={(e) => act({ inspiration: e.target.checked })} />{sheet.ruleset === '5e-2024' ? 'Heroic Inspiration' : 'Inspiration'}</label>
+          <label className="cs-pill">XP{canSet ? <Num label="Experience points" value={sheet.xp} width={70} onChange={(n) => act({ xp: n })} /> : <span>{sheet.xp ?? 0}</span>}</label>
+        </div>
+        <div className="cs-tools">
+          {canSet && <button className={`btn sm${editing ? ' primary' : ''}`} aria-pressed={editing} onClick={() => setEditing(!editing)}>{editing ? 'Done editing' : 'Edit sheet'}</button>}
+          {canSet && <button className="btn sm" onClick={() => setLevelling((v) => !v)}>Level up</button>}
+          {canSet && <button className="btn sm" title="Full hit points, every spell slot back, half the hit dice back" onClick={() => act(longRestPatch(sheet))}><Moon size={12} /> Long rest</button>}
+          <span className="grow" />
+          <button className="btn ghost sm" title="Save this character as a file to share or keep" onClick={() => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(exportCharacter(sheet), null, 2)], { type: 'application/json' })); a.download = `${(sheet.name || 'character').replace(/[^\w\- ]+/g, '').trim() || 'character'}.chronicle-character.json`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000) }}>Export this character</button>
         </div>
       </header>
 
-      {edit && levelling && <LevelUpPanel sheet={sheet} set={act} onClose={() => setLevelling(false)} />}
+      {canSet && levelling && <LevelUpPanel sheet={sheet} set={act} onClose={() => setLevelling(false)} />}
 
       <section className="cs-combat" aria-label="Combat" {...place('combat')}>
         <div className="cs-box"><Shield size={14} /><b>Armor class</b>{edit ? <Num label="Armor class" value={sheet.ac.value} max={99} onChange={(n) => act({ 'ac.value': n })} /> : <span>{sheet.ac.value}</span>}</div>
@@ -122,10 +129,10 @@ export function CharacterSheet({ sheet, set, roll }: { sheet: Sheet; set?: (patc
         <div className="cs-box cs-hp">
           <Heart size={14} /><b>Hit points</b>
           <div className="tt-hpbar" aria-hidden><span style={{ width: `${ratio * 100}%`, background: ratio > 0.5 ? '#4caf50' : ratio > 0.25 ? '#f1c40f' : '#e74c3c' }} /></div>
-          {edit ? (
+          {canSet ? (
             <span className="cs-hpfields">
               <Num label="Current hit points" value={cur} min={-999} width={56} onChange={(n) => act({ 'hp.current': Math.min(n, sheet.hp.max) })} />/
-              <Num label="Maximum hit points" value={sheet.hp.max} width={56} onChange={(n) => act({ 'hp.max': n })} />
+              {edit ? <Num label="Maximum hit points" value={sheet.hp.max} width={56} onChange={(n) => act({ 'hp.max': n })} /> : <span className="cs-hpmax">{sheet.hp.max}</span>}
               <label className="sv-mini">temp<Num label="Temporary hit points" value={sheet.hp.temp ?? 0} width={48} onChange={(n) => act({ 'hp.temp': n })} /></label>
             </span>
           ) : <span>{cur} / {sheet.hp.max}{sheet.hp.temp ? ` (+${sheet.hp.temp})` : ''}</span>}
@@ -133,7 +140,7 @@ export function CharacterSheet({ sheet, set, roll }: { sheet: Sheet; set?: (patc
         <div className="cs-box"><b>Hit dice</b>
           {(sheet.hitDice ?? []).map((d, i) => (
             <span key={i} className="cs-hd">d{d.sides}
-              <Bubbles label={`d${d.sides} hit dice used`} total={d.total} used={d.used} onChange={(n) => edit && act({ hitDice: (sheet.hitDice ?? []).map((x, j) => (j === i ? { ...x, used: n } : x)) })} />
+              <Bubbles label={`d${d.sides} hit dice used`} total={d.total} used={d.used} onChange={(n) => canSet && act({ hitDice: (sheet.hitDice ?? []).map((x, j) => (j === i ? { ...x, used: n } : x)) })} />
               {edit && <><Num label={`d${d.sides} hit dice total`} value={d.total} max={40} width={44} onChange={(n) => act({ hitDice: (sheet.hitDice ?? []).map((x, j) => (j === i ? { ...x, total: n, used: Math.min(x.used, n) } : x)) })} />
                 <button className="icon-btn" aria-label={`Remove d${d.sides} hit dice`} onClick={() => act({ hitDice: (sheet.hitDice ?? []).filter((_, j) => j !== i) })}><Trash2 size={11} /></button></>}
             </span>
@@ -141,8 +148,8 @@ export function CharacterSheet({ sheet, set, roll }: { sheet: Sheet; set?: (patc
           {edit && <span className="cs-add">{[6, 8, 10, 12].map((s) => <button key={s} className="btn sm" onClick={() => act({ hitDice: [...(sheet.hitDice ?? []), { sides: s, total: Math.max(1, level), used: 0 }] })}>+d{s}</button>)}</span>}
         </div>
         <div className="cs-box"><b>Death saves</b>
-          <span className="cs-ds">Successes <Bubbles label="Death save successes" total={3} used={sheet.deathSaves?.ok ?? 0} onChange={(n) => edit && act({ deathSaves: { ok: n, fail: sheet.deathSaves?.fail ?? 0 } })} /></span>
-          <span className="cs-ds">Failures <Bubbles label="Death save failures" total={3} used={sheet.deathSaves?.fail ?? 0} onChange={(n) => edit && act({ deathSaves: { ok: sheet.deathSaves?.ok ?? 0, fail: n } })} /></span>
+          <span className="cs-ds">Successes <Bubbles label="Death save successes" total={3} used={sheet.deathSaves?.ok ?? 0} onChange={(n) => canSet && act({ deathSaves: { ok: n, fail: sheet.deathSaves?.fail ?? 0 } })} /></span>
+          <span className="cs-ds">Failures <Bubbles label="Death save failures" total={3} used={sheet.deathSaves?.fail ?? 0} onChange={(n) => canSet && act({ deathSaves: { ok: sheet.deathSaves?.ok ?? 0, fail: n } })} /></span>
         </div>
       </section>
 
@@ -176,7 +183,7 @@ export function CharacterSheet({ sheet, set, roll }: { sheet: Sheet; set?: (patc
           : profs.tools ? <div className="cs-line"><b>Proficiencies</b> {profs.tools}</div> : null}
       </section>
 
-      <section className="cs-spells" aria-label="Spellcasting" {...place('spells')}>
+      {(edit || !!sheet.spellcasting?.ability || slots.some((x) => x.total > 0) || !!sheet.spells?.trim()) && <section className="cs-spells" aria-label="Spellcasting" {...place('spells')}>
         <h4>Spellcasting</h4>
         <div className="cs-line">
           {edit ? (
@@ -192,7 +199,7 @@ export function CharacterSheet({ sheet, set, roll }: { sheet: Sheet; set?: (patc
           <div className="cs-slots">
             {Array.from({ length: 9 }, (_, i) => slots[i] ?? { total: 0, used: 0 }).map((sl, i) => (edit || sl.total > 0) && (
               <div key={i} className="cs-slot"><b>Level {i + 1}</b>
-                <Bubbles label={`Level ${i + 1} slots used`} total={sl.total} used={sl.used} onChange={(n) => edit && act({ 'spellcasting.slots': Array.from({ length: Math.max(slots.length, i + 1) }, (_, j) => (j === i ? { ...sl, used: n } : slots[j] ?? { total: 0, used: 0 })) })} />
+                <Bubbles label={`Level ${i + 1} slots used`} total={sl.total} used={sl.used} onChange={(n) => canSet && act({ 'spellcasting.slots': Array.from({ length: Math.max(slots.length, i + 1) }, (_, j) => (j === i ? { ...sl, used: n } : slots[j] ?? { total: 0, used: 0 })) })} />
                 {edit && <Num label={`Level ${i + 1} slots`} value={sl.total} max={20} width={44} onChange={(n) => act({ 'spellcasting.slots': Array.from({ length: Math.max(slots.length, i + 1) }, (_, j) => (j === i ? { total: n, used: Math.min(sl.used, n) } : slots[j] ?? { total: 0, used: 0 })) })} />}
               </div>
             ))}
@@ -202,7 +209,7 @@ export function CharacterSheet({ sheet, set, roll }: { sheet: Sheet; set?: (patc
 ` : ''}${lv > 0 ? `Level ${lv}` : 'Cantrip'}: ${e.name}` }) }} />}
         {edit ? <textarea className="sv-area" aria-label="Spells" rows={3} placeholder="Cantrips and spells known or prepared" value={sheet.spells ?? ''} onChange={(e) => act({ spells: e.target.value })} />
           : sheet.spells ? <p className="cs-notes">{sheet.spells}</p> : null}
-      </section>
+      </section>}
 
       <section className="cs-features" aria-label="Features and attacks" {...place('features')}>
         <h4>Attacks and spells</h4>

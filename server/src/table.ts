@@ -7,13 +7,19 @@ import { worldRole } from './access.js'
 import { userFromCookieHeader, type AuthUser } from './auth.js'
 import { config } from './config.js'
 import { db, now } from './db.js'
-import { uid } from './pages.js'
+import { contentHooks, uid } from './pages.js'
 import { publishWorld } from './live.js'
 import { presenceChanged } from './presence.js'
 import { ALLOWED, AUDIO, VIDEO } from './routes/uploads.js'
 import { darknessAt } from './daylight.js'
 import { parseChat, readable, withInline, type Kind, type Part } from './chat.js'
 import { buildSight, canSee, type Sight, type SightToken } from './sight.js'
+import { blockedPath, type MoveWall } from './movement.js'
+import { playersOf, playsInWorld } from './players.js'
+import { revalidateCollab } from './collab.js'
+
+/** Only a read-only member needs asking: everyone else is a player anyway. */
+const plays = (ws: string, userId: string, wr: 'editor' | 'viewer') => wr === 'viewer' && playsInWorld(ws, userId)
 import { advance, delay as delayTurn, marker as lairMarker, emptyCombat, end as endCombat, start as startCombat, visible as visibleCombat, withList, type Combat } from './combat.js'
 import { cryptoRng, parseRoll } from './dice.js'
 import { DAMAGE_TYPES_PF2E, firstAttack, leftReach, adjustDamage, concentrationDc, deathSave, longRest, modOf, saveBonusOf, shortRest, type Effect } from './rules5e.js'
@@ -45,19 +51,19 @@ const conns = new Set<Conn>()
 
 interface SceneRow {
   id: string; workspace_id: string; name: string; sort: number; bg: string; width: number; height: number
-  grid: string; grid_size: number; unit: string; dist: number; diagonal: string; fog: number; darkness: number; weather: string
+  grid: string; grid_size: number; unit: string; dist: number; diagonal: string; fog: number; darkness: number; lighting?: number; weather: string
   folder: string; notes: string; grid_color: string; grid_opacity: number; ambient: string; layers?: string
 }
 interface SceneLayer { id: string; name: string; players: boolean; locked: boolean }
 const layersOf = (r: Pick<SceneRow, 'layers'> | undefined): SceneLayer[] => parse<SceneLayer[]>(r?.layers ?? '[]', [])
 const sceneJson = (r: SceneRow) => ({
   id: r.id, name: r.name, sort: r.sort, bg: r.bg, width: r.width, height: r.height,
-  grid: r.grid, gridSize: r.grid_size, unit: r.unit, dist: r.dist, diagonal: r.diagonal, fog: !!r.fog, darkness: r.darkness, weather: r.weather ?? 'none',
+  grid: r.grid, gridSize: r.grid_size, unit: r.unit, dist: r.dist, diagonal: r.diagonal, fog: !!r.fog, darkness: r.darkness, lighting: !!r.lighting, weather: r.weather ?? 'none',
   folder: r.folder ?? '', gridColor: r.grid_color ?? '#ffffff', gridOpacity: r.grid_opacity ?? 0.28, ambient: r.ambient ?? '', layers: layersOf(r),
 })
 /** What one person is sent of a scene: the notes are the GM's. */
 const sceneFor = (c: Conn, r: SceneRow) => ({ ...sceneJson(r), ...(c.role === 'gm' ? { notes: r.notes ?? '' } : {}) })
-const SCENE_COLUMNS: Record<string, string> = { name: 'name', bg: 'bg', width: 'width', height: 'height', grid: 'grid', gridSize: 'grid_size', unit: 'unit', dist: 'dist', diagonal: 'diagonal', fog: 'fog', darkness: 'darkness', weather: 'weather', folder: 'folder', notes: 'notes', gridColor: 'grid_color', gridOpacity: 'grid_opacity', ambient: 'ambient', layers: 'layers' }
+const SCENE_COLUMNS: Record<string, string> = { name: 'name', bg: 'bg', width: 'width', height: 'height', grid: 'grid', gridSize: 'grid_size', unit: 'unit', dist: 'dist', diagonal: 'diagonal', fog: 'fog', darkness: 'darkness', lighting: 'lighting', weather: 'weather', folder: 'folder', notes: 'notes', gridColor: 'grid_color', gridOpacity: 'grid_opacity', ambient: 'ambient', layers: 'layers' }
 
 interface TokenDb {
   id: string; scene_id: string; name: string; x: number; y: number; size: number; rotation: number; image: string; color: string
@@ -120,14 +126,14 @@ function viewFor(c: Conn, wanted?: string | null) {
 function sightFor(c: Conn, sceneId: string | null): Sight | null {
   if (c.role !== 'player' || !sceneId) return null
   const sc = sceneRow(sceneId, c.ws)
-  if (!sc || !(sc.fog || sc.darkness > 0)) return null
+  if (!sc || !(sc.fog || (sc.lighting && sc.darkness > 0))) return null
   const walls = (db.prepare('SELECT x1, y1, x2, y2, kind, open FROM scene_walls WHERE scene_id = ?').all(sceneId) as WallDb[])
-    .filter((w) => w.kind === 'wall' || w.kind === 'secret' || w.kind === 'oneway' || w.kind === 'terrain' || (w.kind === 'door' && !w.open))
+    .filter((w) => w.kind === 'wall' || w.kind === 'oneway' || w.kind === 'terrain' || ((w.kind === 'door' || w.kind === 'secret') && !w.open))
     .map((w) => ({ x1: w.x1, y1: w.y1, x2: w.x2, y2: w.y2, ...(w.kind === 'oneway' ? { oneway: true } : {}), ...(w.kind === 'terrain' ? { limited: true } : {}) }))
   const reveals = revealsOf(c.ws, sceneId)
   const tokens = (db.prepare('SELECT id, x, y, owners, data FROM tokens WHERE scene_id = ?').all(sceneId) as { id: string; x: number; y: number; owners: string; data: string }[])
     .map((t): SightToken => ({ id: t.id, x: t.x, y: t.y, owners: parse<string[]>(t.owners, []), data: parse<SightToken['data']>(t.data, {}) }))
-  return buildSight({ width: sc.width, height: sc.height, gridSize: sc.grid_size, dist: sc.dist, fog: !!sc.fog, darkness: sc.darkness }, walls, tokens, c.user.id, stateOf(c.ws).settings.sharedVision, reveals)
+  return buildSight({ width: sc.width, height: sc.height, gridSize: sc.grid_size, dist: sc.dist, fog: !!sc.fog, darkness: sc.lighting ? sc.darkness : 0 }, walls, tokens, c.user.id, stateOf(c.ws).settings.sharedVision, reveals)
 }
 
 /** May this connection be told about the token: allowed to see it at all (hidden ones), and in sight where there is fog. */
@@ -142,6 +148,7 @@ function tokensFor(c: Conn, scene: string | null) {
 }
 
 interface WallDb { id: string; x1: number; y1: number; x2: number; y2: number; kind: string; open: number; locked?: number }
+const movementWalls = (sceneId: string) => db.prepare('SELECT x1, y1, x2, y2, kind, open FROM scene_walls WHERE scene_id = ?').all(sceneId) as MoveWall[]
 /** Areas of a scene the GM has shown to the players. */
 const revealsOf = (ws: string, scene: string | null) => (scene ? (db.prepare('SELECT id, x, y, w, h FROM scene_reveals WHERE scene_id = ? AND workspace_id = ?').all(scene, ws) as { id: string; x: number; y: number; w: number; h: number }[]) : [])
 const sendReveals = (ws: string, sceneId: string) => { const reveals = revealsOf(ws, sceneId); for (const c of inWorld(ws)) if (c.scene === sceneId) send(c, { t: 'reveals', sceneId, reveals }); scheduleSight(ws, sceneId) }
@@ -149,14 +156,14 @@ const sendReveals = (ws: string, sceneId: string) => { const reveals = revealsOf
 function wallsFor(c: Conn, scene: string | null) {
   if (!scene) return []
   return (db.prepare('SELECT id, x1, y1, x2, y2, kind, open, locked FROM scene_walls WHERE scene_id = ? AND workspace_id = ?').all(scene, c.ws) as WallDb[])
-    .map((w) => ({ id: w.id, locked: !!w.locked, x1: w.x1, y1: w.y1, x2: w.x2, y2: w.y2, kind: w.kind === 'secret' && c.role !== 'gm' ? 'wall' : w.kind, open: !!w.open && !(w.kind === 'secret' && c.role !== 'gm') }))
+    .map((w) => ({ id: w.id, locked: !!w.locked, x1: w.x1, y1: w.y1, x2: w.x2, y2: w.y2, kind: w.kind === 'secret' && c.role !== 'gm' ? (w.open ? 'door' : 'wall') : w.kind, open: !!w.open }))
 }
 /** Light given off by tokens, hidden ones too: a torch in the dark is seen whoever carries it. */
 function lightsOf(ws: string, scene: string | null) {
   if (!scene) return []
   return (db.prepare("SELECT id, x, y, data FROM tokens WHERE scene_id = ? AND workspace_id = ? AND data LIKE '%\"light\"%'").all(scene, ws) as { id: string; x: number; y: number; data: string }[])
     .map((r) => ({ id: r.id, x: r.x, y: r.y, ...(parse<Record<string, any>>(r.data, {}).light ?? {}) }))
-    .filter((l) => (l.bright ?? 0) > 0 || (l.dim ?? 0) > 0)
+    .filter((l) => !l.off && ((l.bright ?? 0) > 0 || (l.dim ?? 0) > 0))
 }
 const fogOf = (c: Conn, scene: string | null) => {
   if (!scene) return null
@@ -392,8 +399,9 @@ function applyDaylight(ws: string, s: TableSettings) {
   const dark = darknessAt(s.hour)
   for (const id of s.daylight) {
     const row = sceneRow(id, ws)
-    if (!row || row.darkness === dark) continue
-    db.prepare('UPDATE scenes SET darkness = ?, updated_at = ? WHERE id = ?').run(dark, now(), id)
+    if (!row || (row.darkness === dark && row.lighting)) continue
+    // a scene that follows the time of day has its lighting on, or night would never fall on it
+    db.prepare('UPDATE scenes SET darkness = ?, lighting = 1, updated_at = ? WHERE id = ?').run(dark, now(), id)
     const fresh = sceneRow(id, ws)!
     for (const x of inWorld(ws)) send(x, { t: 'scene', scene: sceneFor(x, fresh) })
     scheduleSight(ws, id)
@@ -698,7 +706,7 @@ function combatSummary(ws: string, userId: string, combat: Combat) {
 async function handle(c: Conn, m: ClientMessage) {
   const ws = c.ws
   const { settings } = stateOf(ws)
-  c.role = roleAt(c.user, c.wr, settings)
+  c.role = roleAt(c.user, c.wr, settings, plays(c.ws, c.user.id, c.wr))
   const gm = c.role === 'gm'
 
   switch (m.t) {
@@ -745,8 +753,8 @@ async function handle(c: Conn, m: ClientMessage) {
       const id = uid(), t = now()
       const sort = ((db.prepare('SELECT MAX(sort) AS s FROM scenes WHERE workspace_id = ?').get(ws) as { s: number | null }).s ?? 0) + 1
       db.transaction(() => {
-        db.prepare(`INSERT INTO scenes(id,workspace_id,name,sort,bg,width,height,grid,grid_size,unit,dist,diagonal,fog,darkness,weather,folder,notes,grid_color,grid_opacity,ambient,layers,created_at,updated_at)
-          SELECT ?,workspace_id,?,?,bg,width,height,grid,grid_size,unit,dist,diagonal,fog,darkness,weather,folder,notes,grid_color,grid_opacity,ambient,layers,?,? FROM scenes WHERE id = ?`).run(id, `${src.name} copy`.slice(0, 120), sort, t, t, src.id)
+        db.prepare(`INSERT INTO scenes(id,workspace_id,name,sort,bg,width,height,grid,grid_size,unit,dist,diagonal,fog,darkness,lighting,weather,folder,notes,grid_color,grid_opacity,ambient,layers,created_at,updated_at)
+          SELECT ?,workspace_id,?,?,bg,width,height,grid,grid_size,unit,dist,diagonal,fog,darkness,lighting,weather,folder,notes,grid_color,grid_opacity,ambient,layers,?,? FROM scenes WHERE id = ?`).run(id, `${src.name} copy`.slice(0, 120), sort, t, t, src.id)
         for (const w of db.prepare('SELECT x1,y1,x2,y2,kind,open,locked FROM scene_walls WHERE scene_id = ?').all(src.id) as { x1: number; y1: number; x2: number; y2: number; kind: string; open: number; locked: number }[])
           db.prepare('INSERT INTO scene_walls(id,scene_id,workspace_id,x1,y1,x2,y2,kind,open,locked) VALUES(?,?,?,?,?,?,?,?,?,?)').run(uid(), id, ws, w.x1, w.y1, w.x2, w.y2, w.kind, w.open, w.locked)
         for (const tl of db.prepare('SELECT image,x,y,w,h,rotation,layer,locked,hidden,z,flip,layer_id FROM scene_tiles WHERE scene_id = ?').all(src.id) as Record<string, any>[])
@@ -807,6 +815,8 @@ async function handle(c: Conn, m: ClientMessage) {
       if (!gm) { p.hidden = false; p.locked = false; p.owners = [c.user.id]; p.pageId = null }
       else if (p.owners) p.owners = realUsers(p.owners)
       if (p.pageId && !db.prepare('SELECT 1 FROM pages WHERE id = ? AND workspace_id = ? AND deleted_at IS NULL').get(p.pageId, ws)) return nack(c, m, 'no such page')
+      // a token of a character is moved by the people who play it
+      if (p.pageId) p.owners = withPlayers(p.owners ?? [], p.pageId)
       const z = ((db.prepare('SELECT MAX(z) AS z FROM tokens WHERE scene_id = ?').get(m.sceneId) as { z: number | null }).z ?? 0) + 1
       const id = uid()
       const t = now()
@@ -815,7 +825,8 @@ async function handle(c: Conn, m: ClientMessage) {
          VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       ).run(id, m.sceneId, ws, p.name ?? '', p.x ?? 0, p.y ?? 0, p.size ?? 1, p.rotation ?? 0, p.image ?? '', p.color ?? '', p.pageId ?? null,
         p.hidden ? 1 : 0, p.locked ? 1 : 0, JSON.stringify(p.owners ?? []), p.z ?? z, JSON.stringify(p.data ?? {}), t, t)
-      return emitToken(ws, null, tokenRow(id, ws)!)
+      emitToken(ws, null, tokenRow(id, ws)!)
+      return ownersChanged(ws, [], p.owners ?? [])
     }
     case 'token.update': {
       const before = tokenRow(m.id, ws)
@@ -828,6 +839,7 @@ async function handle(c: Conn, m: ClientMessage) {
       }
       if (patch.owners) patch.owners = realUsers(patch.owners)
       if (patch.pageId && !db.prepare('SELECT 1 FROM pages WHERE id = ? AND workspace_id = ? AND deleted_at IS NULL').get(patch.pageId, ws)) return nack(c, m, 'no such page')
+      if (patch.pageId) patch.owners = withPlayers(patch.owners ?? before.owners, patch.pageId)
       const cols = Object.keys(patch).filter((k) => k in TOKEN_COLUMNS)
       if (!cols.length) return
       const val = (k: string) => {
@@ -835,7 +847,9 @@ async function handle(c: Conn, m: ClientMessage) {
         return k === 'owners' || k === 'data' ? JSON.stringify(v) : typeof v === 'boolean' ? (v ? 1 : 0) : v
       }
       db.prepare(`UPDATE tokens SET ${cols.map((k) => `${TOKEN_COLUMNS[k]} = ?`).join(', ')}, updated_at = ? WHERE id = ?`).run(...cols.map(val), now(), m.id)
-      return emitToken(ws, before, tokenRow(m.id, ws)!)
+      emitToken(ws, before, tokenRow(m.id, ws)!)
+      if (patch.owners) ownersChanged(ws, before.owners, patch.owners)
+      return
     }
     case 'token.light': {
       const before = tokenRow(m.id, ws)
@@ -852,6 +866,8 @@ async function handle(c: Conn, m: ClientMessage) {
         const before = tokenRow(mv.id, ws)
         if (!before) continue
         if (!canMoveToken(c.role, c.user.id, before, settings)) { if (c.shown.has(before.id)) send(c, { t: 'token', token: redact(c.role, c.user.id, before) }); continue }
+        // a player's token stops at walls: the step is refused and the token goes back to where the server has it
+        if (!gm && settings.wallsBlockMovement && blockedPath(before, mv, movementWalls(before.sceneId))) { send(c, { t: 'token', token: redact(c.role, c.user.id, before) }); continue }
         upd.run(mv.x, mv.y, mv.rotation ?? before.rotation, now(), mv.id)
         const after = tokenRow(mv.id, ws)!
         emitToken(ws, before, after)
@@ -1636,7 +1652,7 @@ async function handle(c: Conn, m: ClientMessage) {
       if (m.patch.hour !== undefined || m.patch.daylight !== undefined) applyDaylight(ws, next)
       for (const x of inWorld(ws)) {
         const was = x.role
-        x.role = roleAt(x.user, x.wr, next)
+        x.role = roleAt(x.user, x.wr, next, plays(ws, x.user.id, x.wr))
         send(x, { t: 'settings', settings: next, you: { id: x.user.id, username: x.user.username, role: x.role } })
         // someone who stopped running the table goes back to the table's scene
         if (x.role !== 'gm' && x.scene !== stateOf(ws).active) { viewFor(x, null); sendView(x) }
@@ -1672,6 +1688,8 @@ const sameScene = (c: Conn, who: (x: Conn) => boolean, msg: unknown) => {
 
 async function applyScenePatch(c: Conn, m: ClientMessage, id: string, patch: Record<string, unknown>) {
   const p = { ...patch } as Record<string, unknown>
+  // making a scene dark means wanting light worked out: darkness switches lighting on unless the same change says otherwise
+  if (typeof p.darkness === 'number' && p.darkness > 0 && p.lighting === undefined) p.lighting = true
   // a looping video is a background too; its size is given by the browser that chose it
   const isVideo = typeof p.bg === 'string' && /^\/api\/uploads\/[A-Za-z0-9-]+$/.test(p.bg) && ((db.prepare('SELECT mime FROM uploads WHERE id = ? AND workspace_id = ?').get(p.bg.slice('/api/uploads/'.length), c.ws) as { mime: string } | undefined)?.mime ?? '') in VIDEO
   if (typeof p.bg === 'string' && p.bg && !isVideo) {
@@ -1707,10 +1725,10 @@ export function attachTable(server: HttpServer) {
     const role = worldRole(user, m[1])
     if (!role) return refuse(socket, '404 Not Found')
     // someone the GM banned cannot sit at the table (the GMs themselves cannot be banned)
-    if (stateOf(m[1]).settings.banned.includes(user.id) && roleAt(user, role, stateOf(m[1]).settings) !== 'gm') return refuse(socket, '403 Forbidden')
+    if (stateOf(m[1]).settings.banned.includes(user.id) && roleAt(user, role, stateOf(m[1]).settings, plays(m[1], user.id, role)) !== 'gm') return refuse(socket, '403 Forbidden')
     wss.handleUpgrade(req, socket, head, (socket) => {
       const c: Conn = {
-        socket, user, ws: m[1], wr: role, role: roleAt(user, role, stateOf(m[1]).settings), scene: null, alive: true,
+        socket, user, ws: m[1], wr: role, role: roleAt(user, role, stateOf(m[1]).settings, plays(m[1], user.id, role)), scene: null, alive: true,
         limit: makeLimiter(90, 180), queue: Promise.resolve(), sight: null, shown: new Set(),
       }
       conns.add(c)
@@ -1754,7 +1772,7 @@ export function revalidateTable(changedUsers?: string[]) {
     const before = `${c.wr}:${c.role}`
     c.user = user
     c.wr = role
-    c.role = roleAt(user, role, stateOf(c.ws).settings)
+    c.role = roleAt(user, role, stateOf(c.ws).settings, plays(c.ws, user.id, role))
     // an admin changing someone else's access must not reset everyone's screen: only a table whose own role changed starts over
     if (`${c.wr}:${c.role}` === before) continue
     worlds.add(c.ws)
@@ -1762,6 +1780,34 @@ export function revalidateTable(changedUsers?: string[]) {
   }
   for (const ws of worlds) announce(ws)
   presenceChanged()
+}
+
+// ---------- players of characters ----------
+
+/** The owners of a token linked to a page, with the people who play that page added. */
+function withPlayers(owners: string[], pageId: string): string[] {
+  const row = db.prepare('SELECT props FROM pages WHERE id = ?').get(pageId) as { props: string } | undefined
+  return [...new Set([...owners, ...(row ? playersOf(row.props) : [])])]
+}
+
+/** A read-only member who was given a token (or lost their last one) sits at the table as a player (or a spectator) from now on. */
+function ownersChanged(ws: string, before: string[], after: string[]) {
+  const changed = [...before.filter((u) => !after.includes(u)), ...after.filter((u) => !before.includes(u))]
+  if (changed.some((u) => [...inWorld(ws)].some((c) => c.user.id === u && c.wr === 'viewer'))) revalidateTable(changed)
+}
+
+// The people who play a page changed: the tokens of that character follow, and so does what those people may do.
+contentHooks.playersChanged = (ws, pageId, before, after) => {
+  const gone = before.filter((u) => !after.includes(u))
+  for (const t of (db.prepare('SELECT * FROM tokens WHERE page_id = ? AND workspace_id = ?').all(pageId, ws) as TokenDb[]).map(tokenJson)) {
+    const owners = [...new Set([...t.owners.filter((u) => !gone.includes(u)), ...after])]
+    if (owners.join() === t.owners.join()) continue
+    db.prepare('UPDATE tokens SET owners = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(owners), now(), t.id)
+    emitToken(ws, t, tokenRow(t.id, ws)!)
+  }
+  const changed = [...gone, ...after.filter((u) => !before.includes(u))]
+  revalidateTable(changed)
+  revalidateCollab(changed)
 }
 
 /** Who sits at a table right now, for the admin dashboard. */

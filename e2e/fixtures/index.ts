@@ -40,6 +40,13 @@ type Fixtures = {
   makePage: (title: string, opts?: { content?: unknown; props?: unknown; tags?: string[]; folderId?: string | null }) => Promise<{ id: string; title: string }>
 }
 
+/**
+ * The table folds long panels and the list of conditions away; the tests that drive those controls want them open, so every page starts
+ * with them open (a test of the folding itself closes them).
+ */
+const OPEN_PANELS = ['scene-map', 'scene-light', 'scene-mood', 'scene-props', 'scene-triggers', 'scene-players', 'scene-notes', 'token-control', 'token-look', 'token-bars', 'token-sight']
+const openPanels = (keys: string[]) => { try { for (const k of keys) localStorage.setItem(`tt-fold:${k}`, '1'); localStorage.setItem('tt-conditions-open', '1') } catch { /* ignore */ } }
+
 function track(context: BrowserContext, pages: Set<Page>) {
   const add = async (p: Page) => {
     pages.add(p)
@@ -80,6 +87,7 @@ export const test = base.extend<Fixtures>({
 
   app: async ({ page, world }, use) => {
     await page.addInitScript((id) => { try { localStorage.setItem('workspace', id) } catch { /* ignore */ } }, world.id)
+    await page.addInitScript(openPanels, OPEN_PANELS)
     await page.goto('/')
     await expect(page.getByRole('button', { name: 'Toggle sidebar' })).toBeVisible()
     // the world is loaded once Home shows its counts; a click before that is undone by the load
@@ -94,6 +102,7 @@ export const test = base.extend<Fixtures>({
       const context = await browser.newContext({ baseURL: BASE_URL, storageState: role === 'anonymous' ? { cookies: [], origins: [] } : authFile(role) })
       const pages = new Set<Page>()
       if (browser.browserType().name() === 'chromium') track(context, pages)
+      await context.addInitScript(openPanels, OPEN_PANELS)
       const page = await context.newPage()
       if (worldId) await context.addInitScript((id) => { try { localStorage.setItem('workspace', id) } catch { /* ignore */ } }, worldId)
       const api = await makeApi(authFile(role === 'anonymous' ? 'owner' : role))

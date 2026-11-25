@@ -264,6 +264,20 @@ check('the GM changes a wall', !!(await gm.until((m) => m.t === 'walls' && m.wal
 gm.send({ t: 'wall.delete', ids: [secret.id] })
 check('and deletes one', !!(await pa.until((m) => m.t === 'walls' && m.walls.length === 2)))
 
+// walls stop a player's token: the door at x 700 is closed again (each check looks only at what came after it)
+const next = async (c, send, pred) => { const n = c.mark(); send(); const end = Date.now() + 1500; while (Date.now() < end) { const hit = c.since(n, pred)[0]; if (hit) return hit; await sleep(15) } return null }
+const ariaAt = (x, y) => (m) => m.t === 'token' && m.token.id === aria.id && m.token.x === x && m.token.y === y
+check("a player's token cannot walk through a closed door; the server puts it back", !!(await next(pa, () => pa.send({ t: 'token.move', moves: [{ id: aria.id, x: 800, y: 140 }] }), ariaAt(210, 140))))
+await next(pa, () => gm.send({ t: 'door.toggle', id: door.id }), (m) => m.t === 'walls' && m.walls.find((w) => w.id === door.id)?.open === true)
+check('through the open door it can', !!(await next(gm, () => pa.send({ t: 'token.move', moves: [{ id: aria.id, x: 800, y: 140 }] }), ariaAt(800, 140))))
+await next(gm, () => pa.send({ t: 'token.move', moves: [{ id: aria.id, x: 210, y: 140 }] }), ariaAt(210, 140))
+await next(pa, () => gm.send({ t: 'door.toggle', id: door.id }), (m) => m.t === 'walls' && m.walls.find((w) => w.id === door.id)?.open === false)
+check('the GM moves a token through a wall', !!(await next(gm, () => gm.send({ t: 'token.move', moves: [{ id: orc.id, x: 800, y: 140 }] }), (m) => m.t === 'token' && m.token.id === orc.id && m.token.x === 800)))
+await next(pa, () => gm.send({ t: 'settings.set', patch: { wallsBlockMovement: false } }), (m) => m.t === 'settings' && m.settings.wallsBlockMovement === false)
+check('with the rule off a player walks through walls too', !!(await next(gm, () => pa.send({ t: 'token.move', moves: [{ id: aria.id, x: 800, y: 210 }] }), ariaAt(800, 210))))
+await next(pa, () => gm.send({ t: 'settings.set', patch: { wallsBlockMovement: true } }), (m) => m.t === 'settings' && m.settings.wallsBlockMovement === true)
+await next(gm, () => gm.send({ t: 'token.move', moves: [{ id: aria.id, x: 210, y: 140 }, { id: orc.id, x: 700, y: 210 }] }), (m) => m.t === 'token' && m.token.id === orc.id && m.token.x === 700)
+
 gm.send({ t: 'token.update', id: orc.id, patch: { data: { light: { bright: 20, dim: 40, color: '#ffcc66' } } } })
 const lit = await pa.until((m) => m.t === 'lights' && m.lights.length === 1)
 check('light from a token, even a hidden one, is sent to everyone', lit?.lights[0].bright === 20 && lit.lights[0].id === orc.id)

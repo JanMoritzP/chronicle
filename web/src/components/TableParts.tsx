@@ -11,6 +11,7 @@ import { macroLineOf, noteLineOf } from '../lib/macro'
 import { useRules } from '../lib/pack'
 import { Select } from './Select'
 import { lightItems } from '../lib/lightitems'
+import { LightFields } from './TableLight'
 import { SheetCard, catchRoll, loadSheet, useSheet, type AttackKit } from './TableSheet'
 
 const VALUED = new Set(['Clumsy', 'Doomed', 'Drained', 'Dying', 'Enfeebled', 'Frightened', 'Sickened', 'Slowed', 'Stunned', 'Stupefied', 'Wounded'])
@@ -24,6 +25,8 @@ const PRESETS: Record<string, Omit<Effect, 'id'>> = {
 const modsText = (e: Effect) => [e.ac ? `${e.ac > 0 ? '+' : ''}${e.ac} AC` : '', e.attack ? `${e.attack} attacks` : '', e.save ? `${e.save} saves` : ''].filter(Boolean).join(', ')
 
 /** Spells and conditions that last a number of rounds and change armor class, attack rolls or saves. */
+const effectsOf = (t: Token) => (t.data.effects ?? []) as Effect[]
+
 function Effects({ token, can }: { token: Token; can: boolean }) {
   const effects = (token.data.effects ?? []) as Effect[]
   const [name, setName] = useState('')
@@ -87,6 +90,9 @@ export function TokenStats({ token }: { token: Token }) {
   const [amount, setAmount] = useState('')
   const [kind, setKind] = useState('')
   const [marker, setMarker] = useState('')
+  // the long list of conditions, markers and spell effects opens on request; what the token has is always shown
+  const [more, setMoreState] = useState(() => { try { return localStorage.getItem('tt-conditions-open') === '1' } catch { return false } })
+  const setMore = (open: boolean) => { setMoreState(open); try { localStorage.setItem('tt-conditions-open', open ? '1' : '0') } catch { /* private window */ } }
   const damageTypes = useRules().damageTypes
   const auto = useTable((s) => s.settings.automation)
   const hp = token.data.hp as { value?: number; max?: number; temp?: number } | undefined
@@ -157,17 +163,18 @@ export function TokenStats({ token }: { token: Token }) {
         </div>
       )}
       <div className="tt-chips" role="group" aria-label="Conditions">
-        {(can ? [...names, ...conditions.map(baseOf).filter((c) => !names.includes(c))] : conditions.map(baseOf)).map((c) => (
+        {(can && more ? [...names, ...conditions.map(baseOf).filter((c) => !names.includes(c))] : conditions.map(baseOf)).map((c) => (
           <button key={c} className={`tt-chip${current(c) ? ' on' : ''}`} disabled={!can} aria-pressed={!!current(c)} onClick={() => toggle(c)}>{current(c) ?? c}</button>
         ))}
+        {can && <button className="tt-chip tt-chip-more" aria-expanded={more} onClick={() => setMore(!more)}>{more ? 'Done' : conditions.length || effectsOf(token).length ? 'Conditions and effects' : 'Add a condition or effect'}</button>}
       </div>
-      {can && (
+      {can && more && (
         <div className="tt-row">
           <input className="input" aria-label="Custom marker" placeholder="A marker of your own" maxLength={30} value={marker} onChange={(e) => setMarker(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && marker.trim()) { stat({ conditions: [...new Set([...conditions, marker.trim()])] }); setMarker('') } }} />
           <button className="btn sm" disabled={!marker.trim()} onClick={() => { stat({ conditions: [...new Set([...conditions, marker.trim()])] }); setMarker('') }}>Put a marker on</button>
         </div>
       )}
-      <Effects token={token} can={can} />
+      {(more || effectsOf(token).length > 0) && <Effects token={token} can={can && more} />}
       {gm && hp && (
         <label className="tt-check"><input type="checkbox" checked={!!token.data.hpPrivate} onChange={(e) => stat({ hpPrivate: e.target.checked })} />Hide hit points from other players</label>
       )}
@@ -345,44 +352,28 @@ export function ChatPanel() {
 export function SightLight({ token }: { token: Token }) {
   const unit = useTable((s) => s.scenes.find((x) => x.id === s.sceneId)?.unit ?? 'ft')
   const vision = (token.data.vision ?? {}) as { sight?: number | null; dark?: number }
-  const light = (token.data.light ?? {}) as { bright?: number; dim?: number; color?: string }
-  const save = (key: 'vision' | 'light', value: Record<string, unknown>) => {
-    const data = { ...token.data, [key]: value }
-    if (key === 'light' && !(value.bright || value.dim)) delete data.light
-    sendTable({ t: 'token.update', id: token.id, patch: { data } })
-  }
+  const save = (value: Record<string, unknown>) => sendTable({ t: 'token.update', id: token.id, patch: { data: { ...token.data, vision: value } } })
   const field = (label: string, value: number | null | undefined, commit: (n: number | null) => void, blank = false) => (
     <label>{label}
-      <input className="input tt-num" type="number" min={0} aria-label={label} defaultValue={value ?? ''} key={`${label}${value}`}
+      <input className="input tt-num" type="number" min={0} aria-label={label} defaultValue={value ?? ''} key={`${label}${value}`} placeholder={blank ? 'Walls only' : undefined}
         onBlur={(e) => { const raw = e.target.value.trim(); const n = raw === '' ? null : Number(raw); if (n === null ? blank && value != null : Number.isFinite(n) && n >= 0 && n !== value) commit(n) }}
         onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />
     </label>
   )
   return (
     <div className="tt-sightlight">
-      <b>Sight and light ({unit})</b>
+      <p className="muted tt-hint">Distances in {unit}. Sight matters on scenes with fog of war or lighting.</p>
       <div className="tt-row">
-        {field('Sees up to', vision.sight, (n) => save('vision', { ...vision, sight: n }), true)}
-        {field('Darkvision', vision.dark ?? 0, (n) => save('vision', { ...vision, dark: n ?? 0 }))}
-        {field('Blindsight', (vision as { blind?: number }).blind ?? 0, (n) => save('vision', { ...vision, blind: n ?? 0 }))}
-        {field('Truesight', (vision as { true?: number }).true ?? 0, (n) => save('vision', { ...vision, true: n ?? 0 }))}
+        {field('Sees up to', vision.sight, (n) => save({ ...vision, sight: n }), true)}
+        {field('Darkvision', vision.dark ?? 0, (n) => save({ ...vision, dark: n ?? 0 }))}
+      </div>
+      <div className="tt-row">
+        {field('Blindsight', (vision as { blind?: number }).blind ?? 0, (n) => save({ ...vision, blind: n ?? 0 }))}
+        {field('Truesight', (vision as { true?: number }).true ?? 0, (n) => save({ ...vision, true: n ?? 0 }))}
       </div>
       <label className="tt-check"><input type="checkbox" checked={token.data.sharedSight === true} onChange={(e) => { const data = { ...token.data }; if (e.target.checked) data.sharedSight = true; else delete data.sharedSight; sendTable({ t: 'token.update', id: token.id, patch: { data } }) }} />The whole party sees through this token</label>
-      <div className="tt-row">
-        {field('Bright light', light.bright ?? 0, (n) => save('light', { ...light, bright: n ?? 0 }))}
-        {field('Dim light', light.dim ?? 0, (n) => save('light', { ...light, dim: n ?? 0 }))}
-        {field('Light angle', (light as { angle?: number }).angle ?? 360, (n) => { const { angle: _a, ...rest } = light as { angle?: number }; save('light', n && n >= 1 && n < 360 ? { ...rest, angle: Math.round(n) } : rest) })}
-        {field('Light faces', (light as { dir?: number }).dir ?? 0, (n) => save('light', { ...light, dir: Math.min(360, Math.round(n ?? 0)) }))}
-        <label>Colour
-          <input className="tt-color" type="color" aria-label="Light colour" value={/^#[0-9a-fA-F]{6}$/.test(light.color ?? '') ? light.color : '#ffd9a0'} onChange={(e) => save('light', { ...light, color: e.target.value })} />
-        </label>
-        {light.color && <button className="btn sm" onClick={() => { const { color: _c, ...rest } = light; save('light', rest) }}>No colour</button>}
-        <label>Moves
-          <Select className="input" value={(light as { animation?: string }).animation ?? ''} onChange={(v) => save('light', { ...light, ...(v ? { animation: v } : { animation: undefined }) })} title="How the light moves">
-            <option value="">Steady</option><option value="flicker">Flickers like a torch</option><option value="pulse">Pulses</option>
-          </Select>
-        </label>
-      </div>
+      <b>Light it gives off</b>
+      <LightFields token={token} unit={unit} />
     </div>
   )
 }

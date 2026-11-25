@@ -85,7 +85,7 @@ export function pageDerived(id: string) {
 }
 
 /** Set by the collaboration layer: called when page content is rewritten outside a live editing session, so open editors reload. */
-export const contentHooks: { replaced: (pageId: string) => void } = { replaced: () => {} }
+export const contentHooks: { replaced: (pageId: string) => void; /** the accounts that play a page changed (the table gives them its tokens) */ playersChanged: (wsId: string, pageId: string, before: string[], after: string[]) => void } = { replaced: () => {}, playersChanged: () => {} }
 
 /** Replaces a page's document from the outside (restore, bulk relink). Anyone editing it live is told to reload. */
 export function replaceContent(p: PageRow, doc: DocNode, author: Author | null = null) {

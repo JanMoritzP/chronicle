@@ -43,11 +43,11 @@ test('on a phone the tabletop has a bottom bar, a sheet for chat and dice, and y
   await expect(nav).toBeVisible()
   await expect(app.getByRole('complementary', { name: 'Table panel' })).toHaveCount(0)
 
-  await app.locator('.tt-bar').getByRole('button', { name: 'Scene', exact: true }).click()
+  await app.locator('.tt-bar').getByRole('button', { name: 'New scene' }).click()
   await app.getByPlaceholder('The crypt under the chapel').fill('Camp')
   await app.getByRole('button', { name: 'Create' }).click()
   await expect(app.locator('.tt-bar')).toContainText('Camp')
-  await app.locator('.tt-bar').getByRole('button', { name: 'Token' }).click()
+  await app.locator('.tt-rail').getByRole('button', { name: 'New token' }).click()
   await app.getByPlaceholder('Goblin 1').fill('Aria')
   await app.getByRole('button', { name: 'Add' }).click()
 

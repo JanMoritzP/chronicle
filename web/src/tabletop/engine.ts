@@ -3,7 +3,8 @@ import { FogLayer, type Light, type Rect, type Wall } from './fog'
 import type { Pin } from './state'
 import type { DrawKind, Drawing, Tile } from './state'
 import { formatDistance, hexCentres, hexCorners, inTemplate, measure, snap, tokenPixels, type Pt } from './grid'
-import type { Cursor, Ruler, Scene, Token } from './state'
+import { blockedPath, reach } from './movement'
+import { isLightSource, type Cursor, type Ruler, type Scene, type Token } from './state'
 
 // The picture of a scene: background, grid, tokens, rulers, pings and other people's cursors, drawn with WebGL.
 // The engine knows nothing about the network. It reports what the person did through hooks and shows what it is told.
@@ -29,6 +30,8 @@ export interface Hooks {
   /** the GM held Alt and Shift: ping here and bring everyone to look at it */
   onPull(p: Pt): void
   onPinPlace(p: Pt): void
+  /** the GM clicked empty ground with the light tool */
+  onLightPlace(p: Pt): void
   onPin(pin: Pin): void
   onPinDelete(id: string): void
   onExplored(png: string): void
@@ -40,7 +43,7 @@ export interface Hooks {
   onTileMove(id: string, x: number, y: number): void
   colorOf(userId: string): number
 }
-export type Tool = 'select' | 'ruler' | 'wall' | 'erase' | 'draw' | 'reveal' | 'conceal' | 'pin'
+export type Tool = 'select' | 'ruler' | 'wall' | 'erase' | 'draw' | 'reveal' | 'conceal' | 'pin' | 'light'
 
 const textures = new Map<string, Promise<Texture | null>>()
 /** Images come from our own server behind the login cookie, so they are fetched rather than handed to the loader by address. */
@@ -131,14 +134,20 @@ export class TableEngine {
   private fog!: FogLayer
   private turnId: string | null = null
   private me = { id: '', gm: true, canDoors: false }
+  /** walls stop dragged tokens (the GM passes by holding Ctrl) */
+  private wallsBlock = true
   /** The GM looking through the eyes of players or tokens: fog, darkness, secret doors and hidden tokens work as they do for them. */
   private preview: { users: string[]; tokens: string[] } | null = null
   private explored: string | null = null
   /** Does this person see everything? False for players, and for a GM who is previewing. */
   private get gmView() { return this.me.gm && !this.preview }
+  /** The GM sees the scene's light, softened, unless they switched that off. */
+  private gmLight = true
+  private get fogMode() { return this.gmView ? (this.gmLight ? 'gm' as const : 'off' as const) : 'player' as const }
+  setGmLight(on: boolean) { this.gmLight = on; if (this.ready) this.fog.configure(this.scene, this.fogMode) }
   private shared = false
   private isViewer(t: Token) { const p = this.preview; return t.data?.sharedSight === true || (p ? p.tokens.includes(t.id) || t.owners.some((o) => p.users.includes(o)) : this.shared ? t.owners.length > 0 : t.owners.includes(this.me.id)) }
-  private drag: null | { kind: 'pan' | 'tokens' | 'ruler' | 'marquee' | 'draw' | 'tile' | 'wallend' | 'wallrect' | 'revealrect' | 'drawmove'; /** the drawing being moved */ drawing?: Drawing; start: Pt; screen: Pt; origins?: Map<string, Pt>; lead?: string; moved: boolean; sent: number; /** wall ends that move together, and where they went */ ends?: { id: string; end: 1 | 2 }[]; to?: Pt } = null
+  private drag: null | { kind: 'pan' | 'tokens' | 'ruler' | 'marquee' | 'draw' | 'tile' | 'wallend' | 'wallrect' | 'revealrect' | 'drawmove'; /** the drawing being moved */ drawing?: Drawing; start: Pt; screen: Pt; origins?: Map<string, Pt>; lead?: string; /** how far dragged tokens are from where they started, and how far they were when last sent */ off?: Pt; sentOff?: Pt; moved: boolean; sent: number; /** wall ends that move together, and where they went */ ends?: { id: string; end: 1 | 2 }[]; to?: Pt } = null
   private pointers = new Map<number, Pt>()
   private pinch: null | { dist: number; scale: number } = null
   private longPress: number | undefined
@@ -202,7 +211,7 @@ export class TableEngine {
     if (changed) this.drawBackground()
     if (scene && this.fitted !== scene.id) { this.fitted = scene.id; this.needFit = true; this.fit() }
     for (const v of this.views.values()) this.layout(v)
-    this.fog.configure(scene, !this.gmView)
+    this.fog.configure(scene, this.fogMode)
     this.setWeather(scene?.weather ?? 'none')
     this.ambientG.clear()
     if (scene?.ambient) this.ambientG.rect(0, 0, scene.width, scene.height).fill({ color: Number.parseInt(scene.ambient.slice(1), 16), alpha: 0.28 })
@@ -269,7 +278,7 @@ export class TableEngine {
   upsert(t: Token) { this.poke();
     this.tokens.set(t.id, t)
     if (!this.ready) return
-    const key = [t.image, t.color, t.name, t.size, t.hidden, t.locked, JSON.stringify(t.data.hp ?? null), (t.data.conditions ?? []).join(','), JSON.stringify([t.data.shape, t.data.border, t.data.tint, t.data.flip, t.data.nameplate, t.data.elevation, t.data.aura, t.data.bars])].join('|')
+    const key = [t.image, t.color, t.name, t.size, t.hidden, t.locked, JSON.stringify(t.data.hp ?? null), (t.data.conditions ?? []).join(','), JSON.stringify([t.data.shape, t.data.border, t.data.tint, t.data.flip, t.data.nameplate, t.data.elevation, t.data.aura, t.data.bars, isLightSource(t), isLightSource(t) ? t.data.light : null])].join('|')
     let v = this.views.get(t.id)
     if (!v || v.key !== key) {
       v?.box.destroy({ children: true })
@@ -300,6 +309,7 @@ export class TableEngine {
 
   private build(v: TokenView) {
     const t = v.token
+    if (isLightSource(t)) return this.buildLight(v)
     const d = this.px(t)
     const r = d / 2
     const shape = (t.data.shape as string) ?? 'round'
@@ -387,10 +397,40 @@ export class TableEngine {
     this.drawSelection(v)
   }
 
+  /** A light source is not a creature: the GM sees a small lamp in the light's colour and a ring where its light ends. */
+  private buildLight(v: TokenView) {
+    const t = v.token
+    const l = (t.data.light ?? {}) as { bright?: number; dim?: number; color?: string; off?: boolean }
+    const col = /^#[0-9a-fA-F]{3,8}$/.test(l.color ?? '') ? new Color(l.color!).toNumber() : 0xffd27a
+    const off = !!l.off || !((l.bright ?? 0) > 0 || (l.dim ?? 0) > 0)
+    const s = this.scene
+    if (s && !off) {
+      const unit = (n: number) => (n / s.dist) * s.gridSize
+      const reach = new Graphics()
+      if ((l.dim ?? 0) > 0) reach.circle(0, 0, unit(Math.max(l.dim ?? 0, l.bright ?? 0))).stroke({ width: 1.5, color: col, alpha: 0.35 })
+      if ((l.bright ?? 0) > 0) reach.circle(0, 0, unit(l.bright ?? 0)).stroke({ width: 1.5, color: col, alpha: 0.6 })
+      reach.label = 'aura'
+      v.box.addChild(reach)
+    }
+    const r = 13
+    const lamp = new Graphics()
+    if (!off) lamp.circle(0, 0, r + 6).fill({ color: col, alpha: 0.25 })
+    lamp.circle(0, 0, r).fill({ color: off ? 0x55524c : col }).stroke({ width: 2.5, color: 0x1b1a17, alpha: 0.85 })
+    for (let i = 0; i < 8; i++) {
+      const a = (Math.PI / 4) * i
+      lamp.moveTo(Math.cos(a) * 5, Math.sin(a) * 5).lineTo(Math.cos(a) * 9, Math.sin(a) * 9)
+    }
+    lamp.stroke({ width: 2, color: 0x1b1a17, alpha: off ? 0.5 : 0.8 })
+    lamp.label = 'lamp'
+    v.box.addChild(lamp)
+    v.box.eventMode = 'none'
+    this.drawSelection(v)
+  }
+
   private drawSelection(v: TokenView) {
     v.box.getChildByLabel('sel')?.destroy()
     v.box.getChildByLabel('turn')?.destroy()
-    const r = this.px(v.token) / 2
+    const r = isLightSource(v.token) ? 14 : this.px(v.token) / 2
     if (this.turnId === v.token.id) {
       const t = new Graphics().circle(0, 0, r + 9).stroke({ width: 4, color: 0x4fc3f7 }).circle(0, 0, r + 14).stroke({ width: 2, color: 0x4fc3f7, alpha: 0.5 })
       t.label = 'turn'
@@ -424,7 +464,7 @@ export class TableEngine {
     v.box.position.set(t.x, t.y)
     queueMicrotask(() => this.updateRoofs())
     v.box.rotation = 0
-    v.box.alpha = t.hidden ? 0.45 : 1
+    v.box.alpha = t.hidden && !isLightSource(t) ? 0.45 : 1
     // the picture turns with the token; the name stays upright
     for (const c of v.box.children) if (!['name', 'sel', 'hp', 'down', 'cond', 'turn', 'aura', 'bar'].includes(c.label)) c.rotation = (t.rotation * Math.PI) / 180
   }
@@ -441,11 +481,12 @@ export class TableEngine {
   }
 
   /** Who is looking: the GM sees everything, a player sees what their own tokens see. */
-  setViewer(me: { id: string; gm: boolean; spectator: boolean; canDoors: boolean; shared?: boolean }) { this.poke();
+  setViewer(me: { id: string; gm: boolean; spectator: boolean; canDoors: boolean; shared?: boolean; wallsBlock?: boolean }) { this.poke();
     this.shared = !!me.shared
+    this.wallsBlock = me.wallsBlock !== false
     this.me = { id: me.id, gm: me.gm || me.spectator, canDoors: me.canDoors || me.gm }
     if (!this.ready) return
-    this.fog.configure(this.scene, !this.gmView)
+    this.fog.configure(this.scene, this.fogMode)
     this.drawWalls()
     this.refreshVision()
   }
@@ -455,7 +496,7 @@ export class TableEngine {
     const was = !!this.preview
     this.preview = spec && (spec.users.length || spec.tokens.length) ? spec : null
     if (!this.ready) return
-    this.fog.configure(this.scene, !this.gmView)
+    this.fog.configure(this.scene, this.fogMode)
     if (this.preview) void this.fog.loadExplored(null)
     else if (was) void this.fog.loadExplored(this.explored)
     this.drawWalls()
@@ -973,6 +1014,7 @@ export class TableEngine {
       return
     }
     if (!pan && this.me.gm && this.tool === 'pin') { this.hooks.onPinPlace(world); return }
+    if (!pan && this.me.gm && this.tool === 'light' && !this.hit(world)) { this.hooks.onLightPlace(world); return }
     if (!pan && this.tool === 'draw' && this.drawStyle.kind === 'polygon') {
       const now = performance.now()
       const again = now - this.lastClick.t < 350 && Math.hypot(world.x - this.lastClick.x, world.y - this.lastClick.y) < 6 / this.world.scale.x
@@ -1070,8 +1112,10 @@ export class TableEngine {
       case 'tokens': {
         const lead = this.tokens.get(d.lead!)!
         const o = d.origins!.get(d.lead!)!
-        const target = this.scene ? snap({ x: o.x + world.x - d.start.x, y: o.y + world.y - d.start.y }, lead.size, this.scene) : { x: o.x + world.x - d.start.x, y: o.y + world.y - d.start.y }
+        let target = this.scene ? snap({ x: o.x + world.x - d.start.x, y: o.y + world.y - d.start.y }, lead.size, this.scene) : { x: o.x + world.x - d.start.x, y: o.y + world.y - d.start.y }
+        if (this.scene && this.wallsBlock && !(this.me.gm && (e.ctrlKey || e.metaKey))) target = this.walkTo(d, target, lead.size, now)
         const dx = target.x - o.x, dy = target.y - o.y
+        d.off = { x: dx, y: dy }
         for (const [id, origin] of d.origins!) this.views.get(id)?.box.position.set(origin.x + dx, origin.y + dy)
         const path = [o, target]
         if (d.origins!.size === 1 && this.scene) {
@@ -1081,7 +1125,7 @@ export class TableEngine {
           const colour = left == null ? 0xffd23f : cost <= left ? 0x4caf50 : cost <= left * 2 ? 0xf1c40f : 0xe74c3c
           this.drawRuler(path, colour, null, undefined, left == null ? undefined : ` of ${formatDistance(left, this.scene.unit)} left`)
         }
-        if (now - d.sent > 70) { d.sent = now; this.flushMove(d, false); this.hooks.onRuler(path) }
+        if (now - d.sent > 70) { d.sent = now; d.sentOff = d.off; this.flushMove(d, false); this.hooks.onRuler(path) }
         break
       }
       case 'ruler': {
@@ -1140,6 +1184,22 @@ export class TableEngine {
         break
       }
     }
+  }
+
+  /**
+   * Where the lead of a drag may go on its way to `target` without walking through a wall, and the rest of the
+   * selection with it. Steps are taken from where the tokens are now, so a token can be walked around a corner;
+   * the server checks each step it is sent, so the corner is sent before the token goes round it.
+   */
+  private walkTo(d: NonNullable<TableEngine['drag']>, target: Pt, size: number, now: number): Pt {
+    const o = d.origins!.get(d.lead!)!, off = d.off ?? { x: 0, y: 0 }, sentOff = d.sentOff ?? { x: 0, y: 0 }
+    const at = { x: o.x + off.x, y: o.y + off.y }
+    const to = reach(at, target, size, this.walls, this.scene!)
+    let nx = to.x - o.x, ny = to.y - o.y
+    const moves = (from: Pt, a: Pt, b: Pt) => blockedPath({ x: from.x + a.x, y: from.y + a.y }, { x: from.x + b.x, y: from.y + b.y }, this.walls)
+    if ([...d.origins!].some(([id, p]) => id !== d.lead && moves(p, off, { x: nx, y: ny }))) { nx = off.x; ny = off.y }
+    if ([...d.origins!.values()].some((p) => moves(p, sentOff, { x: nx, y: ny }))) { d.sent = now; d.sentOff = off; this.flushMove(d, false) }
+    return { x: o.x + nx, y: o.y + ny }
   }
 
   /** What a person's own last drags moved, newest last, so Ctrl+Z can put them back. */

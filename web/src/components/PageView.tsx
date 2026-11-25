@@ -20,10 +20,12 @@ import { typeOf } from '../lib/pageTypes'
 import { TypeIcon, useTypes } from './TypeIcon'
 import { TypeLayout } from './TypeLayout'
 import type { SheetPatch } from './SheetView'
-import { emptyCharacter, emptyPf2eCharacter, emptyPf2eCreature, pfDerived, patchSheetLocal, sheetOf, wholeSheetPatch } from '../lib/sheet'
+import { emptyCharacter, emptyPf2eCharacter, emptyPf2eCreature, pfDerived, patchSheetLocal, sheetOf, wholeSheetPatch, type Sheet } from '../lib/sheet'
+import { CharacterBuilder } from './CharacterBuilder'
 import { CharacterSheet } from './CharacterSheet'
 import { Pf2eCharacterSheet } from './Pf2eCharacterSheet'
 import { Select } from './Select'
+import { PlayedBy } from './PlayedBy'
 import type { FullPage, PageVersion } from '../types'
 import { ReadOnlyDoc } from '../editor/Embed'
 
@@ -46,14 +48,15 @@ export function PageView({ id, anchor }: { id: string; anchor?: string }) {
   return <PageEditor key={`${id}:${epoch}`} page={page} anchor={anchor} onReload={() => setEpoch((e) => e + 1)} />
 }
 
-type PropsPatch = { data?: Record<string, any>; portrait?: string | null; type?: string | null; sheet?: Record<string, unknown> }
+type PropsPatch = { data?: Record<string, any>; portrait?: string | null; type?: string | null; sheet?: Record<string, unknown>; players?: string[] }
 type Pending = { title?: string; tags?: string[]; propsPatch?: PropsPatch }
 
 function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: string; onReload: () => void }) {
   const user = useStore((s) => s.user)!
   const online = useStore((s) => s.online)
   const others = online.filter((o) => o.id !== user.id)
-  const readOnly = user.role === 'viewer'
+  /** reads the world only; may still change the page of a character they play (its text and sheet, not its place in the world) */
+  const viewer = user.role === 'viewer'
   const zen = useStore((s) => s.zen)
   const meta = useStore((s) => s.data.pages.find((p) => p.id === page.id))
   const links = useStore((s) => s.data.links)
@@ -69,6 +72,9 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
   const [showShare, setShowShare] = useState(false)
   const pending = useRef<Pending>({})
   const [props, setProps] = useState<Record<string, any>>(page.props ?? {})
+  const players: string[] = Array.isArray(props.players) ? props.players : []
+  const readOnly = viewer && !players.includes(user.id)
+  const setPlayers = (next: string[]) => { setProps({ ...props, players: next }); schedule({ propsPatch: { players: next } }, 100) }
   const types = useTypes()
   const pageType = typeOf(types, { type: props.type ?? null })
   const timer = useRef<number | undefined>(undefined)
@@ -287,6 +293,13 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
     setProps({ ...props, sheet })
     schedule({ propsPatch: { sheet: wholeSheetPatch(sheet) } }, 200)
   }
+  const [building, setBuilding] = useState(false)
+  const createBuilt = (sheet: Sheet) => {
+    setBuilding(false)
+    setProps({ ...props, sheet })
+    if (!title.trim() && sheet.name) setTitle(sheet.name)
+    schedule({ propsPatch: { sheet: wholeSheetPatch(sheet) }, ...(!title.trim() && sheet.name ? { title: sheet.name } : {}) }, 100)
+  }
   const importCharacterFile = async () => {
     const f = await new Promise<File | null>((resolve) => { const el = document.createElement('input'); el.type = 'file'; el.accept = '.json,application/json'; el.onchange = () => resolve(el.files?.[0] ?? null); el.oncancel = () => resolve(null); el.click() })
     if (!f) return
@@ -336,7 +349,7 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
           <button className="icon-btn" title="Zen mode (Alt+Z)" onClick={() => useStore.getState().setUi({ zen: true })}><Maximize2 size={16} /></button>
           <button className="icon-btn" title="Open in split view" onClick={() => nav({ type: 'page', id: page.id }, { split: true })}><PanelRightOpen size={16} /></button>
           <button className="icon-btn" title="Version history" onClick={() => setShowHistory(true)}><Clock size={16} /></button>
-          {!readOnly && (
+          {!viewer && (
             <div style={{ position: 'relative' }}>
             <button className="icon-btn" title="More actions" onClick={() => setShowMenu(!showMenu)}><MoreHorizontal size={16} /></button>
               {showMenu && (
@@ -391,10 +404,10 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); editor?.commands.focus('start') } }}
         />
         <div className="meta-row">
-          {(pageType || !readOnly) && (
+          {(pageType || !viewer) && (
             <span className="type-pick" title="Page type">
               <TypeIcon name={pageType?.icon ?? 'file-text'} size={14} />
-              {readOnly ? <span>{pageType?.name}</span> : (
+              {viewer ? <span>{pageType?.name}</span> : (
                 <Select value={pageType?.id ?? ''} onChange={changeType}>
                   <option value="">Plain page</option>
                   {types.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -405,10 +418,10 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
           {tags.map((t) => (
             <span key={t} className="chip">
               <a style={{ color: 'inherit', textDecoration: 'none', cursor: 'pointer' }} onClick={() => nav({ type: 'tag', tag: t })}>#{t}</a>
-              {!readOnly && <button onClick={() => removeTag(t)} style={{ opacity: .6 }}>×</button>}
+              {!viewer && <button onClick={() => removeTag(t)} style={{ opacity: .6 }}>×</button>}
             </span>
           ))}
-          {!readOnly && (
+          {!viewer && (
             <input
               className="tag-input" aria-label="Add tags" placeholder="+ tag (nested: npc/villain)" value={tagDraft}
               onChange={(e) => setTagDraft(e.target.value)}
@@ -421,12 +434,24 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
           )}
           {meta && <span style={{ marginLeft: 'auto' }}>{words} words · edited {ago(meta.updatedAt)}</span>}
         </div>
+        {(pageType?.id === 'person' || sheetOf(props)?.kind === 'character' || players.length > 0) && !zen && <PlayedBy players={players} readOnly={viewer} onChange={setPlayers} />}
+        {viewer && !readOnly && <p className="player-note muted">You play this character: you can change its text and sheet.</p>}
         {sheetOf(props)?.kind === 'character' ? (
           sheetOf(props)!.pf2e?.char
             ? <Pf2eCharacterSheet sheet={sheetOf(props)!} set={readOnly ? undefined : setSheetFields} />
             : <CharacterSheet sheet={sheetOf(props)!} set={readOnly ? undefined : setSheetFields} />
         ) : pageType?.id === 'person' && !readOnly && !zen ? (
-          <div className="cs-add"><button className="btn sm" onClick={system === 'pf2e' ? addPf2eCharacter : addCharacterSheet}>Add a character sheet</button>{system !== 'pf2e' && <button className="btn sm" title="From a Chronicle, Foundry, D&D Beyond or Roll20 file" onClick={importCharacterFile}>Import a character</button>}</div>
+          <div className="cs-start">
+            <div>
+              <b>No character sheet yet</b>
+              <span className="muted">{system === 'pf2e' ? 'Add a Pathfinder sheet and fill it in.' : 'Build one step by step with the rules, start from a blank sheet, or bring one from another tool.'}</span>
+            </div>
+            <div className="cs-start-actions">
+              {system !== 'pf2e' && <button className="btn primary" onClick={() => setBuilding(true)}>Build a character</button>}
+              <button className="btn sm" onClick={system === 'pf2e' ? addPf2eCharacter : addCharacterSheet}>Add a character sheet</button>
+              {system !== 'pf2e' && <button className="btn sm" title="From a Chronicle, Foundry, D&D Beyond or Roll20 file" onClick={importCharacterFile}>Import a character</button>}
+            </div>
+          </div>
         ) : null}
         {pageType ? (
           <TypeLayout layout={pageType.layout} data={typeData} readOnly={readOnly} setValue={setTypeValue} pickImage={pickImage} sheet={{ value: sheetOf(props), set: setSheetFields, createPf2e: system === 'pf2e' ? addPf2eSheet : undefined }}
@@ -437,8 +462,8 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
 
         {!zen && (
           <>
-            <PageWorldSection pageId={page.id} readOnly={readOnly} version={worldVersion} />
-            <PageRelationsSection pageId={page.id} readOnly={readOnly} version={worldVersion} />
+            <PageWorldSection pageId={page.id} readOnly={viewer} version={worldVersion} />
+            <PageRelationsSection pageId={page.id} readOnly={viewer} version={worldVersion} />
             {backlinks.length > 0 && (
               <div className="section">
                 <h3>Linked from ({backlinks.length})</h3>
@@ -482,7 +507,8 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
         setEmbedFor(null)
       }} />}
       {showShare && <ShareDialog pageId={page.id} title={title} onClose={() => setShowShare(false)} />}
-      {showHistory && <History pageId={page.id} readOnly={readOnly} onClose={() => setShowHistory(false)}
+      {building && <CharacterBuilder ruleset={system === '5e-2024' ? '5e-2024' : '5e'} name={title} onCreate={createBuilt} onClose={() => setBuilding(false)} />}
+      {showHistory && <History pageId={page.id} readOnly={viewer} onClose={() => setShowHistory(false)}
         onRestore={async (vid) => {
           await flush()
           const r = await api.restoreVersion(vid, page.id)

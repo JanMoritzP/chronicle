@@ -411,6 +411,12 @@ areas:
       - id: sheet.character-more
         name: "A character sheet tracks rests, hit dice, death saves, spell slots, items and coins"
         files: [web/src/components/CharacterSheet.tsx]
+      - id: sheet.builder
+        name: "Build a character step by step: class, species, background, scores, skills, and a sheet with the numbers worked out"
+        files: [web/src/components/CharacterBuilder.tsx, web/src/lib/builder.ts]
+      - id: sheet.players
+        name: "A page names who plays it; a reader who plays it may change its sheet"
+        files: [web/src/components/PlayedBy.tsx, web/src/components/PageView.tsx]
       - id: sheet.edit-more
         name: "A creature sheet takes legendary actions, recharges and uses per day"
         files: [web/src/components/SheetView.tsx]
@@ -421,6 +427,12 @@ areas:
   - id: table
     name: Tabletop
     features:
+      - id: table.lighting
+        name: "Lighting is switched on for a scene, a light is placed with the light tool and set up in its panel"
+        files: [web/src/components/TableLight.tsx, web/src/tabletop/fog.ts]
+      - id: table.walls-block
+        name: "A dragged token stops at a wall"
+        files: [web/src/tabletop/movement.ts]
       - id: table.live
         name: "The GM adds a scene and tokens and a player sees them live, hidden ones excepted"
         files: [web/src/components/Tabletop.tsx, web/src/tabletop/state.ts, web/src/tabletop/engine.ts]

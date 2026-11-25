@@ -33,7 +33,7 @@ export interface CommentItem {
   pageId: string; id: string; from: string; to: string; message: string; done: boolean; context: string
   createdAt: number; doneAt: number | null; pageTitle: string; pageIcon: string | null
 }
-export interface Person { username: string; role: 'owner' | 'editor' | 'viewer' }
+export interface Person { id: string; username: string; /** what they may do in this world */ role: 'owner' | 'editor' | 'viewer' }
 export interface Folder { id: string; parentId: string | null; name: string; sort: number }
 export interface LinkRow { sourceId: string; targetId: string | null; targetName: string; anchor: string | null; embed: number; /** set when the link points into the Open5e library */ libKey?: string | null }
 export interface Zettel { id: string; body: string; tags: string[]; createdAt: number; pageId: string | null; processedAt: number | null }

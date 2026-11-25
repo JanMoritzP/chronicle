@@ -618,6 +618,15 @@ const migrations: (string | ((d: Database.Database) => void))[] = [
   // named layers of a scene (a list kept as JSON) and the layer a prop belongs to
   `ALTER TABLE scenes ADD COLUMN layers TEXT NOT NULL DEFAULT '[]'`,
   `ALTER TABLE scene_tiles ADD COLUMN layer_id TEXT`,
+  // lighting is switched on per scene; scenes that were already dark, or follow the time of day, keep their lighting
+  (d) => {
+    d.exec('ALTER TABLE scenes ADD COLUMN lighting INTEGER NOT NULL DEFAULT 0')
+    d.exec('UPDATE scenes SET lighting = 1 WHERE darkness > 0')
+    const on = d.prepare('UPDATE scenes SET lighting = 1 WHERE id = ?')
+    for (const r of d.prepare('SELECT settings FROM table_state').all() as { settings: string }[]) {
+      try { for (const id of (JSON.parse(r.settings).daylight ?? []) as string[]) on.run(id) } catch { /* a damaged settings row has no daylight list */ }
+    }
+  },
 ]
 
 export const SCHEMA_VERSION = migrations.length

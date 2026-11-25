@@ -17,6 +17,8 @@ export const settingsSchema = z.object({
   playersDraw: z.boolean().default(true),
   playersPing: z.boolean().default(true),
   playersRuler: z.boolean().default(true),
+  /** Walls, closed doors and windows stop the players' tokens. The GM can still pass by holding Ctrl. */
+  wallsBlockMovement: z.boolean().default(true),
   /** Players see each other's cursors. */
   showCursors: z.boolean().default(true),
   /** Players see through each other's tokens (a party that looks out for each other). */
@@ -33,7 +35,7 @@ export const settingsSchema = z.object({
 /** A change to the settings: only the keys that are present (a partial of the schema above would fill the defaults back in). */
 export const settingsPatch = z.object({
   gms: z.array(z.string().max(64)).max(20),
-  playersMoveOwn: z.boolean(), playersCreateTokens: z.boolean(), playersEditOwnStats: z.boolean(), playersOpenDoors: z.boolean(), playersDraw: z.boolean(), playersPing: z.boolean(), playersRuler: z.boolean(), showCursors: z.boolean(), sharedVision: z.boolean(), banned: z.array(z.string().max(64)).max(50), muted: z.array(z.string().max(64)).max(50),
+  playersMoveOwn: z.boolean(), playersCreateTokens: z.boolean(), playersEditOwnStats: z.boolean(), playersOpenDoors: z.boolean(), playersDraw: z.boolean(), playersPing: z.boolean(), playersRuler: z.boolean(), wallsBlockMovement: z.boolean(), showCursors: z.boolean(), sharedVision: z.boolean(), banned: z.array(z.string().max(64)).max(50), muted: z.array(z.string().max(64)).max(50),
   automation: z.object({ damage: z.boolean(), concentration: z.boolean(), deathSaves: z.boolean(), attacks: z.boolean() }),
   hour: z.number().int().min(0).max(23),
   daylight: z.array(z.string().max(64)).max(200),
@@ -45,10 +47,13 @@ export function parseSettings(raw: string | null | undefined): TableSettings {
   try { return settingsSchema.parse(JSON.parse(raw ?? '{}')) } catch { return DEFAULT_SETTINGS }
 }
 
-/** The owner account and anyone named in the settings run the table; viewers of the world only watch. */
-export function roleAt(user: { id: string; role: string }, worldRole: 'editor' | 'viewer', settings: TableSettings): TableRole {
+/**
+ * The owner account and anyone named in the settings run the table. Members who write in the world are players. Members who only read it
+ * watch, unless they play a character (a page names them, or they move a token): then they are players too.
+ */
+export function roleAt(user: { id: string; role: string }, worldRole: 'editor' | 'viewer', settings: TableSettings, plays = false): TableRole {
   if (user.role === 'owner' || settings.gms.includes(user.id)) return 'gm'
-  return worldRole === 'viewer' ? 'spectator' : 'player'
+  return worldRole === 'viewer' && !plays ? 'spectator' : 'player'
 }
 
 export interface TokenRow {
@@ -150,6 +155,8 @@ export const scenePatch = z.object({
   fog: z.boolean(),
   /** 0 is daylight, 1 is pitch dark; light sources push it back. */
   darkness: z.number().min(0).max(1),
+  /** Light and darkness are worked out at all. Off, the scene is in plain daylight whatever the darkness says. */
+  lighting: z.boolean(),
   /** Where the scene sits in the GM's list of scenes, and what the GM noted about it. */
   folder: z.string().max(60),
   notes: z.string().max(5000),

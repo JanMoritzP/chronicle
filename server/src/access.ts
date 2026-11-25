@@ -2,11 +2,12 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { userFromRequest, type AuthUser } from './auth.js'
 import { db } from './db.js'
 import { publishWorld } from './live.js'
+import { playsInWorld, playsPage } from './players.js'
 
 export type WorldRole = 'editor' | 'viewer'
 
 declare module 'fastify' {
-  interface FastifyRequest { worldId?: string }
+  interface FastifyRequest { worldId?: string; /** a read-only member changing the page of the character they play (only its text and sheet) */ playerEdit?: boolean }
 }
 
 /**
@@ -69,6 +70,8 @@ export function worldOfPath(path: string): string | null | undefined {
 }
 
 const WRITES = new Set(['POST', 'PATCH', 'PUT', 'DELETE'])
+const PLAYER_PAGE = /^\/api\/pages\/([^/]+)$/
+const PLAYER_UPLOAD = /^\/api\/workspaces\/[^/]+\/uploads$/
 const AREA = /^\/api\/(?:workspaces\/[^/]+\/)?([a-z-]+)/
 
 export function accessRoutes(app: FastifyInstance) {
@@ -83,7 +86,13 @@ export function accessRoutes(app: FastifyInstance) {
     if (ws === null) return // the route answers 404
     const role = worldRole(user, ws)
     if (!role) return reply.code(404).send({ error: 'not found' })
-    if (role === 'viewer' && WRITES.has(req.method)) return reply.code(403).send({ error: 'read-only account' })
+    if (role === 'viewer' && WRITES.has(req.method)) {
+      // a player may change the page of their own character, and upload a picture for it, even in a world they only read
+      const page = req.method === 'PATCH' ? PLAYER_PAGE.exec(path)?.[1] : undefined
+      const upload = req.method === 'POST' && PLAYER_UPLOAD.test(path)
+      if (!(page && playsPage(user.id, page)) && !(upload && playsInWorld(ws, user.id))) return reply.code(403).send({ error: 'read-only account' })
+      req.playerEdit = true
+    }
     req.user = user
     req.worldId = ws
   })

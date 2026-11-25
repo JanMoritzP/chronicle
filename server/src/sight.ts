@@ -37,7 +37,7 @@ export function buildSight(scene: SightScene, walls: SightWall[], tokens: SightT
     // a light shines whoever carries it, hidden tokens included
     for (const t of tokens) {
       const l = t.data.light
-      if (!l) continue
+      if (!l || (l as { off?: boolean }).off) continue
       const dim = px(Math.max(l.dim ?? 0, l.bright ?? 0))
       if (dim > 0) carve(t, dim, coneOf(l))
     }

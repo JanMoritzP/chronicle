@@ -6,15 +6,17 @@ import { bindCall, handleCall, handleRtc, setCallIdentity } from './call'
 // What the browser knows about the table. The server is the only writer: this store only ever holds what it was told.
 
 export type TableRole = 'gm' | 'player' | 'spectator'
-export interface Scene extends GridSpec { id: string; name: string; sort: number; bg: string; width: number; height: number; fog: boolean; darkness: number; weather?: 'none' | 'rain' | 'snow'; folder?: string; /** only the GM is sent the notes */ notes?: string; gridColor?: string; gridOpacity?: number; ambient?: string; /** named layers for props */ layers?: SceneLayer[] }
+export interface Scene extends GridSpec { id: string; name: string; sort: number; bg: string; width: number; height: number; fog: boolean; darkness: number; /** light and darkness are worked out (old scenes: on when dark) */ lighting?: boolean; weather?: 'none' | 'rain' | 'snow'; folder?: string; /** only the GM is sent the notes */ notes?: string; gridColor?: string; gridOpacity?: number; ambient?: string; /** named layers for props */ layers?: SceneLayer[] }
 export interface SceneLayer { id: string; name: string; players: boolean; locked: boolean }
 export interface Token {
   id: string; sceneId: string; name: string; x: number; y: number; size: number; rotation: number
   image: string; color: string; pageId: string | null; hidden: boolean; locked: boolean
   owners: string[]; z: number; data: Record<string, any>
 }
+/** A light the GM put on the map (with the light tool, the map editor or a map file): not a creature, only light. */
+export const isLightSource = (t: Pick<Token, 'data'>) => t.data?.lightSource === true || t.data?.editorLight === true
 export interface Settings {
-  gms: string[]; playersMoveOwn: boolean; playersCreateTokens: boolean; playersEditOwnStats: boolean; playersOpenDoors: boolean; playersDraw: boolean; playersPing: boolean; playersRuler: boolean; showCursors: boolean; sharedVision: boolean
+  gms: string[]; playersMoveOwn: boolean; playersCreateTokens: boolean; playersEditOwnStats: boolean; playersOpenDoors: boolean; playersDraw: boolean; playersPing: boolean; playersRuler: boolean; wallsBlockMovement?: boolean; showCursors: boolean; sharedVision: boolean
   banned?: string[]; muted?: string[]
   /** the hour of the day at the table, and the scenes whose darkness follows it */
   hour?: number; daylight?: string[]
@@ -46,7 +48,7 @@ export type InlinePart = { t: 'text'; text: string } | { t: 'roll'; roll: RollJs
 export type ChatPart = InlinePart | { t: 'card'; title: string; rows: { label: string; parts: InlinePart[] }[] }
 export interface ChatMsg { id: string; ts: number; userId: string; name: string; kind: 'say' | 'roll' | 'gmroll' | 'emote' | 'whisper' | 'ooc'; to: string[]; parts: ChatPart[] }
 
-export const DEFAULT_SETTINGS: Settings = { gms: [], playersMoveOwn: true, playersCreateTokens: false, playersEditOwnStats: true, playersOpenDoors: false, playersDraw: true, playersPing: true, playersRuler: true, showCursors: true, sharedVision: false, automation: { damage: false, concentration: false, deathSaves: false, attacks: false } }
+export const DEFAULT_SETTINGS: Settings = { gms: [], playersMoveOwn: true, playersCreateTokens: false, playersEditOwnStats: true, playersOpenDoors: false, playersDraw: true, playersPing: true, playersRuler: true, wallsBlockMovement: true, showCursors: true, sharedVision: false, automation: { damage: false, concentration: false, deathSaves: false, attacks: false } }
 
 interface TableState {
   conn: Conn

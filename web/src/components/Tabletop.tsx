@@ -1,12 +1,12 @@
 import { Color } from 'pixi.js'
-import { BrickWall, Dices, Map as MapIcon, Pencil, UserRound, Ellipsis, Crosshair, Eraser, Eye, MessageSquare, EyeOff, Lock, LockOpen, Maximize, Minus, Plus, Ruler, RotateCw, Swords, Trash2, UserPlus, MousePointer2, Users } from 'lucide-react'
+import { BrickWall, ChevronRight, Dices, Eraser, Eye, EyeOff, Focus, Lightbulb, Lock, LockOpen, Map as MapIcon, MapPin, Maximize, MessageSquare, Minus, MousePointer2, PanelRightClose, PanelRightOpen, Pencil, Plus, Ruler, RotateCw, ScanEye, ScrollText, Settings2, Skull, SquareDashed, Sun, SunDim, Swords, Trash2, UserPlus, UserRound, Users, Ellipsis, Crosshair, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { askText, confirmDialog } from '../lib/dialog'
 import { colorFor } from '../lib/collab'
 import { useStore } from '../store'
 import { TableEngine, type Tool } from '../tabletop/engine'
 import { snap } from '../tabletop/grid'
-import { joinTable, leaveTable, onTableMessage, sendTable, useTable, type DrawKind, type Scene, type Token } from '../tabletop/state'
+import { isLightSource, joinTable, leaveTable, onTableMessage, sendTable, useTable, type DrawKind, type Scene, type Token } from '../tabletop/state'
 import { pickBackground, pickImage, uploadImage, videoSize } from '../tabletop/upload'
 import { exportUvtt, importUvtt } from '../tabletop/uvttFiles'
 import { EncounterPanel } from './TableEncounters'
@@ -28,8 +28,19 @@ import { CallPanel } from './CallPanel'
 import { Replay } from './Replay'
 import { TokenActions, TokenBars, TokenLook } from './TokenLook'
 import { TablesAndDecks } from './TableDecks'
+import { LIGHT_PRESETS, LightSourcePanel, SceneLights } from './TableLight'
 import { ChatPanel, CombatPanel, LinkPage, SightLight, TokenSheet, TokenStats } from './TableParts'
 import { Select } from './Select'
+import { blockedPath } from '../tabletop/movement'
+
+const WALL_HINTS = {
+  wall: 'Stops sight, light and tokens',
+  door: 'Click it to open or close it; Ctrl-click locks it',
+  secret: 'A door that looks like a wall to the players until it is opened',
+  window: 'Sight and light pass, tokens do not',
+  oneway: 'Seen through from the side its arrow points to only',
+  terrain: 'A hill or hedge: seen past once, but two of them in a row block the view. Tokens walk over it.',
+} as const
 
 const PALETTE = ['#c0392b', '#2e86c1', '#27ae60', '#d68910', '#8e44ad', '#16a085', '#7f8c8d', '#d35400']
 const colorNum = (id: string) => new Color(colorFor(id)).toNumber()
@@ -111,6 +122,14 @@ export function TableView() {
       onDrawMove: (id, dx, dy) => { sendTable({ t: 'draw.move', id, dx, dy }) },
       onPull: (p) => { const v = engine.current?.getView(); if (v) sendTable({ t: 'camera.pull', x: p.x - v.w / 2, y: p.y - v.h / 2, w: v.w, h: v.h }) },
       onPinPlace: (p) => setPinAt(p),
+      onLightPlace: (p) => {
+        const st = useTable.getState()
+        const id = st.sceneId
+        if (!id) return
+        const preset = LIGHT_PRESETS.find((x) => x.id === lightPresetRef.current) ?? LIGHT_PRESETS[1]
+        const n = st.tokens.filter(isLightSource).length + 1
+        sendTable({ t: 'token.add', sceneId: id, token: { name: `${preset.label} ${n}`, hidden: true, size: 0.5, x: p.x, y: p.y, data: { lightSource: true, light: { ...preset.light } } } })
+      },
       onPin: (pin) => { if (pin.pageId) useStore.getState().navigate({ type: 'page', id: pin.pageId }) },
       onPinDelete: (id) => { sendTable({ t: 'pin.delete', id }) },
       onText: async (p) => {
@@ -133,7 +152,7 @@ export function TableView() {
       }
       const viewer = () => {
         const s = useTable.getState()
-        e.setViewer({ shared: s.settings.sharedVision, id: s.you?.id ?? '', gm: s.role === 'gm', spectator: s.role === 'spectator', canDoors: s.role === 'player' && s.settings.playersOpenDoors })
+        e.setViewer({ shared: s.settings.sharedVision, id: s.you?.id ?? '', gm: s.role === 'gm', spectator: s.role === 'spectator', canDoors: s.role === 'player' && s.settings.playersOpenDoors, wallsBlock: s.settings.wallsBlockMovement !== false })
       }
       viewer()
       push()
@@ -152,7 +171,7 @@ export function TableView() {
       const turn = () => { const s = useTable.getState(); e.setTurn(s.combat.active ? s.combat.list.find((x) => x.id === s.combat.turn)?.tokenId ?? null : null) }
       turn()
       const unsub = useTable.subscribe((s, prev) => {
-        if (s.role !== prev.role || s.you !== prev.you || s.settings.playersOpenDoors !== prev.settings.playersOpenDoors || s.settings.sharedVision !== prev.settings.sharedVision) viewer()
+        if (s.role !== prev.role || s.you !== prev.you || s.settings.playersOpenDoors !== prev.settings.playersOpenDoors || s.settings.sharedVision !== prev.settings.sharedVision || s.settings.wallsBlockMovement !== prev.settings.wallsBlockMovement) viewer()
         if (s.scenes !== prev.scenes || s.sceneId !== prev.sceneId) push()
         if (s.combat !== prev.combat || s.tokens !== prev.tokens) turn()
         if (s.drawings !== prev.drawings) e.setDrawings(s.drawings)
@@ -185,6 +204,13 @@ export function TableView() {
   }, [draw, gmOnly])
   const [wallKind, setWallKind] = useState<'wall' | 'door' | 'secret' | 'window' | 'oneway' | 'terrain'>('wall')
   const [wallShape, setWallShape] = useState<'line' | 'rect'>('line')
+  // what a light placed with the light tool is like, and whether the GM sees the scene's light (both kept in this browser)
+  const [lightPreset, setLightPresetState] = useState(() => { try { return localStorage.getItem('tt-light-preset') || 'torch' } catch { return 'torch' } })
+  const lightPresetRef = useRef(lightPreset)
+  const setLightPreset = (id: string) => { setLightPresetState(id); lightPresetRef.current = id; try { localStorage.setItem('tt-light-preset', id) } catch { /* private window */ } }
+  const [gmLight, setGmLightState] = useState(() => { try { return localStorage.getItem('tt-gm-light') !== '0' } catch { return true } })
+  const setGmLight = (on: boolean) => { setGmLightState(on); try { localStorage.setItem('tt-gm-light', on ? '1' : '0') } catch { /* private window */ } }
+  useEffect(() => { engine.current?.setGmLight(gmLight) }, [gmLight])
   // the GM can look at the scene as a player (or one token) sees it: fog, darkness, secret doors and hidden tokens, without a decoy account
   const [previewKey, setPreviewKey] = useState('')
   // views the GM wants to come back to (a room, the stairs): kept in this browser, per scene
@@ -250,7 +276,10 @@ export function TableView() {
     else if (e.key.startsWith('Arrow') && sel.length && scene) {
       e.preventDefault()
       const d = e.key === 'ArrowLeft' ? [-1, 0] : e.key === 'ArrowRight' ? [1, 0] : e.key === 'ArrowUp' ? [0, -1] : [0, 1]
-      sendTable({ t: 'token.move', moves: sel.map((t) => ({ id: t.id, x: t.x + d[0] * scene.gridSize, y: t.y + d[1] * scene.gridSize })) })
+      // a nudge into a wall goes nowhere (the GM passes with Ctrl, as when dragging)
+      const free = st.settings.wallsBlockMovement === false || (gm && (e.ctrlKey || e.metaKey))
+      const moves = sel.map((t) => ({ id: t.id, x: t.x + d[0] * scene.gridSize, y: t.y + d[1] * scene.gridSize })).filter((m, i) => free || !blockedPath(sel[i], m, st.walls))
+      if (moves.length) sendTable({ t: 'token.move', moves })
     } else return
   }
 
@@ -270,58 +299,38 @@ export function TableView() {
 
   if (!wsId) return <div className="view muted">Create a world first.</div>
 
+  const tabs: { id: typeof panel; label: string; icon: React.ReactNode; badge?: string; show: boolean }[] = [
+    { id: 'token', label: 'Token', icon: <MousePointer2 size={16} />, show: true },
+    { id: 'combat', label: 'Combat', icon: <Swords size={16} />, badge: combat.active ? `R${combat.round}` : undefined, show: true },
+    { id: 'chat', label: 'Chat', icon: <MessageSquare size={16} />, badge: unread > 0 && panel !== 'chat' ? String(unread) : undefined, show: true },
+    { id: 'scene', label: 'Scene', icon: <MapIcon size={16} />, show: gm },
+    { id: 'encounters', label: 'Encounters', icon: <Skull size={16} />, show: gm },
+    { id: 'handouts', label: 'Handouts', icon: <ScrollText size={16} />, show: true },
+    { id: 'games', label: 'Tables and decks', icon: <Dices size={16} />, show: true },
+    { id: 'table', label: 'Table', icon: <Settings2 size={16} />, show: true },
+  ]
+  const title: Record<typeof panel, string> = { token: one ? (isLightSource(one) ? 'Light' : one.name || 'Token') : selected.length > 1 ? `${selected.length} tokens` : selectedTile ? 'Prop' : 'Tokens', combat: 'Combat', chat: 'Chat and dice', scene: scene?.name ?? 'Scene', encounters: 'Encounters', handouts: 'Handouts', games: 'Tables, decks and sound', table: 'The table' }
+  const toolButton = (t: Tool, label: string, hint: string, icon: React.ReactNode) => (
+    <button className={`tt-tool${tool === t ? ' on' : ''}`} title={hint} aria-label={label} aria-pressed={tool === t} onClick={() => setTool(tool === t && t !== 'select' ? 'select' : t)}>{icon}</button>
+  )
+  const lit = !!scene && scene.lighting !== false && scene.darkness > 0
+
   return (
     <div className="tt" tabIndex={0} onKeyDown={onKey}>
       <div className="tt-bar">
-        <Select className="input tt-scene" value={sceneId ?? ''} placeholder="No scenes yet" disabled={!gm} onChange={(id) => sendTable({ t: 'view', sceneId: id })}>
-          {[...scenes].sort((a, b) => (a.folder ?? '').localeCompare(b.folder ?? '') || a.sort - b.sort).map((s) => <option key={s.id} value={s.id}>{s.folder ? `${s.folder} › ` : ''}{s.name}{s.id === active ? ' (table)' : ''}</option>)}
-        </Select>
-        {gm && <button className="btn sm" onClick={addScene}><Plus size={13} /> Scene</button>}
-        {gm && scene && scene.id !== active && <button className="btn sm" title="Bring every player to this scene" onClick={() => sendTable({ t: 'scene.activate', id: scene.id })}><Users size={13} /> Move players here</button>}
-        <span className="tt-sep" />
-        <button className={`btn sm square${tool === 'select' ? ' on' : ''}`} title="Select and move (Esc)" aria-label="Select" onClick={() => setTool('select')}><MousePointer2 size={14} /></button>
-        <button className={`btn sm square${tool === 'ruler' ? ' on' : ''}`} title="Measure distance" aria-label="Ruler" onClick={() => setTool('ruler')}><Ruler size={14} /></button>
-        {canDraw && <button className={`btn sm square${tool === 'draw' ? ' on' : ''}`} title="Draw on the map" aria-label="Draw" onClick={() => setTool(tool === 'draw' ? 'select' : 'draw')}><Pencil size={14} /></button>}
-        {canDraw && tool === 'draw' && (
-          <>
-            <span className="seg tt-kinds" role="group" aria-label="Kind of drawing">
-              {([['free', 'Pen', 'Draw freehand'], ['line', 'Line', 'A straight line'], ['arrow', 'Arrow', 'A line with a head'], ['polygon', 'Shape', 'Click the corners, double-click to close it'], ['rect', 'Box', 'A rectangle'], ['ellipse', 'Circle', 'An ellipse'], ['text', 'Text', 'Write on the map'], ['cone', 'Cone', 'Spell area: a cone from the origin, as long as it is wide at the end'], ['beam', 'Ray', 'Spell area: a line one cell wide'], ['blast', 'Burst', 'Spell area: a circle from its centre'], ['cube', 'Cube', 'Spell area: a square from the middle of one side']] as const).map(([k, label, hint]) => <button key={k} className={draw.kind === k ? 'on' : ''} title={hint} onClick={() => setDraw({ ...draw, kind: k })}>{label}</button>)}
-            </span>
-            <span className="tt-swatches" role="group" aria-label="Colour">
-              {['#ff5252', '#ffb300', '#66bb6a', '#29b6f6', '#ab47bc', '#ffffff', '#212121'].map((c) => <button key={c} className={`tt-swatch${draw.color === c ? ' on' : ''}`} style={{ background: c }} title={c} aria-label={`Colour ${c}`} onClick={() => setDraw({ ...draw, color: c })} />)}
-            </span>
-            <label className="tt-inline" title="Line width">Width<input type="range" min={2} max={16} value={draw.width} onChange={(e) => setDraw({ ...draw, width: Number(e.target.value) })} /></label>
-            {(draw.kind === 'rect' || draw.kind === 'ellipse' || draw.kind === 'polygon') && <label className="tt-inline"><input type="checkbox" checked={draw.fill} onChange={(e) => setDraw({ ...draw, fill: e.target.checked })} />Filled</label>}
-            {draw.fill && <label className="tt-inline" title="How solid the fill is">Fill<input type="range" min={10} max={100} aria-label="Fill strength" value={draw.opacity} onChange={(e) => setDraw({ ...draw, opacity: Number(e.target.value) })} /></label>}
-            <label className="tt-inline" title="Gone after a few seconds, to point something out"><input type="checkbox" checked={draw.temp} onChange={(e) => setDraw({ ...draw, temp: e.target.checked })} />Fades away</label>
-            {gm && <label className="tt-inline" title="Only you see it"><input type="checkbox" checked={gmOnly} onChange={(e) => setGmOnly(e.target.checked)} />GM only</label>}
-          </>
+        {gm
+          ? <Select className="input tt-scene" value={sceneId ?? ''} placeholder="No scenes yet" onChange={(id) => sendTable({ t: 'view', sceneId: id })}>
+              {[...scenes].sort((a, b) => (a.folder ?? '').localeCompare(b.folder ?? '') || a.sort - b.sort).map((s) => <option key={s.id} value={s.id}>{s.folder ? `${s.folder} › ` : ''}{s.name}{s.id === active ? ' (players are here)' : ''}</option>)}
+            </Select>
+          : <b className="tt-scene-name ellipsis">{scene?.name ?? 'Waiting for the GM'}</b>}
+        {gm && <button className="btn sm square" title="New scene" aria-label="New scene" onClick={addScene}><Plus size={14} /></button>}
+        {gm && scene && scene.id !== active && <button className="btn sm primary" title="Bring every player to this scene" onClick={() => sendTable({ t: 'scene.activate', id: scene.id })}><Users size={13} /> Move players here</button>}
+        {gm && scene && scene.id === active && <span className="tt-live" title="The players are on this scene">Players are here</span>}
+        <span className="grow" />
+        {gm && scene && lit && (
+          <button className={`btn sm square${gmLight ? ' on' : ''}`} aria-pressed={gmLight} aria-label="Show the light on my screen" title={gmLight ? 'You see the darkness and the light, softened. Click to see the plain map.' : 'Show the darkness and the light, softened'} onClick={() => setGmLight(!gmLight)}>{gmLight ? <Sun size={14} /> : <SunDim size={14} />}</button>
         )}
-        {canDraw && <button className={`btn sm square${tool === 'erase' ? ' on' : ''}`} title="Remove a drawing (or a wall) by clicking it" aria-label="Erase" onClick={() => setTool(tool === 'erase' ? 'select' : 'erase')}><Eraser size={14} /></button>}
-        {gm && scene && <button className="btn sm" title="Remove every drawing on this scene" onClick={async () => { if (await confirmDialog('Every drawing on this scene is removed for everyone.', { title: 'Clear drawings', okLabel: 'Clear', danger: true })) sendTable({ t: 'draw.clear', sceneId: scene.id }) }}>Clear drawings</button>}
-        {gm && <button className={`btn sm square${tool === 'wall' ? ' on' : ''}`} title="Draw walls, doors and windows. Click to place points, double-click or Enter to finish." aria-label="Draw walls" onClick={() => setTool(tool === 'wall' ? 'select' : 'wall')}><BrickWall size={14} /></button>}
         {gm && scene && (
-          <>
-            <button className={`btn sm${tool === 'pin' ? ' on' : ''}`} title="Click the map to pin a note, with a page if you like" aria-label="Pin a note" onClick={() => setTool(tool === 'pin' ? 'select' : 'pin')}>Pin</button>
-            <button className={`btn sm${tool === 'reveal' ? ' on' : ''}`} title="Drag a rectangle to show that part of the map to the players" aria-label="Show an area" onClick={() => setTool(tool === 'reveal' ? 'select' : 'reveal')}>Show area</button>
-            <button className={`btn sm${tool === 'conceal' ? ' on' : ''}`} title="Click an area you showed to take it back" aria-label="Hide a shown area" onClick={() => setTool(tool === 'conceal' ? 'select' : 'conceal')}>Hide area</button>
-          </>
-        )}
-        {gm && tool === 'wall' && (
-          <span className="seg tt-kinds" role="group" aria-label="Kind of wall">
-            {(['wall', 'door', 'secret', 'window', 'oneway', 'terrain'] as const).map((k) => <button key={k} className={wallKind === k ? 'on' : ''} title={k === 'terrain' ? 'A hill or hedge: seen past once, but two of them in a row block the view' : undefined} onClick={() => setWallKind(k)}>{k === 'wall' ? 'Wall' : k === 'door' ? 'Door' : k === 'secret' ? 'Secret door' : k === 'window' ? 'Window' : k === 'oneway' ? 'One-way' : 'Terrain'}</button>)}
-          </span>
-        )}
-        {gm && tool === 'wall' && (
-          <span className="seg tt-kinds" role="group" aria-label="Shape of wall drawing">
-            <button className={wallShape === 'line' ? 'on' : ''} onClick={() => setWallShape('line')}>Lines</button>
-            <button className={wallShape === 'rect' ? 'on' : ''} onClick={() => setWallShape('rect')}>Rectangle</button>
-          </span>
-        )}
-        <button className="btn sm square" title="Zoom in" aria-label="Zoom in" onClick={() => engine.current?.zoomBy(1.25)}><Plus size={14} /></button>
-        <button className="btn sm square" title="Zoom out" aria-label="Zoom out" onClick={() => engine.current?.zoomBy(0.8)}><Minus size={14} /></button>
-        <button className="btn sm square" title="Fit the scene (F)" aria-label="Fit the scene" onClick={() => engine.current?.fit()}><Maximize size={14} /></button>
-        {role === 'gm' && scene && (
           <Select className="input tt-preview" value={previewing ? previewKey : ''} title="See the scene as a player does" onChange={setPreviewKey}>
             <option value="">GM view</option>
             {previewOptions.all && <option value={previewOptions.all.key}>{previewOptions.all.label}</option>}
@@ -329,60 +338,130 @@ export function TableView() {
             {previewOptions.tokens.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
           </Select>
         )}
-        {role === 'gm' && scene && (
-          <>
-            <button className="btn sm" title="Show everyone on this scene the part of it you are looking at" onClick={() => { const v = engine.current?.getView(); if (v) sendTable({ t: 'camera.pull', x: v.x, y: v.y, w: v.w, h: v.h }) }}>Bring everyone here</button>
-            <Select className="input tt-preview" value="" title="Saved views" onChange={async (v) => {
-              if (v === '*save') {
-                const name = await askText('Save this view', { label: 'Name', placeholder: 'The stairs', okLabel: 'Save' })
-                const view = engine.current?.getView()
-                if (name?.trim() && view) keepViews([...views.filter((x) => x.name !== name.trim()), { name: name.trim(), ...view }])
-              } else if (v.startsWith('x:')) keepViews(views.filter((x) => x.name !== v.slice(2)))
-              else { const hit = views.find((x) => x.name === v); if (hit) engine.current?.setView(hit) }
-            }}>
-              <option value="">Views</option>
-              {views.map((x) => <option key={x.name} value={x.name}>{x.name}</option>)}
-              <option value="*save">Save this view…</option>
-              {views.map((x) => <option key={`x${x.name}`} value={`x:${x.name}`}>Forget {x.name}</option>)}
-            </Select>
-          </>
+        {previewing && <button className="btn sm primary" aria-label="Leave the preview" onClick={() => setPreviewKey('')}><Eye size={13} /> {previewing.label.replace(/^(As|Through) /, '')}</button>}
+        {gm && scene && (
+          <Select className="input tt-preview" value="" placeholder="Views" title="Saved views" onChange={async (v) => {
+            if (v === '*save') {
+              const name = await askText('Save this view', { label: 'Name', placeholder: 'The stairs', okLabel: 'Save' })
+              const view = engine.current?.getView()
+              if (name?.trim() && view) keepViews([...views.filter((x) => x.name !== name.trim()), { name: name.trim(), ...view }])
+            } else if (v.startsWith('x:')) keepViews(views.filter((x) => x.name !== v.slice(2)))
+            else { const hit = views.find((x) => x.name === v); if (hit) engine.current?.setView(hit) }
+          }}>
+            <option value="">Views</option>
+            {views.map((x) => <option key={x.name} value={x.name}>{x.name}</option>)}
+            <option value="*save">Save this view…</option>
+            {views.map((x) => <option key={`x${x.name}`} value={`x:${x.name}`}>Forget {x.name}</option>)}
+          </Select>
         )}
-        {previewing && <button className="btn sm primary" aria-label="Leave the preview" onClick={() => setPreviewKey('')}><Eye size={13} /> Preview: {previewing.label.replace(/^(As|Through) /, '')}</button>}
-        {scene && canAdd && <button className="btn sm" onClick={addToken}><UserPlus size={13} /> Token</button>}
-        <span className="grow" />
+        {gm && scene && <button className="btn sm square" title="Show everyone on this scene the part of it you are looking at" aria-label="Bring everyone here" onClick={() => { const v = engine.current?.getView(); if (v) sendTable({ t: 'camera.pull', x: v.x, y: v.y, w: v.w, h: v.h }) }}><Focus size={14} /></button>}
         <span className={`tt-conn ${conn}`} title={conn === 'open' ? 'Connected' : 'Reconnecting'}>{conn === 'open' ? '' : conn === 'connecting' ? 'Connecting…' : 'Offline, reconnecting…'}</span>
-        {!narrow && <button className="btn sm tt-toggle" onClick={() => setPanelOpen(!panelOpen)}>{panelOpen ? 'Hide panel' : 'Panel'}</button>}
+        {!narrow && <button className="btn sm square tt-toggle" aria-label={panelOpen ? 'Hide panel' : 'Show panel'} title={panelOpen ? 'Hide the panel' : 'Show the panel'} onClick={() => setPanelOpen(!panelOpen)}>{panelOpen ? <PanelRightClose size={14} /> : <PanelRightOpen size={14} />}</button>}
       </div>
       {error && <div className="tt-error" role="alert" onClick={() => useTable.setState({ error: '' })}>{error}</div>}
       <div className="tt-main">
         <div className="tt-canvas" ref={host}>
-          {!scene && <div className="tt-empty muted">{gm ? 'No scenes yet. Create one to start.' : 'The GM has not opened a scene yet.'}</div>}
+          {!scene && <div className="tt-empty">{gm ? <><b>No scene yet</b><span className="muted">A scene is a battle map: a picture, a grid, walls and light.</span><button className="btn primary" onClick={addScene}><Plus size={14} /> Make the first scene</button></> : <span className="muted">The GM has not opened a scene yet.</span>}</div>}
+          {scene && (
+            <div className="tt-rail" role="toolbar" aria-label="Tools" aria-orientation="vertical">
+              {toolButton('select', 'Select', 'Select and move (Esc)', <MousePointer2 size={16} />)}
+              {toolButton('ruler', 'Ruler', 'Measure a distance (Shift keeps the last leg)', <Ruler size={16} />)}
+              {canDraw && toolButton('draw', 'Draw', 'Draw on the map, or mark a spell area', <Pencil size={16} />)}
+              {canDraw && toolButton('erase', 'Erase', 'Click a drawing to remove it (the GM also removes walls and pins)', <Eraser size={16} />)}
+              {gm && <span className="tt-rail-sep" />}
+              {gm && toolButton('wall', 'Draw walls', 'Walls, doors and windows: they stop sight, light and tokens', <BrickWall size={16} />)}
+              {gm && toolButton('light', 'Place a light', 'Click the map to place a light', <Lightbulb size={16} />)}
+              {gm && toolButton('pin', 'Pin a note', 'Click the map to pin a note, with a page if you like', <MapPin size={16} />)}
+              {gm && toolButton('reveal', 'Show an area', 'Drag a rectangle to show that part of the map to the players', <ScanEye size={16} />)}
+              {gm && toolButton('conceal', 'Hide a shown area', 'Click an area you showed to take it back', <SquareDashed size={16} />)}
+              {canAdd && <span className="tt-rail-sep" />}
+              {canAdd && <button className="tt-tool" title="Add a token in the middle of the view" aria-label="New token" onClick={addToken}><UserPlus size={16} /></button>}
+              <span className="tt-rail-sep" />
+              <button className="tt-tool" title="Zoom in" aria-label="Zoom in" onClick={() => engine.current?.zoomBy(1.25)}><Plus size={16} /></button>
+              <button className="tt-tool" title="Zoom out" aria-label="Zoom out" onClick={() => engine.current?.zoomBy(0.8)}><Minus size={16} /></button>
+              <button className="tt-tool" title="Fit the scene (F)" aria-label="Fit the scene" onClick={() => engine.current?.fit()}><Maximize size={16} /></button>
+            </div>
+          )}
+          {scene && tool !== 'select' && (
+            <div className="tt-options" role="group" aria-label="Tool options">
+              {tool === 'ruler' && <span className="tt-hint-inline">Drag to measure. Hold Shift to keep the last leg and go round a corner.</span>}
+              {tool === 'draw' && (
+                <>
+                  <span className="seg tt-kinds" role="group" aria-label="Kind of drawing">
+                    {([['free', 'Pen', 'Draw freehand'], ['line', 'Line', 'A straight line'], ['arrow', 'Arrow', 'A line with a head'], ['polygon', 'Shape', 'Click the corners, double-click to close it'], ['rect', 'Box', 'A rectangle'], ['ellipse', 'Circle', 'An ellipse'], ['text', 'Text', 'Write on the map']] as const).map(([k, label, hint]) => <button key={k} className={draw.kind === k ? 'on' : ''} title={hint} onClick={() => setDraw({ ...draw, kind: k })}>{label}</button>)}
+                  </span>
+                  <span className="seg tt-kinds" role="group" aria-label="Spell areas">
+                    {([['cone', 'Cone', 'Spell area: a cone from the origin, as long as it is wide at the end'], ['beam', 'Ray', 'Spell area: a line one cell wide'], ['blast', 'Burst', 'Spell area: a circle from its centre'], ['cube', 'Cube', 'Spell area: a square from the middle of one side']] as const).map(([k, label, hint]) => <button key={k} className={draw.kind === k ? 'on' : ''} title={hint} onClick={() => setDraw({ ...draw, kind: k })}>{label}</button>)}
+                  </span>
+                  <span className="tt-swatches" role="group" aria-label="Colour">
+                    {['#ff5252', '#ffb300', '#66bb6a', '#29b6f6', '#ab47bc', '#ffffff', '#212121'].map((c) => <button key={c} className={`tt-swatch${draw.color === c ? ' on' : ''}`} style={{ background: c }} title={c} aria-label={`Colour ${c}`} onClick={() => setDraw({ ...draw, color: c })} />)}
+                  </span>
+                  <label className="tt-inline" title="Line width">Width<input type="range" min={2} max={16} value={draw.width} onChange={(e) => setDraw({ ...draw, width: Number(e.target.value) })} /></label>
+                  {(draw.kind === 'rect' || draw.kind === 'ellipse' || draw.kind === 'polygon') && <label className="tt-inline"><input type="checkbox" checked={draw.fill} onChange={(e) => setDraw({ ...draw, fill: e.target.checked })} />Filled</label>}
+                  {draw.fill && <label className="tt-inline" title="How solid the fill is">Fill<input type="range" min={10} max={100} aria-label="Fill strength" value={draw.opacity} onChange={(e) => setDraw({ ...draw, opacity: Number(e.target.value) })} /></label>}
+                  <label className="tt-inline" title="Gone after a few seconds, to point something out"><input type="checkbox" checked={draw.temp} onChange={(e) => setDraw({ ...draw, temp: e.target.checked })} />Fades away</label>
+                  {gm && <label className="tt-inline" title="Only you see it"><input type="checkbox" checked={gmOnly} onChange={(e) => setGmOnly(e.target.checked)} />GM only</label>}
+                </>
+              )}
+              {tool === 'erase' && (
+                <>
+                  <span className="tt-hint-inline">Click a drawing to remove it{gm ? ', or a wall or pin' : ''}.</span>
+                  {gm && <button className="btn sm" title="Remove every drawing on this scene" onClick={async () => { if (await confirmDialog('Every drawing on this scene is removed for everyone.', { title: 'Clear drawings', okLabel: 'Clear', danger: true })) sendTable({ t: 'draw.clear', sceneId: scene.id }) }}>Clear drawings</button>}
+                </>
+              )}
+              {gm && tool === 'wall' && (
+                <>
+                  <span className="seg tt-kinds" role="group" aria-label="Kind of wall">
+                    {(['wall', 'door', 'secret', 'window', 'oneway', 'terrain'] as const).map((k) => <button key={k} className={wallKind === k ? 'on' : ''} title={WALL_HINTS[k]} onClick={() => setWallKind(k)}>{k === 'wall' ? 'Wall' : k === 'door' ? 'Door' : k === 'secret' ? 'Secret door' : k === 'window' ? 'Window' : k === 'oneway' ? 'One-way' : 'Terrain'}</button>)}
+                  </span>
+                  <span className="seg tt-kinds" role="group" aria-label="Shape of wall drawing">
+                    <button className={wallShape === 'line' ? 'on' : ''} onClick={() => setWallShape('line')}>Lines</button>
+                    <button className={wallShape === 'rect' ? 'on' : ''} onClick={() => setWallShape('rect')}>Rectangle</button>
+                  </span>
+                  <span className="tt-hint-inline">{wallShape === 'line' ? 'Click to place points, double-click or Enter to finish. Drag an end to move it.' : 'Drag a rectangle: four walls at once.'}</span>
+                </>
+              )}
+              {gm && tool === 'light' && (
+                <>
+                  <label className="tt-inline">New lights are
+                    <Select className="input" value={lightPreset} onChange={setLightPreset} title="What a new light is like; change it later in its panel">
+                      {LIGHT_PRESETS.map((p) => <option key={p.id} value={p.id}>{p.label} ({p.light.bright}/{p.light.dim} {scene.unit})</option>)}
+                    </Select>
+                  </label>
+                  <span className="tt-hint-inline">{lit ? 'Click the map to place one.' : 'Click the map to place one. Switch lighting on in the Scene panel to see it work.'}</span>
+                </>
+              )}
+              {gm && tool === 'pin' && <span className="tt-hint-inline">Click the map to pin a note.</span>}
+              {gm && tool === 'reveal' && <span className="tt-hint-inline">Drag a rectangle: players see it as if their tokens had.</span>}
+              {gm && tool === 'conceal' && <span className="tt-hint-inline">Click a shown area to hide it again.</span>}
+              <button className="btn ghost sm square" title="Back to select (Esc)" aria-label="Close the tool" onClick={() => setTool('select')}><X size={14} /></button>
+            </div>
+          )}
           {stats && <div className="tt-stats-badge" role="status" aria-label="Performance">{stats}</div>}
           <DiceTray />
           <CallPanel />
         </div>
         {panelOpen && (
           <aside className={`tt-panel${narrow ? ' sheet' : ''}`} aria-label="Table panel">
-            <div className="seg">
-              <button className={panel === 'token' ? 'on' : ''} onClick={() => setPanel('token')}>Token</button>
-              {gm && <button className={panel === 'scene' ? 'on' : ''} onClick={() => setPanel('scene')}>Scene</button>}
-              {gm && <button className={panel === 'encounters' ? 'on' : ''} onClick={() => setPanel('encounters')}>Encounters</button>}
-              <button className={panel === 'combat' ? 'on' : ''} onClick={() => setPanel('combat')}><Swords size={12} /> Combat{combat.active ? ` (R${combat.round})` : ''}</button>
-              <button className={panel === 'chat' ? 'on' : ''} onClick={() => setPanel('chat')}><MessageSquare size={12} /> Chat{unread > 0 && panel !== 'chat' ? ` (${unread})` : ''}</button>
-              <button className={panel === 'handouts' ? 'on' : ''} onClick={() => setPanel('handouts')}>Handouts</button>
-              <button className={panel === 'games' ? 'on' : ''} onClick={() => setPanel('games')}>Tables and decks</button>
-              <button className={panel === 'table' ? 'on' : ''} onClick={() => setPanel('table')}>Table</button>
+            <div className="tt-tabs" role="group" aria-label="Panel">
+              {tabs.filter((t) => t.show).map((t) => (
+                <button key={t.id} aria-pressed={panel === t.id} className={panel === t.id ? 'on' : ''} aria-label={t.label} title={t.label} onClick={() => setPanel(t.id)}>
+                  {t.icon}{t.badge && <span className="tt-badge">{t.badge}</span>}
+                </button>
+              ))}
             </div>
-            {panel === 'token' && (selectedTile && !selected.length && gm ? <TilePanel /> : <TokenPanel token={one} count={selected.length} />)}
-            {panel === 'scene' && gm && scene && <TilesSection scene={scene} wsId={wsId} centre={() => engine.current?.centre() ?? { x: scene.width / 2, y: scene.height / 2 }} />}
-            {panel === 'scene' && gm && scene && <ScenePanel scene={scene} active={active === scene.id} wsId={wsId} />}
-            {panel === 'scene' && gm && scene && <TriggersSection scene={scene} />}
-            {panel === 'table' && <TablePanel />}
-            {panel === 'chat' && <ChatPanel />}
-            {panel === 'handouts' && <HandoutsPanel />}
-            {panel === 'games' && <TablesAndDecks />}
-            {panel === 'combat' && <CombatPanel />}
-            {panel === 'encounters' && gm && <EncounterPanel />}
+            <h3 className="tt-panel-title ellipsis">{title[panel]}</h3>
+            <div className="tt-panel-body">
+              {panel === 'token' && (selectedTile && !selected.length && gm ? <TilePanel /> : <TokenPanel token={one} count={selected.length} />)}
+              {panel === 'scene' && gm && scene && <ScenePanel scene={scene} active={active === scene.id} wsId={wsId} onPlaceLight={() => setTool('light')} centre={() => engine.current?.centre() ?? { x: scene.width / 2, y: scene.height / 2 }} />}
+              {panel === 'scene' && gm && !scene && <p className="muted tt-hint">Create a scene first.</p>}
+              {panel === 'table' && <TablePanel />}
+              {panel === 'chat' && <ChatPanel />}
+              {panel === 'handouts' && <HandoutsPanel />}
+              {panel === 'games' && <TablesAndDecks />}
+              {panel === 'combat' && <CombatPanel />}
+              {panel === 'encounters' && gm && <EncounterPanel />}
+            </div>
           </aside>
         )}
       </div>
@@ -438,6 +517,18 @@ function MyStrip() {
 /** Tokens copied with Ctrl+C, for Ctrl+V to put down again. */
 let clipboard: Token[] = []
 
+/** A part of a panel that folds away, so a long panel shows only what is being worked on. Open or closed is remembered in this browser. */
+function Fold({ id, title, open: initial = false, children }: { id: string; title: string; open?: boolean; children: React.ReactNode }) {
+  const key = `tt-fold:${id}`
+  const [open, setOpen] = useState(() => { try { const v = localStorage.getItem(key); return v == null ? initial : v === '1' } catch { return initial } })
+  return (
+    <details className="tt-fold" open={open} onToggle={(e) => { const o = (e.currentTarget as HTMLDetailsElement).open; if (o === open) return; setOpen(o); try { localStorage.setItem(key, o ? '1' : '0') } catch { /* private window */ } }}>
+      <summary><ChevronRight size={14} className="tt-fold-mark" />{title}</summary>
+      {open && <div className="tt-fold-body">{children}</div>}
+    </details>
+  )
+}
+
 function TokenPanel({ token, count }: { token: Token | null; count: number }) {
   const role = useTable((s) => s.role)
   const members = useTable((s) => s.members)
@@ -447,61 +538,74 @@ function TokenPanel({ token, count }: { token: Token | null; count: number }) {
   const [name, setName] = useState(token?.name ?? '')
   useEffect(() => setName(token?.name ?? ''), [token?.id, token?.name])
   if (!token) {
+    const creatures = tokens.filter((t) => !isLightSource(t))
     return (
       <>
         {gm && count > 1 && <button className="btn sm" title="Roll each one's hit points from the dice on its sheet" onClick={() => sendTable({ t: 'token.rollhp', ids: useTable.getState().selected })}>Roll hit points for each</button>}
-        <p className="muted tt-hint">{count > 1 ? `${count} tokens selected. R turns them, arrows move them${gm ? ', Delete removes them' : ''}.` : 'Click a token to select it. Hold Alt and click the map to ping. Drag empty ground to move the view, scroll to zoom.'}</p>
-        <ul className="tt-tokens" aria-label="Tokens on this scene">
-          {tokens.map((t) => <li key={t.id}><button className="btn ghost sm" onClick={() => useTable.setState({ selected: [t.id] })}><span className="tt-dot" style={{ background: t.color || '#6b7280' }} />{t.name || 'Unnamed'}{t.hidden ? ' (hidden)' : ''}</button></li>)}
-        </ul>
+        <p className="muted tt-hint">{count > 1 ? `${count} tokens selected. R turns them, arrows move them${gm ? ', Delete removes them' : ''}.` : 'Click a token to select it. Alt-click the map to ping. Drag empty ground to move the view, scroll to zoom.'}</p>
+        {creatures.length > 0 && (
+          <ul className="tt-tokens" aria-label="Tokens on this scene">
+            {creatures.map((t) => <li key={t.id}><button className="btn ghost sm" onClick={() => useTable.setState({ selected: [t.id] })}><span className="tt-dot" style={{ background: t.color || '#6b7280' }} />{t.name || 'Unnamed'}{t.hidden ? ' (hidden)' : ''}</button></li>)}
+          </ul>
+        )}
       </>
     )
   }
+  if (isLightSource(token)) return gm ? <LightSourcePanel token={token} /> : null
   const patch = (p: Record<string, unknown>) => sendTable({ t: 'token.update', id: token.id, patch: p })
   const owned = new Set(token.owners)
+  const canTurn = gm || (!!useTable.getState().you && token.owners.includes(useTable.getState().you!.id))
   return (
     <div className="tt-form">
-      <label>Name<input className="input" value={name} disabled={!gm} onChange={(e) => setName(e.target.value)} onBlur={() => name !== token.name && patch({ name })} onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} /></label>
+      {gm
+        ? <label className="tt-name">Name<input className="input" value={name} onChange={(e) => setName(e.target.value)} onBlur={() => name !== token.name && patch({ name })} onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} /></label>
+        : null}
+      <div className="tt-quick" role="group" aria-label="Token actions">
+        {gm && <button className="btn sm" onClick={() => patch({ hidden: !token.hidden })}>{token.hidden ? <><Eye size={13} /> Reveal</> : <><EyeOff size={13} /> Hide</>}</button>}
+        {gm && <button className="btn sm" onClick={() => patch({ locked: !token.locked })}>{token.locked ? <><LockOpen size={13} /> Unlock</> : <><Lock size={13} /> Lock</>}</button>}
+        {canTurn && <button className="btn sm square" title="Turn 45 degrees (R)" aria-label="Turn" onClick={() => patch({ rotation: (token.rotation + 45) % 360 })}><RotateCw size={13} /></button>}
+        {gm && <button className="btn sm square danger" title="Delete token" aria-label="Delete token" onClick={async () => { if (await confirmDialog(`“${token.name || 'This token'}” is removed from the scene for everyone.`, { title: 'Delete token', okLabel: 'Delete', danger: true })) sendTable({ t: 'token.delete', ids: [token.id] }) }}><Trash2 size={13} /></button>}
+      </div>
       <TokenStats token={token} />
-      <TokenBars token={token} can={gm} />
-      <TokenActions token={token} gm={gm} />
-      {gm && (
-        <>
-          <button className="btn sm" title="Roll the hit points from the dice on the sheet" onClick={() => sendTable({ t: 'token.rollhp', ids: [token.id] })}>Roll hit points</button>
-          <TokenLook token={token} />
-        </>
-      )}
-      {gm && (
-        <>
-          <LinkPage token={token} />
-          <label>Size
-            <Select className="input" value={String(token.size)} onChange={(v) => patch({ size: Number(v) })}>
-              {[0.5, 1, 2, 3, 4, 5].map((s) => <option key={s} value={String(s)}>{s === 0.5 ? 'Tiny (half a cell)' : s === 1 ? 'Medium (1 cell)' : `${s} cells`}</option>)}
-            </Select>
-          </label>
-          {gm && <TokenLayer token={token} />}
-          <SightLight token={token} />
-          <label>Colour<input type="color" className="tt-color" value={token.color || '#6b7280'} onChange={(e) => patch({ color: e.target.value })} /></label>
-          <div className="tt-row">
-            <button className="btn sm" onClick={async () => { const f = await pickImage(); if (f) { const url = await uploadImage(wsId, f); if (url) patch({ image: url }) } }}>Set picture</button>
-            {token.image && <button className="btn sm" onClick={() => patch({ image: '' })}>Remove picture</button>}
-          </div>
-          <div className="tt-row">
-            <button className="btn sm" onClick={() => patch({ hidden: !token.hidden })}>{token.hidden ? <><Eye size={13} /> Reveal</> : <><EyeOff size={13} /> Hide</>}</button>
-            <button className="btn sm" onClick={() => patch({ locked: !token.locked })}>{token.locked ? <><LockOpen size={13} /> Unlock</> : <><Lock size={13} /> Lock</>}</button>
-            <button className="btn sm" title="Turn 45 degrees (R)" onClick={() => patch({ rotation: (token.rotation + 45) % 360 })}><RotateCw size={13} /></button>
-          </div>
-          <div className="tt-owners">
-            <b>Who controls it</b>
-            {members.filter((m) => m.role !== 'viewer').map((m) => (
-              <label key={m.id} className="tt-check"><input type="checkbox" checked={owned.has(m.id)} onChange={(e) => patch({ owners: e.target.checked ? [...token.owners, m.id] : token.owners.filter((o) => o !== m.id) })} />{m.username}</label>
-            ))}
-          </div>
-          <button className="btn sm danger" onClick={async () => { if (await confirmDialog(`“${token.name || 'This token'}” is removed from the scene for everyone.`, { title: 'Delete token', okLabel: 'Delete', danger: true })) sendTable({ t: 'token.delete', ids: [token.id] }) }}><Trash2 size={13} /> Delete token</button>
-        </>
-      )}
+      {!gm && <TokenBars token={token} can={false} />}
+      {!gm && <TokenActions token={token} gm={false} />}
       <TokenSheet token={token} />
-      {!gm && <div className="tt-row"><button className="btn sm" title="Turn 45 degrees (R)" disabled={!token.owners.length} onClick={() => patch({ rotation: (token.rotation + 45) % 360 })}><RotateCw size={13} /> Turn</button></div>}
+      {gm && (
+        <>
+          <Fold id="token-control" title="Character and control">
+            <LinkPage token={token} />
+            <div className="tt-owners">
+              <b>Who moves it</b>
+              {members.map((m) => (
+                <label key={m.id} className="tt-check"><input type="checkbox" checked={owned.has(m.id)} onChange={(e) => patch({ owners: e.target.checked ? [...token.owners, m.id] : token.owners.filter((o) => o !== m.id) })} />{m.username}{m.role === 'viewer' ? <small className="muted"> (reads the world)</small> : null}</label>
+              ))}
+              {members.length < 2 && <p className="muted tt-hint">Invite players to the world first (Settings, Worlds).</p>}
+            </div>
+          </Fold>
+          <Fold id="token-look" title="Appearance">
+            <label>Size
+              <Select className="input" value={String(token.size)} onChange={(v) => patch({ size: Number(v) })}>
+                {[0.5, 1, 2, 3, 4, 5].map((s) => <option key={s} value={String(s)}>{s === 0.5 ? 'Tiny (half a cell)' : s === 1 ? 'Medium (1 cell)' : s === 2 ? 'Large (2 cells)' : s === 3 ? 'Huge (3 cells)' : s === 4 ? 'Gargantuan (4 cells)' : `${s} cells`}</option>)}
+              </Select>
+            </label>
+            <div className="tt-row">
+              <label className="tt-light-colour">Colour<input type="color" className="tt-color" value={token.color || '#6b7280'} onChange={(e) => patch({ color: e.target.value })} /></label>
+              <button className="btn sm" onClick={async () => { const f = await pickImage(); if (f) { const url = await uploadImage(wsId, f); if (url) patch({ image: url }) } }}>Set picture</button>
+              {token.image && <button className="btn ghost sm" onClick={() => patch({ image: '' })}>Remove picture</button>}
+            </div>
+            <TokenLook token={token} />
+            <TokenLayer token={token} />
+            <button className="btn sm" title="Roll the hit points from the dice on the sheet" onClick={() => sendTable({ t: 'token.rollhp', ids: [token.id] })}>Roll hit points</button>
+          </Fold>
+          <Fold id="token-bars" title="Bars and action buttons">
+            <TokenBars token={token} can />
+            <TokenActions token={token} gm />
+          </Fold>
+          <Fold id="token-sight" title="Vision and light">
+            <SightLight token={token} />
+          </Fold>
+        </>
+      )}
     </div>
   )
 }
@@ -512,93 +616,113 @@ function SendPlayers({ scene }: { scene: Scene }) {
   const you = useTable((st) => st.you)
   const [picked, setPicked] = useState<string[]>([])
   const players = online.filter((o) => o.role === 'player' && o.id !== you?.id)
-  if (!players.length) return null
+  if (!players.length) return <p className="muted tt-hint">No players are at the table right now.</p>
   return (
     <div className="tt-form" role="group" aria-label="Send players to this scene">
-      <b>Send players here</b>
+      <b>Send some players here</b>
       {players.map((o) => <label key={o.id} className="tt-check"><input type="checkbox" checked={picked.includes(o.id)} onChange={(e) => setPicked(e.target.checked ? [...picked, o.id] : picked.filter((x) => x !== o.id))} />{o.username}</label>)}
       <button className="btn sm" disabled={!picked.length} onClick={() => { sendTable({ t: 'scene.send', id: scene.id, to: picked }); setPicked([]) }}>Send them to “{scene.name}”</button>
     </div>
   )
 }
 
-function ScenePanel({ scene, active, wsId }: { scene: Scene; active: boolean; wsId: string }) {
+function ScenePanel({ scene, active, wsId, onPlaceLight, centre }: { scene: Scene; active: boolean; wsId: string; onPlaceLight: () => void; centre: () => { x: number; y: number } }) {
   const [name, setName] = useState(scene.name)
   const [editing, setEditing] = useState(false)
   const [library, setLibrary] = useState(false)
   useEffect(() => setName(scene.name), [scene.id, scene.name])
   const patch = (p: Record<string, unknown>) => sendTable({ t: 'scene.update', id: scene.id, patch: p })
-  const num = (key: string, value: number, min: number) => (
-    <input className="input" type="number" min={min} defaultValue={value} key={`${scene.id}${key}${value}`} onBlur={(e) => { const n = Number(e.target.value); if (Number.isFinite(n) && n >= min && n !== value) patch({ [key]: n }) }} />
+  const num = (key: string, value: number, min: number, label: string) => (
+    <input className="input" type="number" min={min} aria-label={label} defaultValue={value} key={`${scene.id}${key}${value}`} onBlur={(e) => { const n = Number(e.target.value); if (Number.isFinite(n) && n >= min && n !== value) patch({ [key]: n }) }} />
   )
+  const lighting = scene.lighting !== false && (scene.lighting === true || scene.darkness > 0)
   return (
     <div className="tt-form">
       <label>Name<input className="input" value={name} onChange={(e) => setName(e.target.value)} onBlur={() => name.trim() && name !== scene.name && patch({ name: name.trim() })} /></label>
-      <div className="tt-row">
-        <button className="btn sm" onClick={async () => { const f = await pickBackground(); if (!f) return; const size = f.type.startsWith('video/') ? await videoSize(f) : null; const url = await uploadImage(wsId, f); if (url) patch({ bg: url, ...(size ? { width: Math.min(40000, Math.max(100, size.width)), height: Math.min(40000, Math.max(100, size.height)) } : {}) }) }}>Set map image or loop</button>
-        {scene.bg && <button className="btn sm" onClick={() => patch({ bg: '' })}>Remove image</button>}
-      </div>
-      <div className="tt-row">
-        <button className="btn sm" title="Draw rooms, corridors, doors and lights and make this scene from them" onClick={() => setEditing(true)}>Open the map editor</button>
-        <button className="btn sm" title="Every picture and sound of this world" onClick={() => setLibrary(true)}>Asset library</button>
-      </div>
       {library && <AssetLibrary scene={scene} wsId={wsId} onClose={() => setLibrary(false)} />}
       {editing && <MapEditor scene={scene} wsId={wsId} onClose={() => setEditing(false)} />}
-      <div className="tt-row">
-        <button className="btn sm" title="Make a new scene from a map file made by Dungeondraft or another map tool" onClick={() => void importUvtt(wsId)}>Import a Universal VTT map</button>
-        <button className="btn sm" title="Save this scene, its walls and lights as a map file" onClick={() => void exportUvtt(scene)}>Export as Universal VTT</button>
-      </div>
-      <label>Grid
-        <Select className="input" value={scene.grid} onChange={(v) => patch({ grid: v })}>
-          <option value="square">Square</option>
-          <option value="hex-row">Hexes, pointy top</option>
-          <option value="hex-col">Hexes, flat top</option>
-          <option value="none">No grid</option>
-        </Select>
-      </label>
-      <label>Cell size in pixels{num('gridSize', scene.gridSize, 10)}</label>
-      <div className="tt-row">
-        <label>Grid colour<input className="tt-color" type="color" aria-label="Grid colour" value={scene.gridColor ?? '#ffffff'} onChange={(e) => patch({ gridColor: e.target.value })} /></label>
-        <label>Grid strength<input type="range" min={0} max={100} aria-label="Grid strength" value={Math.round((scene.gridOpacity ?? 0.28) * 100)} onChange={(e) => patch({ gridOpacity: Number(e.target.value) / 100 })} /></label>
-      </div>
-      <div className="tt-row">
-        <label>Ambient colour<input className="tt-color" type="color" aria-label="Ambient colour" value={scene.ambient || '#ffd9a0'} onChange={(e) => patch({ ambient: e.target.value })} /></label>
-        {scene.ambient && <button className="btn sm" onClick={() => patch({ ambient: '' })}>No ambient colour</button>}
-      </div>
-      <label>Folder<input className="input" aria-label="Scene folder" maxLength={60} placeholder="Chapter 1" defaultValue={scene.folder ?? ''} key={scene.id + (scene.folder ?? '')} onBlur={(e) => e.target.value.trim() !== (scene.folder ?? '') && patch({ folder: e.target.value.trim() })} /></label>
-      <label>Notes for you<textarea className="input" aria-label="Scene notes" rows={3} maxLength={5000} placeholder="Read-aloud text, secrets, where the traps are" defaultValue={scene.notes ?? ''} key={scene.id + 'n'} onBlur={(e) => e.target.value !== (scene.notes ?? '') && patch({ notes: e.target.value })} /></label>
-      <div className="tt-row">
-        <button className="btn sm" onClick={() => sendTable({ t: 'scene.duplicate', id: scene.id })}>Duplicate this scene</button>
-      </div>
-      <SendPlayers scene={scene} />
-      <div className="tt-row">
-        <label>Cell is{num('dist', scene.dist, 0.1)}</label>
-        <label>Unit<input className="input" defaultValue={scene.unit} key={scene.id + scene.unit} maxLength={8} onBlur={(e) => e.target.value.trim() && e.target.value !== scene.unit && patch({ unit: e.target.value.trim() })} /></label>
-      </div>
-      <label>Diagonal moves
-        <Select className="input" value={scene.diagonal} onChange={(v) => patch({ diagonal: v })}>
-          <option value="5-10-5">Every second diagonal counts double (5-10-5)</option>
-          <option value="5-5-5">Every diagonal counts one cell (5-5-5)</option>
-          <option value="euclid">Straight line length</option>
-          <option value="manhattan">Across then down</option>
-        </Select>
-      </label>
-      <label className="tt-check"><input type="checkbox" checked={scene.fog} onChange={(e) => patch({ fog: e.target.checked })} />Fog of war: players only see what their tokens see</label>
-      <label>Weather
-        <Select className="input" value={scene.weather ?? 'none'} onChange={(v) => patch({ weather: v })} title="Weather over the scene">
-          <option value="none">Clear</option>
-          <option value="rain">Rain</option>
-          <option value="snow">Snow</option>
-        </Select>
-      </label>
-      <label>Darkness ({Math.round(scene.darkness * 100)} %)<input type="range" min={0} max={100} value={Math.round(scene.darkness * 100)} onChange={(e) => patch({ darkness: Number(e.target.value) / 100 })} /></label>
-      <DaylightControl scene={scene} />
-      {scene.fog && <button className="btn sm" onClick={() => sendTable({ t: 'fog.reset', sceneId: scene.id })}>Forget what players explored</button>}
-      <div className="tt-row"><label>Width (px){num('width', scene.width, 100)}</label><label>Height (px){num('height', scene.height, 100)}</label></div>
-      <div className="tt-row">
-        {!active && <button className="btn sm" onClick={() => sendTable({ t: 'scene.activate', id: scene.id })}>Move players here</button>}
+      <Fold id="scene-map" title="Map and grid" open>
+        <div className="tt-row">
+          <button className="btn sm" onClick={async () => { const f = await pickBackground(); if (!f) return; const size = f.type.startsWith('video/') ? await videoSize(f) : null; const url = await uploadImage(wsId, f); if (url) patch({ bg: url, ...(size ? { width: Math.min(40000, Math.max(100, size.width)), height: Math.min(40000, Math.max(100, size.height)) } : {}) }) }}>Set map image or loop</button>
+          {scene.bg && <button className="btn ghost sm" onClick={() => patch({ bg: '' })}>Remove image</button>}
+        </div>
+        <div className="tt-row">
+          <button className="btn sm" title="Draw rooms, corridors, doors and lights and make this scene from them" onClick={() => setEditing(true)}>Open the map editor</button>
+          <button className="btn sm" title="Every picture and sound of this world" onClick={() => setLibrary(true)}>Asset library</button>
+        </div>
+        <label>Grid
+          <Select className="input" value={scene.grid} onChange={(v) => patch({ grid: v })}>
+            <option value="square">Square</option>
+            <option value="hex-row">Hexes, pointy top</option>
+            <option value="hex-col">Hexes, flat top</option>
+            <option value="none">No grid</option>
+          </Select>
+        </label>
+        <div className="tt-row">
+          <label>Cell size in pixels{num('gridSize', scene.gridSize, 10, 'Cell size in pixels')}</label>
+          <label>Cell is{num('dist', scene.dist, 0.1, 'Cell is')}</label>
+          <label>Unit<input className="input" defaultValue={scene.unit} key={scene.id + scene.unit} maxLength={8} onBlur={(e) => e.target.value.trim() && e.target.value !== scene.unit && patch({ unit: e.target.value.trim() })} /></label>
+        </div>
+        <label>Diagonal moves
+          <Select className="input" value={scene.diagonal} onChange={(v) => patch({ diagonal: v })}>
+            <option value="5-10-5">Every second diagonal counts double (5-10-5)</option>
+            <option value="5-5-5">Every diagonal counts one cell (5-5-5)</option>
+            <option value="euclid">Straight line length</option>
+            <option value="manhattan">Across then down</option>
+          </Select>
+        </label>
+        <div className="tt-row">
+          <label className="tt-light-colour">Grid colour<input className="tt-color" type="color" aria-label="Grid colour" value={scene.gridColor ?? '#ffffff'} onChange={(e) => patch({ gridColor: e.target.value })} /></label>
+          <label>Grid strength<input type="range" min={0} max={100} aria-label="Grid strength" value={Math.round((scene.gridOpacity ?? 0.28) * 100)} onChange={(e) => patch({ gridOpacity: Number(e.target.value) / 100 })} /></label>
+        </div>
+        <div className="tt-row"><label>Width (px){num('width', scene.width, 100, 'Width (px)')}</label><label>Height (px){num('height', scene.height, 100, 'Height (px)')}</label></div>
+      </Fold>
+      <Fold id="scene-light" title="Light and vision" open>
+        <label className="tt-check"><input type="checkbox" checked={scene.fog} onChange={(e) => patch({ fog: e.target.checked })} />Fog of war: players only see what their tokens see</label>
+        {scene.fog && <button className="btn ghost sm" onClick={() => sendTable({ t: 'fog.reset', sceneId: scene.id })}>Forget what players explored</button>}
+        <label className="tt-check"><input type="checkbox" checked={lighting} onChange={(e) => patch(e.target.checked ? { lighting: true, ...(scene.darkness > 0 ? {} : { darkness: 0.7 }) } : { lighting: false })} />Lighting: darkness, light sources and darkvision</label>
+        {!lighting && <p className="muted tt-hint">Off: the whole map is in daylight and lights do nothing.</p>}
+        {lighting && (
+          <>
+            <label>Darkness ({Math.round(scene.darkness * 100)} %)<input type="range" min={0} max={100} value={Math.round(scene.darkness * 100)} onChange={(e) => patch({ darkness: Number(e.target.value) / 100 })} /></label>
+            <DaylightControl scene={scene} />
+            <SceneLights scene={scene} onPlace={onPlaceLight} />
+          </>
+        )}
+      </Fold>
+      <Fold id="scene-mood" title="Mood">
+        <label>Weather
+          <Select className="input" value={scene.weather ?? 'none'} onChange={(v) => patch({ weather: v })} title="Weather over the scene">
+            <option value="none">Clear</option>
+            <option value="rain">Rain</option>
+            <option value="snow">Snow</option>
+          </Select>
+        </label>
+        <div className="tt-row">
+          <label className="tt-light-colour">Ambient colour<input className="tt-color" type="color" aria-label="Ambient colour" value={scene.ambient || '#ffd9a0'} onChange={(e) => patch({ ambient: e.target.value })} /></label>
+          {scene.ambient && <button className="btn ghost sm" onClick={() => patch({ ambient: '' })}>No ambient colour</button>}
+        </div>
+      </Fold>
+      <Fold id="scene-props" title="Props and layers">
+        <TilesSection scene={scene} wsId={wsId} centre={centre} />
+      </Fold>
+      <Fold id="scene-triggers" title="Triggers">
+        <TriggersSection scene={scene} />
+      </Fold>
+      <Fold id="scene-players" title="Players">
+        {!active && <button className="btn sm" onClick={() => sendTable({ t: 'scene.activate', id: scene.id })}>Move all players here</button>}
+        <SendPlayers scene={scene} />
+      </Fold>
+      <Fold id="scene-notes" title="Notes and organising">
+        <label>Notes for you<textarea className="input" aria-label="Scene notes" rows={3} maxLength={5000} placeholder="Read-aloud text, secrets, where the traps are" defaultValue={scene.notes ?? ''} key={scene.id + 'n'} onBlur={(e) => e.target.value !== (scene.notes ?? '') && patch({ notes: e.target.value })} /></label>
+        <label>Folder<input className="input" aria-label="Scene folder" maxLength={60} placeholder="Chapter 1" defaultValue={scene.folder ?? ''} key={scene.id + (scene.folder ?? '')} onBlur={(e) => e.target.value.trim() !== (scene.folder ?? '') && patch({ folder: e.target.value.trim() })} /></label>
+        <div className="tt-row">
+          <button className="btn sm" onClick={() => sendTable({ t: 'scene.duplicate', id: scene.id })}>Duplicate this scene</button>
+          <button className="btn sm" title="Make a new scene from a map file made by Dungeondraft or another map tool" onClick={() => void importUvtt(wsId)}>Import a Universal VTT map</button>
+          <button className="btn sm" title="Save this scene, its walls and lights as a map file" onClick={() => void exportUvtt(scene)}>Export as Universal VTT</button>
+        </div>
         <button className="btn sm danger" onClick={async () => { if (await confirmDialog(`“${scene.name}” and every token on it are deleted for good.`, { title: 'Delete scene', okLabel: 'Delete', danger: true })) sendTable({ t: 'scene.delete', id: scene.id }) }}><Trash2 size={13} /> Delete scene</button>
-      </div>
+      </Fold>
     </div>
   )
 }
@@ -623,6 +747,7 @@ function TablePanel() {
     ['playersDraw', 'Players draw on the map'],
     ['playersPing', 'Players ping the map'],
     ['playersRuler', 'Players share their ruler'],
+    ['wallsBlockMovement', 'Walls and closed doors stop tokens (hold Ctrl to pass as GM)'],
     ['showCursors', 'Show everyone’s pointer'],
     ['sharedVision', 'Players see through each other’s tokens'],
   ] as const, [])
@@ -666,7 +791,7 @@ function TablePanel() {
       {gm && (
         <>
           <b><Crosshair size={13} /> Rules of the table</b>
-          {flags.map(([k, label]) => <label key={k} className="tt-check"><input type="checkbox" checked={settings[k]} onChange={(e) => set({ [k]: e.target.checked })} />{label}</label>)}
+          {flags.map(([k, label]) => <label key={k} className="tt-check"><input type="checkbox" checked={settings[k] !== false} onChange={(e) => set({ [k]: e.target.checked })} />{label}</label>)}
           <b>Rules the table applies for you</b>
           <p className="muted" style={{ fontSize: 12, margin: 0 }}>All off, so you play by hand until you choose. They apply to tokens linked to a sheet.</p>
           {([['damage', 'Damage types: resistance, vulnerability and immunity'], ['concentration', 'Concentration saves when someone who concentrates is hurt'], ['deathSaves', 'Falling unconscious at 0 hit points, and death saves'], ['attacks', 'Attacks and saves rolled against targets, with the damage applied']] as const).map(([k, label]) => (

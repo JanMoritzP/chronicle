@@ -6,6 +6,12 @@ import { coneOf, pointInPolygon, visibility, type Cone, type Seg } from './visib
 // Fog of war and light. A player sees what their own tokens can see (walls block sight) and that is also lit (by the sky, a light source,
 // or the token's darkvision). What they have seen stays on the map, dimmed. Everything is drawn into small off-screen pictures that are
 // combined into one dark layer with holes in it, laid over the scene.
+// The GM sees the light of a scene too, but softer and without fog, so lights can be placed and checked while the map is built.
+
+/** How much of the darkness the GM sees: enough to see where the light falls, not so much that the map cannot be worked on. */
+const GM_DARKNESS = 0.6
+/** How dark the scene is: nothing while its lighting is off. */
+export const darknessOf = (s: Pick<Scene, 'darkness' | 'lighting'>) => (s.lighting === false ? 0 : s.darkness)
 
 export interface Wall { id: string; x1: number; y1: number; x2: number; y2: number; kind: 'wall' | 'door' | 'secret' | 'window' | 'oneway' | 'terrain'; open: boolean; locked?: boolean }
 export interface Rect { id?: string; x: number; y: number; w: number; h: number }
@@ -18,7 +24,7 @@ const SAVE_EVERY_MS = 4000
 /** Walls that stop sight: closed doors and plain walls. Windows and open doors let it through. */
 /** A terrain wall (a hill, a hedge) is seen past once but not twice. */
 export const asSeg = (w: Wall): Seg => ({ x1: w.x1, y1: w.y1, x2: w.x2, y2: w.y2, ...(w.kind === 'terrain' ? { limited: true } : {}) })
-export const blocksSight = (w: Wall) => w.kind === 'wall' || w.kind === 'secret' || w.kind === 'oneway' || w.kind === 'terrain' || (w.kind === 'door' && !w.open)
+export const blocksSight = (w: Wall) => w.kind === 'wall' || w.kind === 'oneway' || w.kind === 'terrain' || ((w.kind === 'door' || w.kind === 'secret') && !w.open)
 /** A one-way wall can be seen through from the side its arrow points to. */
 export const seesThrough = (w: Wall, p: Pt) => w.kind === 'oneway' && (w.x2 - w.x1) * (p.y - w.y1) - (w.y2 - w.y1) * (p.x - w.x1) < 0
 
@@ -26,6 +32,8 @@ export class FogLayer {
   readonly view = new Container()
   private scene: Scene | null = null
   private enabled = false
+  /** a player's view (fog, sight and light) or the GM's (light only, softened) */
+  private mode: 'player' | 'gm' = 'player'
   private walls: Wall[] = []
   private lights: Light[] = []
   private viewers: Viewer[] = []
@@ -42,6 +50,8 @@ export class FogLayer {
   private e?: RenderTexture
   private o?: RenderTexture
   private out?: Sprite
+  /** what a player sees right now, so the colour of a light behind a wall does not show through the dark */
+  private tintMask?: Sprite
   /** the colour of coloured lights, under the darkness so unseen places stay dark */
   private tint = new Graphics()
   private tintPolys: { pts: number[]; color: number; anim?: string }[] = []
@@ -60,12 +70,14 @@ export class FogLayer {
 
   private px(units: number) { return this.scene ? (units / this.scene.dist) * this.scene.gridSize : units }
 
-  configure(scene: Scene | null, enabled: boolean) {
+  configure(scene: Scene | null, mode: 'player' | 'gm' | 'off') {
     const sizeChanged = !this.scene || !scene || this.scene.id !== scene.id || this.scene.width !== scene.width || this.scene.height !== scene.height
     this.scene = scene
-    this.enabled = enabled && !!scene && (scene.fog || scene.darkness > 0)
+    this.mode = mode === 'gm' ? 'gm' : 'player'
+    this.enabled = !!scene && (mode === 'player' ? scene.fog || darknessOf(scene) > 0 : mode === 'gm' && darknessOf(scene) > 0.02)
     this.view.visible = this.enabled
     if (sizeChanged) this.rebuild()
+    this.tint.mask = this.mode === 'player' && this.tintMask ? this.tintMask : null
     this.update()
   }
 
@@ -73,6 +85,9 @@ export class FogLayer {
     for (const t of [this.v, this.d, this.r, this.e, this.o]) t?.destroy(true)
     this.v = this.d = this.r = this.e = this.o = undefined
     this.out?.destroy()
+    this.tint.mask = null
+    this.tintMask?.destroy()
+    this.tintMask = undefined
     this.out = undefined
     this.view.removeChildren()
     this.tint.clear()
@@ -89,7 +104,9 @@ export class FogLayer {
     this.v = make(); this.d = make(); this.r = make(); this.e = make(); this.o = make()
     this.out = new Sprite(this.o)
     this.out.scale.set(1 / this.k)
-    this.view.addChild(this.tint, this.out)
+    this.tintMask = new Sprite(this.v)
+    this.tintMask.scale.set(1 / this.k)
+    this.view.addChild(this.tintMask, this.tint, this.out)
   }
 
   setWalls(walls: Wall[]) { this.walls = walls; this.update() }
@@ -99,6 +116,8 @@ export class FogLayer {
   setReveals(reveals: Rect[]) { this.reveals = reveals; this.update() }
   /** Does a coloured light move (flicker, pulse)? Then the screen is painted again every frame. */
   get animated() { return this.enabled && !this.still && this.tintPolys.some((t) => t.anim) }
+  /** Is the GM's softened view of the light being drawn (no fog, nothing hidden)? */
+  get gmLight() { return this.enabled && this.mode === 'gm' }
   /** Draws the fog at a lower or the normal detail (what was explored is kept, a little blurred). */
   setDetail(low: boolean) { const side = low ? MAX_SIDE / 2 : MAX_SIDE; if (side !== this.maxSide) { this.maxSide = side; if (this.scene) { this.rebuild(); this.update() } } }
   /** The tint of moving lights for this moment. */
@@ -133,10 +152,10 @@ export class FogLayer {
 
   /** Can this point be seen right now? Used to hide tokens in the dark and behind walls. */
   isVisible(p: Pt): boolean {
-    if (!this.enabled) return true
+    if (!this.enabled || this.mode === 'gm') return true
     if (!this.seen.some((poly) => pointInPolygon(p, poly))) return false
     const s = this.scene!
-    return s.darkness <= 0.02 || this.lit.some((poly) => pointInPolygon(p, poly))
+    return darknessOf(s) <= 0.02 || this.lit.some((poly) => pointInPolygon(p, poly))
   }
 
   update() {
@@ -154,6 +173,8 @@ export class FogLayer {
     const segs: Seg[] = this.walls.filter(blocksSight).map(asSeg)
     const flat = (poly: Pt[]) => poly.flatMap((p) => [p.x * k, p.y * k])
     const clear = { r: 0, g: 0, b: 0, a: 0 }
+    const gm = this.mode === 'gm'
+    const darkness = darknessOf(s) * (gm ? GM_DARKNESS : 1)
 
     // coloured lights tint what they reach
     this.tint.clear()
@@ -167,7 +188,7 @@ export class FogLayer {
       if (poly.length > 2) this.tintPolys.push({ pts: poly.flatMap((p) => [p.x, p.y]), color: Number.parseInt(col.length === 4 ? col.slice(1).replace(/./g, (c) => c + c) : col.slice(1, 7), 16) || 0xffffff, anim: l.animation })
     }
     // what darkvision shows in the dark is washed out and cool, as night vision looks
-    if (s.darkness > 0.02) {
+    if (darkness > 0.02 && !gm) {
       for (const vw of this.viewers) {
         if (!(vw.dark > 0)) continue
         const poly = visibility(vw, segs, bounds, this.px(vw.dark))
@@ -188,8 +209,8 @@ export class FogLayer {
     // how dark it is: darkness everywhere, pushed back by light and darkvision
     this.lit = []
     const darkC = new Container()
-    if (s.darkness > 0.02) {
-      darkC.addChild(new Graphics().rect(0, 0, s.width * k, s.height * k).fill({ color: 0x000000, alpha: s.darkness }))
+    if (darkness > 0.02) {
+      darkC.addChild(new Graphics().rect(0, 0, s.width * k, s.height * k).fill({ color: 0x000000, alpha: darkness }))
       const carve = (origin: Pt, radius: number, alpha: number, remember: boolean, cone?: Cone) => {
         const poly = visibility(origin, segs, bounds, radius, cone)
         if (poly.length < 3) return
@@ -203,11 +224,13 @@ export class FogLayer {
         if (dim > 0) carve(l, dim, 0.55, true, coneOf(l))
         if (bright > 0) carve(l, bright, 0.9, true, coneOf(l))
       }
-      this.viewers.forEach((vw) => { if (vw.dark > 0) carve(vw, this.px(vw.dark), 0.85, true) })
+      if (!gm) this.viewers.forEach((vw) => { if (vw.dark > 0) carve(vw, this.px(vw.dark), 0.85, true) })
       for (const r of this.reveals) { this.lit.push(rectPoly(r)); const g = new Graphics().poly(flat(rectPoly(r))).fill({ color: 0xffffff, alpha: 0.9 }); g.blendMode = 'erase'; darkC.addChild(g) }
     }
-    this.app.renderer.render({ container: darkC, target: this.d, clear: true, clearColor: clear })
+    // the GM's view is the darkness alone: nothing is hidden and nothing is remembered
+    this.app.renderer.render({ container: darkC, target: gm ? this.o : this.d, clear: true, clearColor: clear })
     darkC.destroy({ children: true })
+    if (gm) { this.lastMs = performance.now() - t0; this.onDrawn(); return }
 
     // seen and lit: the part of the view that is not dark
     const combine = new Container()
@@ -241,7 +264,7 @@ export class FogLayer {
   }
 
   private scheduleSave() {
-    if (this.saveTimer) return
+    if (this.saveTimer || this.mode === 'gm') return
     this.saveTimer = window.setTimeout(() => { this.saveTimer = undefined; this.flushSave() }, SAVE_EVERY_MS)
   }
 

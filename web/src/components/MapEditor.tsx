@@ -160,7 +160,7 @@ export function MapEditor({ scene, wsId, onClose }: { scene: Scene; wsId: string
       for (let i = 0; i < walls.length; i += 200) sendTable({ t: 'wall.add', sceneId: scene.id, walls: walls.slice(i, i + 200) })
       const old = st.tokens.filter((t) => t.data?.editorLight).map((t) => t.id)
       if (old.length) sendTable({ t: 'token.delete', ids: old })
-      for (const l of tableLights(doc, SCENE_PX, 5)) sendTable({ t: 'token.add', sceneId: scene.id, token: { name: 'Light', hidden: true, x: l.x, y: l.y, data: { editorLight: true, light: { bright: l.bright, dim: l.dim, color: l.color } } } })
+      for (const l of tableLights(doc, SCENE_PX, 5)) sendTable({ t: 'token.add', sceneId: scene.id, token: { name: 'Light', hidden: true, x: l.x, y: l.y, data: { editorLight: true, lightSource: true, light: { bright: l.bright, dim: l.dim, color: l.color } } } })
       onClose()
     } catch (e: any) { setBusy(false); await alertDialog(e.message ?? 'The map could not be applied.') }
   }

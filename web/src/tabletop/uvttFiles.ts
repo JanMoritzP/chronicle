@@ -42,7 +42,7 @@ export async function importUvtt(wsId: string) {
   const id = await made
   if (!id) { await alertDialog('The scene could not be made. Try again.'); return }
   for (let i = 0; i < map.walls.length; i += 200) sendTable({ t: 'wall.add', sceneId: id, walls: map.walls.slice(i, i + 200) })
-  for (const l of map.lights) sendTable({ t: 'token.add', sceneId: id, token: { name: 'Light', hidden: true, x: l.x, y: l.y, data: { light: { bright: l.bright, dim: l.dim, ...(l.color ? { color: l.color } : {}) } } } })
+  for (const l of map.lights) sendTable({ t: 'token.add', sceneId: id, token: { name: 'Light', hidden: true, x: l.x, y: l.y, data: { lightSource: true, light: { bright: l.bright, dim: l.dim, ...(l.color ? { color: l.color } : {}) } } } })
   sendTable({ t: 'view', sceneId: id })
 }
 

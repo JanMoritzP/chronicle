@@ -47,9 +47,10 @@ for (const [name, rollBack] of Object.entries(SCENARIOS)) {
     d.exec('DROP TABLE IF EXISTS scene_reveals; DROP TABLE IF EXISTS scene_pins; ALTER TABLE scene_tiles DROP COLUMN flip; DROP TABLE IF EXISTS session_events; ALTER TABLE uploads DROP COLUMN tags; ALTER TABLE scene_walls DROP COLUMN locked')
     d.exec('ALTER TABLE scene_tiles DROP COLUMN layer_id; ALTER TABLE scenes DROP COLUMN layers')
     d.exec('ALTER TABLE scenes DROP COLUMN weather')
+    d.exec('ALTER TABLE scenes DROP COLUMN lighting')
     for (const col of ['folder', 'notes', 'grid_color', 'grid_opacity', 'ambient']) d.exec(`ALTER TABLE scenes DROP COLUMN ${col}`)
     rollBack(d)
-    d.prepare("UPDATE meta SET value = ? WHERE key = 'schema_version'").run(String(version - 19))
+    d.prepare("UPDATE meta SET value = ? WHERE key = 'schema_version'").run(String(version - 20))
     d.close()
 
     proc = await start(dir)

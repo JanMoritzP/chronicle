@@ -1,0 +1,175 @@
+import { openPage } from '../lib/ui'
+import { expect, grantAccess, test } from '../fixtures'
+
+// Light, walls that stop tokens, the character builder and who plays a character.
+
+const openTable = async (page: import('@playwright/test').Page) => {
+  await page.getByRole('button', { name: 'Tabletop' }).click()
+  await expect(page.locator('.tt-canvas canvas')).toBeVisible()
+}
+const makeScene = async (page: import('@playwright/test').Page, name: string) => {
+  await page.locator('.tt-bar').getByRole('button', { name: 'New scene' }).click()
+  await page.getByPlaceholder('The crypt under the chapel').fill(name)
+  await page.getByRole('button', { name: 'Create' }).click()
+  await expect(page.locator('.tt-bar')).toContainText(name)
+}
+
+test('lighting is switched on for a scene, a light is placed and set up in its panel', { tag: '@feature:table.lighting' }, async ({ app }) => {
+  await openTable(app)
+  await makeScene(app, 'Cellar')
+  await app.getByRole('button', { name: 'Scene', exact: true }).click()
+  const lighting = app.getByLabel(/^Lighting:/)
+  await expect(lighting).not.toBeChecked()
+  await expect(app.getByText('Off: the whole map is in daylight')).toBeVisible()
+  await lighting.click()
+  await expect(lighting).toBeChecked()
+  await expect(app.getByText(/^Darkness \(70 %\)/)).toBeVisible()
+  await expect(app.getByRole('button', { name: 'Show the light on my screen' })).toHaveAttribute('aria-pressed', 'true')
+
+  // the light tool places a lamp where the map is clicked
+  await app.getByRole('button', { name: 'Place a light', exact: true }).first().click()
+  await expect(app.getByRole('group', { name: 'Tool options' })).toContainText('New lights are')
+  await app.locator('.tt-canvas canvas').click({ position: { x: 400, y: 300 } })
+  const lights = app.getByRole('group', { name: 'Lights on this scene' })
+  await expect(lights).toContainText('Torch 1')
+
+  // its panel sets it up; putting it out keeps it on the list
+  await lights.getByRole('button', { name: /^Torch 1/ }).click()
+  await app.getByRole('button', { name: 'Token', exact: true }).click()
+  await expect(app.locator('.tt-panel-title')).toHaveText('Light')
+  const bright = app.getByLabel('Bright light')
+  await bright.fill('30')
+  await bright.press('Enter')
+  await app.getByLabel('Shines in a cone').click()
+  await expect(app.getByLabel('Light angle')).toHaveValue('60')
+  await app.getByRole('button', { name: 'Put it out' }).click()
+  await expect(app.getByRole('button', { name: 'Light it' })).toBeVisible()
+  await app.getByRole('button', { name: 'Scene', exact: true }).click()
+  await expect(lights).toContainText('30/40 ft')
+  await expect(lights.getByRole('button', { name: 'Light Torch 1' })).toBeVisible()
+
+  // switching lighting off leaves the darkness for later
+  await lighting.click()
+  await expect(lighting).not.toBeChecked()
+  await expect(app.getByRole('button', { name: 'Show the light on my screen' })).toHaveCount(0)
+  await lighting.click()
+  await expect(app.getByText(/^Darkness \(70 %\)/)).toBeVisible()
+})
+
+test('a token stops at a wall, and the GM passes with Ctrl', { tag: '@feature:table.walls-block' }, async ({ app, world }) => {
+  await openTable(app)
+  await makeScene(app, 'Corridor')
+  // a wall on the grid line at x 420 and a token in the cell just left of it, put there over the table's own socket
+  const where = () => app.evaluate(async (worldId) => {
+    const sock = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/table/${worldId}`)
+    const msgs: any[] = []
+    sock.onmessage = (e) => msgs.push(JSON.parse(e.data))
+    await new Promise((r) => (sock.onopen = r))
+    for (let i = 0; i < 100 && !msgs.some((m) => m.t === 'snapshot'); i++) await new Promise((r) => setTimeout(r, 30))
+    const snap = msgs.find((m) => m.t === 'snapshot')
+    sock.close()
+    return { sceneId: snap.sceneId as string, x: snap.tokens.find((t: any) => t.name === 'Runner')?.x as number | undefined, walls: snap.walls.length as number }
+  }, world.id)
+  const { sceneId } = await where()
+  await app.evaluate(async ({ worldId, sceneId }) => {
+    const sock = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/table/${worldId}`)
+    await new Promise((r) => (sock.onopen = r))
+    sock.send(JSON.stringify({ t: 'wall.add', sceneId, walls: [{ x1: 420, y1: 0, x2: 420, y2: 1400 }] }))
+    sock.send(JSON.stringify({ t: 'token.add', sceneId, token: { name: 'Runner', x: 385, y: 245 } }))
+    await new Promise((r) => setTimeout(r, 300))
+    sock.close()
+  }, { worldId: world.id, sceneId })
+  await expect(app.getByRole('list', { name: 'Tokens on this scene' })).toContainText('Runner')
+  await app.getByRole('list', { name: 'Tokens on this scene' }).getByRole('button', { name: 'Runner' }).click()
+  await app.locator('.tt').focus()
+  await app.keyboard.press('ArrowRight')
+  await app.waitForTimeout(400)
+  expect((await where()).x).toBe(385)
+  await app.keyboard.press('ArrowLeft')
+  await expect.poll(async () => (await where()).x).toBe(315)
+  await app.keyboard.press('ArrowRight')
+  await expect.poll(async () => (await where()).x).toBe(385)
+  await app.keyboard.press('Control+ArrowRight')
+  await expect.poll(async () => (await where()).x).toBe(455)
+})
+
+test('a character is built step by step with the rules worked out', { tag: '@feature:sheet.builder' }, async ({ app, makePage }) => {
+  await makePage('Brann', { props: { type: 'person' } })
+  await app.reload()
+  await openPage(app, 'Brann')
+  await app.getByRole('button', { name: 'Build a character' }).click()
+  const d = app.getByRole('dialog', { name: 'Build a character' })
+  await expect(d.getByRole('button', { name: 'Next' })).toBeDisabled()
+  await d.getByRole('radio', { name: /^Fighter/ }).click()
+  await d.getByRole('button', { name: 'Next' }).click()
+  await d.getByRole('radio', { name: /^Hill dwarf/ }).click()
+  await d.getByRole('button', { name: 'Next' }).click()
+  await d.getByRole('radio', { name: /^Soldier/ }).click()
+  await d.getByRole('button', { name: 'Next' }).click()
+  // the standard array goes to Strength first for a fighter, the dwarf adds to Constitution
+  await expect(d.locator('.cb-score').first()).toContainText('15')
+  await d.getByRole('button', { name: 'Next' }).click()
+  await expect(d.getByText('choose 2')).toBeVisible()
+  await expect(d.getByRole('checkbox', { name: /Athletics/ })).toBeChecked()
+  await expect(d.getByRole('checkbox', { name: /Athletics/ })).toBeDisabled()
+  await d.getByRole('checkbox', { name: /Perception/ }).check()
+  await expect(d.getByRole('button', { name: 'Next' })).toBeDisabled()
+  await d.getByRole('checkbox', { name: /Survival/ }).check()
+  await expect(d.getByRole('checkbox', { name: /Stealth/ })).toBeDisabled()
+  await d.getByRole('button', { name: 'Next' }).click()
+  const summary = d.getByLabel('The finished character')
+  await expect(summary).toContainText('13hit points')
+  await expect(summary).toContainText('19armor class')
+  await d.getByRole('button', { name: 'Create the character' }).click()
+  await expect(d).toHaveCount(0)
+
+  // the sheet opens to play from: the numbers are there, the form is behind Edit sheet
+  const sheet = app.getByLabel('Character sheet')
+  await expect(sheet).toContainText('Fighter 1')
+  await expect(sheet).toContainText('Hill dwarf')
+  await expect(app.getByLabel('Current hit points')).toHaveValue('13')
+  await expect(app.getByRole('button', { name: /Strength saving throw \+4, proficient/ })).toBeVisible()
+  await expect(app.getByRole('button', { name: /^Athletics \+4, proficient/ })).toBeVisible()
+  await expect(app.getByLabel('Strength', { exact: true })).toHaveCount(0)
+  await app.getByRole('button', { name: 'Edit sheet' }).click()
+  await expect(app.getByLabel('Strength', { exact: true })).toHaveValue('15')
+  await app.waitForTimeout(1500)
+  await app.reload()
+  await openPage(app, 'Brann')
+  await expect(app.getByLabel('Character sheet')).toContainText('Longsword')
+})
+
+test('a page names who plays it, and a reader who plays it may change its sheet', { tag: '@feature:sheet.players' }, async ({ app, as, makePage, world, api }) => {
+  await grantAccess(world.id, 'viewer')
+  const page = await makePage('Hero', { props: { type: 'person' } })
+  await app.reload()
+  await openPage(app, 'Hero')
+  await app.getByRole('button', { name: 'Add a character sheet' }).click()
+  await app.getByLabel('Character name').fill('Hero')
+  await app.waitForTimeout(1200)
+
+  const { page: reader } = await as('viewer', world.id)
+  await reader.goto('/')
+  await openPage(reader, 'Hero')
+  await expect(reader.getByText('Read-only')).toBeVisible()
+  await expect(reader.getByLabel('Current hit points')).toHaveCount(0)
+
+  // the GM names the reader as the player
+  await app.locator('.played-by').getByRole('combobox').click()
+  await app.getByRole('option', { name: /e2e-viewer/ }).click()
+  await expect(app.locator('.played-by')).toContainText('e2e-viewer')
+  await app.waitForTimeout(800)
+  const stored = await api.json<{ props: { players?: string[] } }>('get', `/api/pages/${page.id}`)
+  expect(stored.props.players?.length).toBe(1)
+
+  await reader.reload()
+  await openPage(reader, 'Hero')
+  await expect(reader.getByText('You play this character')).toBeVisible()
+  const hp = reader.getByLabel('Current hit points')
+  await hp.fill('4')
+  await reader.waitForTimeout(1200)
+  const after = await api.json<{ props: { sheet: { hp: { current: number } } } }>('get', `/api/pages/${page.id}`)
+  expect(after.props.sheet.hp.current).toBe(4)
+  // their place in the world stays the GM's
+  await expect(reader.getByLabel('Add tags')).toHaveCount(0)
+})

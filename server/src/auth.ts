@@ -67,7 +67,8 @@ export const requireUser = async (req: FastifyRequest, reply: FastifyReply) => {
 export const requireEditor = async (req: FastifyRequest, reply: FastifyReply) => {
   req.user ??= userFromRequest(req)
   if (!req.user) return reply.code(401).send({ error: 'unauthorized' })
-  if (req.user.role === 'viewer') return reply.code(403).send({ error: 'read-only account' })
+  // a read-only account changing its own character was let through by the world check (access.ts), for that page only
+  if (req.user.role === 'viewer' && !req.playerEdit) return reply.code(403).send({ error: 'read-only account' })
 }
 
 export const requireOwner = async (req: FastifyRequest, reply: FastifyReply) => {

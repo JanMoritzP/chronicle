@@ -27,13 +27,14 @@ function editComment(doc: DocNode, commentId: string, change: Record<string, any
 const MISSING = 'This comment is no longer in the page.'
 
 export async function commentRoutes(app: FastifyInstance) {
-  /** Everyone who can open the world, for the @ menu: the owners plus the members. */
+  /** Everyone who can open the world, for the @ menu and for naming who plays a character: the owners plus the members, with what they may do here. */
   app.get('/api/workspaces/:ws/people', { preHandler: requireUser }, async (req) => {
     const { ws } = req.params as { ws: string }
     return db.prepare(
-      `SELECT username, role FROM users
-       WHERE role = 'owner' OR id IN (SELECT user_id FROM workspace_members WHERE workspace_id = ?)
-       ORDER BY username COLLATE NOCASE`,
+      `SELECT u.id, u.username, CASE WHEN u.role = 'owner' THEN 'owner' WHEN u.role = 'viewer' THEN 'viewer' ELSE COALESCE(m.role, 'editor') END AS role
+       FROM users u LEFT JOIN workspace_members m ON m.user_id = u.id AND m.workspace_id = ?
+       WHERE u.role = 'owner' OR m.user_id IS NOT NULL
+       ORDER BY u.username COLLATE NOCASE`,
     ).all(ws)
   })
 

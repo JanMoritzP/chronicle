@@ -8,6 +8,7 @@ import { parseSheet, patchSheet } from '../sheet.js'
 import { templatesOf } from './templates.js'
 import { pageTypesOf } from './pagetypes.js'
 import { statTemplatesOf } from './stattemplates.js'
+import { memberIds, playersOf } from '../players.js'
 import { contentHooks, ensureBaseline, pageDerived, pageSummary, portraitOf, recordActivity, recordRevision, reindexLinks, relinkByName, setTags, uid, type PageRow } from '../pages.js'
 
 const docSchema = z.custom<DocNode>((v) => typeof v === 'object' && v !== null && (v as DocNode).type === 'doc')
@@ -271,12 +272,23 @@ export async function contentRoutes(app: FastifyInstance) {
         type: z.string().nullable().optional(),
         /** Sheet fields by path ("hp.max"); see server/src/sheet.ts. */
         sheet: z.record(z.string(), z.any()).optional(),
+        /** The accounts that play this character: they may change its text and sheet, and move its tokens. */
+        players: z.array(z.string().max(64)).max(12).optional(),
       }).optional(),
     }).safeParse(req.body)
     if (!b.success) return reply.code(400).send({ error: 'bad request' })
     const p = db.prepare('SELECT * FROM pages WHERE id = ?').get(id) as PageRow | undefined
     if (!p) return reply.code(404).send({ error: 'not found' })
     const d = b.data
+    // someone who only reads the world changes the page of their own character: its title, text and sheet, nothing else
+    if (req.playerEdit && (d.icon !== undefined || d.folderId !== undefined || d.aliases || d.tags || d.props || d.propsPatch?.type !== undefined || d.propsPatch?.players)) {
+      return reply.code(403).send({ error: 'Players can change the text and sheet of their own character only.' })
+    }
+    if (d.propsPatch?.players) {
+      const members = memberIds(p.workspace_id)
+      if (d.propsPatch.players.some((u) => !members.has(u))) return reply.code(400).send({ error: 'Only members of this world can play a character in it.' })
+    }
+    const playersBefore = playersOf(p.props)
     if (d.folderId && !sameWorld('folders', d.folderId, p.workspace_id)) return reply.code(400).send({ error: 'bad request' })
     if (d.props && !validSheetProps(d.props)) return reply.code(400).send({ error: 'bad request' })
     if (d.propsPatch) {
@@ -297,6 +309,7 @@ export async function contentRoutes(app: FastifyInstance) {
         if (pp[k] === undefined) continue
         if (pp[k]) merged[k] = pp[k]; else delete merged[k]
       }
+      if (pp.players) { if (pp.players.length) merged.players = [...new Set(pp.players)]; else delete merged.players }
       d.props = merged
     }
     if (d.content) ensureHeadingIds(d.content)
@@ -326,6 +339,8 @@ export async function contentRoutes(app: FastifyInstance) {
     })()
     // a document sent over REST replaces whatever is being edited live; open editors reload it
     if (d.content) contentHooks.replaced(id)
+    const playersAfter = playersOf(d.props ?? p.props)
+    if (playersAfter.join() !== playersBefore.join()) contentHooks.playersChanged(p.workspace_id, id, playersBefore, playersAfter)
     return pageDerived(id)
   })
 

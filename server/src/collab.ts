@@ -6,6 +6,7 @@ import * as syncProtocol from 'y-protocols/sync'
 import { WebSocketServer, WebSocket, type RawData } from 'ws'
 import * as Y from 'yjs'
 import { worldRole } from './access.js'
+import { playsPage } from './players.js'
 import { userFromCookieHeader, type AuthUser } from './auth.js'
 import { db, now } from './db.js'
 import { ensureHeadingIds } from './doc.js'
@@ -189,7 +190,7 @@ export function attachCollab(server: HttpServer) {
     wss.handleUpgrade(req, socket, head, (ws) => {
       const room = openRoom(m[1])
       if (!room) return ws.close(CLOSE_DENIED)
-      connect(ws, room, user, role === 'editor')
+      connect(ws, room, user, role === 'editor' || playsPage(user.id, m[1]))
     })
   })
 
@@ -247,7 +248,7 @@ export function revalidateCollab(changedUsers?: string[]) {
       const role = user ? worldRole(user, room.wsId) : null
       if (!user || !role) { c.socket.close(CLOSE_DENIED, 'no access'); continue }
       c.user = user
-      c.canWrite = role === 'editor'
+      c.canWrite = role === 'editor' || playsPage(user.id, room.pageId)
     }
   }
   presenceChanged()

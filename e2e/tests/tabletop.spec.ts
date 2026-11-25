@@ -12,7 +12,7 @@ test('the GM adds a scene and tokens and a player sees them live, hidden ones ex
   await app.reload()
   await openTable(app)
 
-  await app.locator('.tt-bar').getByRole('button', { name: 'Scene', exact: true }).click()
+  await app.locator('.tt-bar').getByRole('button', { name: 'New scene' }).click()
   await app.getByPlaceholder('The crypt under the chapel').fill('The crypt')
   await app.getByRole('button', { name: 'Create' }).click()
   await expect(app.locator('.tt-bar')).toContainText('The crypt')
@@ -23,7 +23,7 @@ test('the GM adds a scene and tokens and a player sees them live, hidden ones ex
   await expect(player.locator('.tt-bar')).toContainText('The crypt')
 
   for (const name of ['Aria', 'Orc']) {
-    await app.locator('.tt-bar').getByRole('button', { name: 'Token' }).click()
+    await app.locator('.tt-rail').getByRole('button', { name: 'New token' }).click()
     await app.getByPlaceholder('Goblin 1').fill(name)
     await app.getByRole('button', { name: 'Add' }).click()
     await expect(app.getByRole('list', { name: 'Tokens on this scene' })).toContainText(name)
@@ -40,11 +40,11 @@ test('the GM adds a scene and tokens and a player sees them live, hidden ones ex
 
 test('the GM edits a token from the panel', { tag: '@feature:table.panel' }, async ({ app }) => {
   await openTable(app)
-  await app.locator('.tt-bar').getByRole('button', { name: 'Scene', exact: true }).click()
+  await app.locator('.tt-bar').getByRole('button', { name: 'New scene' }).click()
   await app.getByPlaceholder('The crypt under the chapel').fill('Tavern')
   await app.getByRole('button', { name: 'Create' }).click()
   await expect(app.locator('.tt-bar')).toContainText('Tavern')
-  await app.locator('.tt-bar').getByRole('button', { name: 'Token' }).click()
+  await app.locator('.tt-rail').getByRole('button', { name: 'New token' }).click()
   await app.getByPlaceholder('Goblin 1').fill('Barkeep')
   await app.getByRole('button', { name: 'Add' }).click()
   await app.getByRole('list', { name: 'Tokens on this scene' }).getByRole('button', { name: 'Barkeep' }).click()
@@ -57,7 +57,7 @@ test('the GM edits a token from the panel', { tag: '@feature:table.panel' }, asy
 })
 
 const makeScene = async (page: import('@playwright/test').Page, name: string) => {
-  await page.locator('.tt-bar').getByRole('button', { name: 'Scene', exact: true }).click()
+  await page.locator('.tt-bar').getByRole('button', { name: 'New scene' }).click()
   await page.getByPlaceholder('The crypt under the chapel').fill(name)
   await page.getByRole('button', { name: 'Create' }).click()
   await expect(page.locator('.tt-bar')).toContainText(name)
@@ -65,7 +65,7 @@ const makeScene = async (page: import('@playwright/test').Page, name: string) =>
   await expect(page.getByRole('alert')).toHaveCount(0)
 }
 const makeToken = async (page: import('@playwright/test').Page, name: string) => {
-  await page.locator('.tt-bar').getByRole('button', { name: 'Token' }).click()
+  await page.locator('.tt-rail').getByRole('button', { name: 'New token' }).click()
   await page.getByPlaceholder('Goblin 1').fill(name)
   await page.getByRole('button', { name: 'Add' }).click()
   await page.locator('.tt-canvas canvas').click({ position: { x: 5, y: 5 } })
@@ -79,7 +79,7 @@ test('chat and dice: a roll is shown to everyone, a whisper only to its target',
   const { page: player } = await as('editor', world.id)
   await player.goto('/')
   await openTable(player)
-  for (const p of [app, player]) await p.locator('.tt-panel .seg').getByRole('button', { name: /Chat/ }).click()
+  for (const p of [app, player]) await p.locator('.tt-tabs').getByRole('button', { name: /Chat/ }).click()
 
   await app.getByLabel('Chat message').fill('/roll 1d20+5 stealth')
   await app.getByLabel('Chat message').press('Enter')
@@ -125,7 +125,7 @@ test("hit points, damage, healing and conditions on a token", { tag: '@feature:t
 test('the GM turns on fog and darkness for a scene and the choice is kept', { tag: '@feature:table.fog' }, async ({ app }) => {
   await openTable(app)
   await makeScene(app, 'Catacombs')
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Scene' }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Scene' }).click()
   const fog = app.getByLabel(/Fog of war/)
   await expect(fog).not.toBeChecked()
   await fog.click()
@@ -133,7 +133,7 @@ test('the GM turns on fog and darkness for a scene and the choice is kept', { ta
   await expect(app.getByRole('button', { name: 'Forget what players explored' })).toBeVisible()
   await app.reload()
   await openTable(app)
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Scene' }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Scene' }).click()
   await expect(app.getByLabel(/Fog of war/)).toBeChecked()
   // the wall tools are there for the GM and offer the kinds of wall
   await app.getByRole('button', { name: 'Draw walls' }).click()
@@ -144,7 +144,8 @@ test('the GM can preview the fog of war as a player or through a token, without 
   await openTable(app)
   await makeScene(app, 'Vault')
   await makeToken(app, 'Scout')
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Scene' }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Scene' }).click()
+  await app.getByLabel(/^Lighting:/).click()
   await app.getByLabel(/Darkness/).fill('90')
   await app.getByLabel(/Fog of war/).click()
   await expect(app.getByLabel(/Fog of war/)).toBeChecked()
@@ -195,7 +196,7 @@ test('combat: add tokens, set initiative, start and step through the turns', { t
   await makeScene(app, 'Brawl')
   await makeToken(app, 'Aria')
   await makeToken(app, 'Orc')
-  await app.locator('.tt-panel .seg').getByRole('button', { name: /Combat/ }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: /Combat/ }).click()
   await app.getByRole('button', { name: /Add all/ }).click()
   await app.getByLabel('Initiative of Aria').fill('15')
   await app.getByLabel('Initiative of Aria').press('Enter')
@@ -210,7 +211,7 @@ test('combat: add tokens, set initiative, start and step through the turns', { t
   const { page: player } = await as('editor', world.id)
   await player.goto('/')
   await openTable(player)
-  await player.locator('.tt-panel .seg').getByRole('button', { name: /Combat/ }).click()
+  await player.locator('.tt-tabs').getByRole('button', { name: /Combat/ }).click()
   await expect(player.getByRole('list', { name: 'Order of play' }).locator('[aria-current=step]')).toContainText('Orc')
   await app.getByRole('button', { name: 'Next turn' }).click()
   await expect(app.getByText('Round 2')).toBeVisible()
@@ -240,7 +241,7 @@ test('encounters: build a fight, see how hard it is and place it on the scene', 
   await app.reload()
   await openTable(app)
   await makeScene(app, 'Road')
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Encounters' }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Encounters' }).click()
   await app.getByRole('button', { name: 'New encounter' }).click()
   await app.getByPlaceholder('Goblin ambush on the road').fill('Ambush')
   await app.getByRole('button', { name: 'Create' }).click()
@@ -255,7 +256,7 @@ test('encounters: build a fight, see how hard it is and place it on the scene', 
   await expect(meter).toContainText('Easy')
   await expect(meter).toContainText('400 adjusted XP')
   await app.getByRole('button', { name: 'Place on this scene' }).click()
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Token' }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Token' }).click()
   await app.locator('.tt-canvas canvas').click({ position: { x: 5, y: 5 } })
   const tokens = app.getByRole('list', { name: 'Tokens on this scene' })
   await expect(tokens).toContainText('Goblin 4')
@@ -304,7 +305,7 @@ test('canvas tools: drag, measure, ping, draw, walls, and a player under fog', {
   await app.mouse.move(cx - 160, cy - 100, { steps: 5 })
   await app.mouse.move(cx - 120, cy - 130, { steps: 5 })
   await app.mouse.up()
-  await app.getByRole('group', { name: 'Kind of drawing' }).getByRole('button', { name: 'Box' }).click()
+  await app.getByRole('group', { name: 'Tool options' }).getByRole('button', { name: 'Box' }).click()
   await app.getByLabel('Colour #29b6f6').click()
   await app.mouse.move(cx + 80, cy - 140)
   await app.mouse.down()
@@ -314,7 +315,7 @@ test('canvas tools: drag, measure, ping, draw, walls, and a player under fog', {
   await app.mouse.click(cx + 120, cy - 140)
 
   // walls: a closed box around the middle with a door, fog on, then a player's view of it
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Scene' }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Scene' }).click()
   await app.getByLabel(/Fog of war/).click()
   await expect(app.getByLabel(/Fog of war/)).toBeChecked()
   await app.getByRole('button', { name: 'Draw walls' }).click()
@@ -345,25 +346,25 @@ test('canvas tools: drag, measure, ping, draw, walls, and a player under fog', {
 test('layers and templates: place a tile, move it to another layer, and draw a spell area', { tag: '@feature:table.tiles' }, async ({ app }) => {
   await openTable(app)
   await makeScene(app, 'Hall')
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Scene' }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Scene' }).click()
   const chooser = app.waitForEvent('filechooser')
   await app.getByRole('button', { name: 'Add a tile' }).click()
   await (await chooser).setFiles({ name: 'table.png', mimeType: 'image/png', buffer: makePng(300, 150) })
   const tiles = app.getByRole('list', { name: 'Tiles on this scene' })
   await expect(tiles).toContainText('Tile 1')
   await tiles.getByRole('button', { name: /Tile 1/ }).click()
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Token' }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Token' }).click()
   await app.getByLabel('Tile width').fill('420')
   await app.getByLabel('Tile width').press('Enter')
   await expect(app.getByLabel('Tile width')).toHaveValue('420')
   await app.getByRole('button', { name: 'Hide', exact: true }).click()
   await expect(app.getByRole('button', { name: 'Reveal' })).toBeVisible()
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Scene' }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Scene' }).click()
   await expect(tiles).toContainText('hidden')
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Token' }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Token' }).click()
   await app.getByRole('button', { name: 'Delete tile' }).click()
   await app.getByRole('button', { name: 'Delete', exact: true }).click()
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Scene' }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Scene' }).click()
   await expect(tiles).not.toContainText('Tile 1')
 
   // a cone and a burst, each as many cells long as it was dragged
@@ -373,7 +374,7 @@ test('layers and templates: place a tile, move it to another layer, and draw a s
   const cx = box.x + box.width / 2, cy = box.y + box.height / 2
   await app.getByRole('button', { name: 'Draw', exact: true }).click()
   for (const kind of ['Cone', 'Burst', 'Ray', 'Cube']) {
-    await app.getByRole('group', { name: 'Kind of drawing' }).getByRole('button', { name: kind, exact: true }).click()
+    await app.getByRole('group', { name: 'Spell areas' }).getByRole('button', { name: kind, exact: true }).click()
     await app.mouse.move(cx - 150, cy)
     await app.mouse.down()
     await app.mouse.move(cx - 60, cy + 10, { steps: 5 })
@@ -396,7 +397,7 @@ test('a world that plays by the 2024 rules rates a fight against a budget', { ta
   await app.reload()
   await openTable(app)
   await makeScene(app, 'Ford')
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Encounters' }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Encounters' }).click()
   await app.getByRole('button', { name: 'New encounter' }).click()
   await app.getByPlaceholder('Goblin ambush on the road').fill('Ogres')
   await app.getByRole('button', { name: 'Create' }).click()
@@ -467,7 +468,7 @@ test('a Pathfinder 2e world: a creature sheet, and a threat rating by level', { 
 
   await openTable(app)
   await makeScene(app, 'Orc camp')
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Encounters' }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Encounters' }).click()
   await app.getByRole('button', { name: 'New encounter' }).click()
   await app.getByPlaceholder('Goblin ambush on the road').fill('Patrol')
   await app.getByRole('button', { name: 'Create' }).click()
@@ -495,7 +496,7 @@ test('canvas: hex grids, tiles that can be dragged, doors that open and walls th
   const cx = box.x + box.width / 2, cy = box.y + box.height / 2
 
   // every kind of grid and every rule for counting diagonals
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Scene' }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Scene' }).click()
   for (const [from, option] of [['Square', 'Hexes, pointy top'], ['Hexes, pointy top', 'Hexes, flat top'], ['Hexes, flat top', 'No grid'], ['No grid', 'Square']] as const) {
     await app.getByRole('combobox').filter({ hasText: from }).first().click()
     await app.getByRole('option', { name: option }).click()
@@ -529,7 +530,7 @@ test('canvas: hex grids, tiles that can be dragged, doors that open and walls th
   await app.mouse.down()
   await app.mouse.up()
   await app.getByRole('list', { name: 'Tiles on this scene' }).getByRole('button', { name: /Tile 1/ }).click()
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Token' }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Token' }).click()
   await app.getByRole('button', { name: 'Lock', exact: true }).click()
   await expect(app.getByRole('button', { name: 'Unlock', exact: true })).toBeVisible()
   await app.getByRole('button', { name: 'Forward', exact: true }).click()
@@ -591,14 +592,14 @@ test('a token linked to a creature page gets its sheet card with a roll on every
   await card.getByText('Scimitar').click()
   await card.getByRole('button', { name: /^To hit/ }).first().click()
   await card.getByRole('button', { name: /1d6\+1/ }).click()
-  await app.locator('.tt-panel .seg').getByRole('button', { name: /Chat/ }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: /Chat/ }).click()
   const chat = app.getByRole('list', { name: 'Chat' })
   await expect(chat).toContainText('Bandit 1: Initiative')
   await expect(chat).toContainText('Scimitar, attack')
   await expect(chat).toContainText('Scimitar, slashing damage')
   await expect(chat.locator('.tt-rollout')).toHaveCount(6)
   // conditions toggle on and off
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Token' }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Token' }).click()
   const prone = app.getByRole('group', { name: 'Conditions' }).getByRole('button', { name: 'Prone' })
   await prone.click()
   await expect(prone).toHaveAttribute('aria-pressed', 'true')
@@ -626,10 +627,10 @@ test('the GM switches on damage types: resistance halves a hit and it is said in
 
   // off by default: no damage type to choose
   await expect(app.getByRole('button', { name: 'Select Damage type' })).toHaveCount(0)
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Table', exact: true }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Table', exact: true }).click()
   await app.getByLabel('Damage types: resistance, vulnerability and immunity').click()
   await expect(app.getByLabel('Damage types: resistance, vulnerability and immunity')).toBeChecked()
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Token', exact: true }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Token', exact: true }).click()
   await app.getByLabel('Amount of damage or healing').fill('10')
   await expect(async () => {
     await app.getByTitle('Damage type').click()
@@ -638,10 +639,10 @@ test('the GM switches on damage types: resistance halves a hit and it is said in
   }).toPass()
   await app.getByRole('button', { name: 'Damage', exact: true }).click()
   await expect(app.getByLabel('Hit points', { exact: true })).toHaveValue('15')
-  await app.locator('.tt-panel .seg').getByRole('button', { name: /Chat/ }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: /Chat/ }).click()
   await expect(app.getByRole('list', { name: 'Chat' })).toContainText('takes 5 fire damage (resistant)')
 
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Token', exact: true }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Token', exact: true }).click()
   const ready = app.getByRole('group', { name: 'Spell slots' }).getByRole('button', { name: /ready/ })
   await expect(ready).toHaveCount(1)
   // a long rest brings the hit points back
@@ -654,7 +655,7 @@ test('the GM switches on damage types: resistance halves a hit and it is said in
   await app.getByRole('button', { name: 'Damage', exact: true }).click()
   await expect(app.getByLabel('Hit points', { exact: true })).toHaveValue('0')
   await app.getByRole('button', { name: 'Death save' }).click()
-  await app.locator('.tt-panel .seg').getByRole('button', { name: /Chat/ }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: /Chat/ }).click()
   await expect(app.getByRole('list', { name: 'Chat' })).toContainText('Death saving throw')
 })
 
@@ -683,10 +684,10 @@ test('with attacks switched on, a feature can be rolled against a target and the
   await expect(app.locator('.tt-sheet')).toContainText('Medium humanoid')
   // off by default: there is no target to choose
   await expect(app.getByTitle('Target of attacks')).toHaveCount(0)
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Table', exact: true }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Table', exact: true }).click()
   await app.getByLabel('Attacks and saves rolled against targets, with the damage applied').click()
   await expect(app.getByLabel('Attacks and saves rolled against targets, with the damage applied')).toBeChecked()
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Token', exact: true }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Token', exact: true }).click()
   await expect(async () => {
     await app.getByTitle('Target of attacks').click()
     await expect(app.getByRole('option', { name: 'Dummy' })).toBeVisible({ timeout: 1500 })
@@ -694,7 +695,7 @@ test('with attacks switched on, a feature can be rolled against a target and the
   await app.getByRole('option', { name: 'Dummy' }).click()
   await app.locator('.tt-sheet').getByText('Longbow').click()
   await app.getByRole('button', { name: 'Use Longbow on the target' }).click()
-  await app.locator('.tt-panel .seg').getByRole('button', { name: /Chat/ }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: /Chat/ }).click()
   const chat = app.getByRole('list', { name: 'Chat' })
   await expect(chat).toContainText('Longbow, attack on Dummy')
   await expect(chat).toContainText(/(critically hits|hits) Dummy for \d+ piercing|misses Dummy/)
@@ -703,12 +704,12 @@ test('with attacks switched on, a feature can be rolled against a target and the
   const box = (await app.locator('.tt-canvas canvas').boundingBox())!
   const cx = box.x + box.width / 2, cy = box.y + box.height / 2
   await app.getByRole('button', { name: 'Draw', exact: true }).click()
-  await app.getByRole('group', { name: 'Kind of drawing' }).getByRole('button', { name: 'Burst', exact: true }).click()
+  await app.getByRole('group', { name: 'Tool options' }).getByRole('button', { name: 'Burst', exact: true }).click()
   await app.mouse.move(cx, cy)
   await app.mouse.down()
   await app.mouse.move(cx + 150, cy, { steps: 5 })
   await app.mouse.up()
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Token', exact: true }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Token', exact: true }).click()
   await expect(async () => {
     await app.getByTitle('Target of attacks').click()
     await expect(app.getByRole('option', { name: /Everyone in the burst 1/ })).toBeVisible({ timeout: 1500 })
@@ -716,7 +717,7 @@ test('with attacks switched on, a feature can be rolled against a target and the
   await app.getByRole('option', { name: /Everyone in the burst 1/ }).click()
   await app.locator('.tt-sheet').getByText('Longbow').click()
   await app.getByRole('button', { name: 'Use Longbow on the target' }).click()
-  await app.locator('.tt-panel .seg').getByRole('button', { name: /Chat/ }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: /Chat/ }).click()
   await expect(chat.getByText('Longbow, attack on Archer 1')).toBeVisible()
 })
 
@@ -740,7 +741,7 @@ test('spell effects with a duration go on a token and can be ended', { tag: '@fe
   await app.getByRole('button', { name: 'End Bless', exact: true }).click()
   await expect(effects).not.toContainText('Bless (10)')
   await expect(effects).toContainText('Blessing of the hearth')
-  await app.locator('.tt-panel .seg').getByRole('button', { name: /Chat/ }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: /Chat/ }).click()
   await expect(app.getByRole('list', { name: 'Chat' })).toContainText('is under Bless for 10 rounds')
 })
 
@@ -750,7 +751,7 @@ test('macros: a saved line asks its questions, reads the selected token and is s
   await openTable(app)
   await makeScene(app, 'Camp')
   await makeToken(app, 'Bram')
-  await app.locator('.tt-panel .seg').getByRole('button', { name: /Chat/ }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: /Chat/ }).click()
   await app.getByRole('button', { name: 'Macros', exact: true }).click()
   await app.getByRole('button', { name: 'New macro' }).click()
   await app.getByLabel('Macro name').fill('Smash')
@@ -772,7 +773,7 @@ test('macros: a saved line asks its questions, reads the selected token and is s
   const { page: player } = await as('editor', world.id)
   await player.goto('/')
   await openTable(player)
-  await player.locator('.tt-panel .seg').getByRole('button', { name: /Chat/ }).click()
+  await player.locator('.tt-tabs').getByRole('button', { name: /Chat/ }).click()
   await expect(player.getByRole('group', { name: 'Macros' }).getByRole('button', { name: 'Smash', exact: true })).toBeVisible()
   await player.getByRole('button', { name: 'Macros', exact: true }).click()
   await expect(player.getByRole('button', { name: 'Edit Smash' })).toHaveCount(0)
@@ -787,7 +788,7 @@ test('handouts: the GM writes one, shows it to a player, and it opens on their s
   await player.goto('/')
   await openTable(player)
 
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Handouts', exact: true }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Handouts', exact: true }).click()
   await app.getByRole('button', { name: 'New handout' }).click()
   await app.getByLabel('Handout title').fill('A torn letter')
   await app.getByLabel('Handout text').fill('Meet me under the old bridge at midnight.')
@@ -796,7 +797,7 @@ test('handouts: the GM writes one, shows it to a player, and it opens on their s
   await expect(list).toContainText('A torn letter')
   await expect(list).toContainText('Hidden from the players')
 
-  await player.locator('.tt-panel .seg').getByRole('button', { name: 'Handouts', exact: true }).click()
+  await player.locator('.tt-tabs').getByRole('button', { name: 'Handouts', exact: true }).click()
   await expect(player.getByRole('list', { name: 'Handouts' })).toHaveCount(1)
   await expect(player.getByRole('list', { name: 'Handouts' })).not.toContainText('A torn letter')
 
@@ -824,7 +825,7 @@ test('roll tables and card decks: the GM makes them, players roll and draw, hand
   const { page: player } = await as('editor', world.id)
   await player.goto('/')
   await openTable(player)
-  const tab = (p: import('@playwright/test').Page, name: string | RegExp) => p.locator('.tt-panel .seg').getByRole('button', { name })
+  const tab = (p: import('@playwright/test').Page, name: string | RegExp) => p.locator('.tt-tabs').getByRole('button', { name })
 
   await tab(app, 'Tables and decks').click()
   await app.getByRole('button', { name: 'New table' }).click()
@@ -867,7 +868,7 @@ test('Pathfinder 2e: three actions a turn that come back when the turn begins', 
   await openTable(app)
   await makeScene(app, 'Duel')
   await makeToken(app, 'Fighter')
-  await app.locator('.tt-panel .seg').getByRole('button', { name: /Combat/ }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: /Combat/ }).click()
   await app.getByRole('button', { name: /Add all/ }).click()
   await app.getByLabel('Initiative of Fighter').fill('12')
   await app.getByLabel('Initiative of Fighter').press('Enter')
@@ -920,13 +921,13 @@ test('a light can have a colour that is kept, and the GM can let players see thr
   await app.getByLabel('Bright light').fill('20')
   await app.getByLabel('Bright light').press('Enter')
   await app.getByLabel('Light colour').fill('#ff8800')
-  await expect(app.getByRole('button', { name: 'No colour' })).toBeVisible()
+  await expect(app.getByRole('button', { name: 'White light' })).toBeVisible()
   await app.waitForTimeout(400)
   await app.reload()
   await openTable(app)
   await app.getByRole('list', { name: 'Tokens on this scene' }).getByRole('button', { name: 'Lantern' }).click()
   await expect(app.getByLabel('Light colour')).toHaveValue('#ff8800')
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Table', exact: true }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Table', exact: true }).click()
   await app.getByLabel('Players see through each other’s tokens').click()
   await expect(app.getByLabel('Players see through each other’s tokens')).toBeChecked()
 })
@@ -934,7 +935,7 @@ test('a light can have a colour that is kept, and the GM can let players see thr
 test('a Universal VTT map becomes a scene with walls, doors and lights, and a scene can be exported as one', { tag: '@feature:table.uvtt' }, async ({ app }) => {
   await openTable(app)
   await makeScene(app, 'Start')
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Scene', exact: true }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Scene', exact: true }).click()
   const png = makePng(40, 40, [90, 120, 60])
   const file = {
     format: 0.3,
@@ -948,9 +949,9 @@ test('a Universal VTT map becomes a scene with walls, doors and lights, and a sc
   await app.getByRole('button', { name: 'Import a Universal VTT map' }).click()
   await (await chooser).setFiles({ name: 'Old crypt.dd2vtt', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(file)) })
   await expect(app.locator('.tt-bar')).toContainText('Old crypt')
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Token', exact: true }).click()
-  await expect(app.getByRole('list', { name: 'Tokens on this scene' })).toContainText('Light')
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Scene', exact: true }).click()
+  // the map's lights are light sources of the scene, listed with its lighting
+  await app.getByLabel(/^Lighting:/).click()
+  await expect(app.getByRole('group', { name: 'Lights on this scene' })).toContainText('Light')
   await expect(async () => {
     const download = app.waitForEvent('download', { timeout: 3000 })
     await app.getByRole('button', { name: 'Export as Universal VTT' }).click()
@@ -967,7 +968,7 @@ test('a Universal VTT map becomes a scene with walls, doors and lights, and a sc
 test('the table chat becomes a recap page, and a page can be handed out', { tag: '@feature:table.recap' }, async ({ app }) => {
   await openTable(app)
   await makeScene(app, 'Tavern')
-  await app.locator('.tt-panel .seg').getByRole('button', { name: /Chat/ }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: /Chat/ }).click()
   await app.getByLabel('Chat message').fill('We meet the innkeeper.')
   await app.getByLabel('Chat message').press('Enter')
   await expect(app.getByRole('list', { name: 'Chat' })).toContainText('We meet the innkeeper.')
@@ -979,7 +980,7 @@ test('the table chat becomes a recap page, and a page can be handed out', { tag:
   // the page can be handed to the players as a handout
   await app.getByRole('button', { name: 'Tabletop' }).click()
   await expect(app.locator('.tt-canvas canvas')).toBeVisible()
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Handouts', exact: true }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Handouts', exact: true }).click()
   await app.getByRole('button', { name: 'From a page' }).click()
   await app.getByPlaceholder('Find a page to hand out…').fill('Session recap')
   await app.getByPlaceholder('Find a page to hand out…').press('Enter')
@@ -998,7 +999,7 @@ test('the jukebox: the GM adds a sound file and plays it for everyone, who can t
   await player.goto('/')
   await openTable(player)
   const wav = Buffer.concat([Buffer.from('RIFF'), Buffer.from([36, 0, 0, 0]), Buffer.from('WAVEfmt '), Buffer.from([16, 0, 0, 0, 1, 0, 1, 0, 64, 31, 0, 0, 64, 31, 0, 0, 1, 0, 8, 0]), Buffer.from('data'), Buffer.from([0, 0, 0, 0])])
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Tables and decks' }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Tables and decks' }).click()
   const chooser = app.waitForEvent('filechooser')
   await app.getByRole('button', { name: 'Add a sound file' }).click()
   await (await chooser).setFiles({ name: 'tavern.wav', mimeType: 'audio/wav', buffer: wav })
@@ -1028,7 +1029,7 @@ test('triggers: something happens by itself when a token goes down', { tag: '@fe
   await app.getByLabel('Hit points', { exact: true }).press('Enter')
   await expect(app.getByLabel('Hit points', { exact: true })).toHaveValue('5')
 
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Scene', exact: true }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Scene', exact: true }).click()
   await app.getByRole('button', { name: 'New trigger' }).click()
   await app.getByLabel('Trigger name').fill('Squeal')
   await expect(async () => {
@@ -1041,17 +1042,17 @@ test('triggers: something happens by itself when a token goes down', { tag: '@fe
   await expect(app.getByRole('list', { name: 'Trigger list' })).toContainText('Squeal')
   await expect(app.getByRole('list', { name: 'Trigger list' })).toContainText('A token goes down')
 
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Token', exact: true }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Token', exact: true }).click()
   await app.getByLabel('Amount of damage or healing').fill('5')
   await app.getByRole('button', { name: 'Damage', exact: true }).click()
-  await app.locator('.tt-panel .seg').getByRole('button', { name: /Chat/ }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: /Chat/ }).click()
   await expect(app.getByRole('list', { name: 'Chat' })).toContainText('The boar squeals and falls.')
 })
 
 test('weather falls over a scene and is kept', { tag: '@feature:table.weather' }, async ({ app }) => {
   await openTable(app)
   await makeScene(app, 'Moor')
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Scene', exact: true }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Scene', exact: true }).click()
   const canvas = app.locator('.tt-canvas canvas')
   const clear = await canvas.screenshot()
   await expect(async () => {
@@ -1063,14 +1064,14 @@ test('weather falls over a scene and is kept', { tag: '@feature:table.weather' }
   await app.waitForTimeout(400)
   await app.reload()
   await openTable(app)
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Scene', exact: true }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Scene', exact: true }).click()
   await expect(app.getByTitle('Weather over the scene')).toContainText('Rain')
 })
 
 test('the map editor: draw a room with a door and a light, and make the scene from it', { tag: '@feature:table.map-editor' }, async ({ app }) => {
   await openTable(app)
   await makeScene(app, 'Drawn')
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Scene', exact: true }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Scene', exact: true }).click()
   await app.getByRole('button', { name: 'Open the map editor' }).click()
   const editor = app.getByRole('dialog', { name: 'Map editor' })
   await expect(editor).toBeVisible()
@@ -1104,7 +1105,7 @@ test('the map editor: draw a room with a door and a light, and make the scene fr
   await expect(editor).toHaveCount(0)
 
   // the scene has the picture, the walls with the door, and the light: seen in what it exports
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Scene', exact: true }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Scene', exact: true }).click()
   await expect(async () => {
     const download = app.waitForEvent('download', { timeout: 3000 })
     await app.getByRole('button', { name: 'Export as Universal VTT' }).click()
@@ -1131,7 +1132,7 @@ test('scenes: a folder, notes only the GM sees, a copy, and sending some players
   const { page: player } = await as('editor', world.id)
   await player.goto('/')
   await openTable(player)
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Scene', exact: true }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Scene', exact: true }).click()
   await app.getByLabel('Scene folder').fill('Act one')
   await app.getByLabel('Scene folder').press('Tab')
   await expect(app.locator('.tt-bar')).toContainText('Act one › Cellar')
@@ -1141,7 +1142,7 @@ test('scenes: a folder, notes only the GM sees, a copy, and sending some players
   await app.waitForTimeout(400)
   await app.reload()
   await openTable(app)
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Scene', exact: true }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Scene', exact: true }).click()
   await expect(app.getByLabel('Scene notes')).toHaveValue('The barrel hides a trapdoor.')
   await expect(app.getByLabel('Grid colour')).toHaveValue('#ff8800')
 
@@ -1152,7 +1153,7 @@ test('scenes: a folder, notes only the GM sees, a copy, and sending some players
     await expect(app.locator('.tt-scene')).toContainText('Cellar copy', { timeout: 1500 })
   }).toPass()
   // the player is sent to the copy while the table stays on the original
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Scene', exact: true }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Scene', exact: true }).click()
   const send = app.getByRole('group', { name: 'Send players to this scene' })
   await expect(send).toBeVisible()
   await send.getByRole('checkbox').first().check()
@@ -1195,7 +1196,7 @@ test('tokens: a look of their own, extra bars, markers, and buttons that run a m
   await actions.getByLabel('Button macro').fill('/roll 1d20+9 bite')
   await actions.getByRole('button', { name: 'Make the button' }).click()
   await actions.getByRole('button', { name: 'Bite', exact: true }).click()
-  await app.locator('.tt-panel .seg').getByRole('button', { name: /Chat/ }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: /Chat/ }).click()
   await expect(app.getByRole('list', { name: 'Chat' })).toContainText('bite')
 
   // all of it is kept
@@ -1222,7 +1223,7 @@ test('walls: a rectangle in one drag, one-way walls, shown areas, and light that
   await app.mouse.move(cx + 120, cy + 80, { steps: 6 })
   await app.mouse.up()
   await app.getByRole('button', { name: 'Draw walls' }).click()
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Scene', exact: true }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Scene', exact: true }).click()
   const chooser = app.waitForEvent('filechooser')
   await app.getByRole('button', { name: 'Set map image' }).click()
   await (await chooser).setFiles({ name: 'fort.png', mimeType: 'image/png', buffer: makePng(300, 150) })
@@ -1245,7 +1246,7 @@ test('walls: a rectangle in one drag, one-way walls, shown areas, and light that
   await expect(app.getByRole('button', { name: 'Hide a shown area' })).toBeVisible()
 
   // a token that sees in other ways, and a light that flickers
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Token', exact: true }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Token', exact: true }).click()
   await makeToken(app, 'Lantern bearer')
   await expect(app.getByLabel('Blindsight')).toBeVisible()
   await expect(app.getByLabel('Truesight')).toBeVisible()
@@ -1266,7 +1267,7 @@ test('drawing: arrows, shapes, fading marks and pins on the map', { tag: '@featu
   const cx = box.x + box.width / 2, cy = box.y + box.height / 2
   const blank = await canvas.screenshot()
   await app.getByRole('button', { name: 'Draw', exact: true }).click()
-  const kinds = app.getByRole('group', { name: 'Kind of drawing' })
+  const kinds = app.getByRole('group', { name: 'Tool options' })
   await expect(kinds).toContainText('Arrow')
   await kinds.getByRole('button', { name: 'Arrow', exact: true }).click()
   await app.mouse.move(cx - 100, cy)
@@ -1303,7 +1304,7 @@ test('combat: waiting, a lair line, legendary actions, reminders and effects tha
   await makeScene(app, 'Throne room')
   await makeToken(app, 'Knight')
   await makeToken(app, 'Lich')
-  await app.locator('.tt-panel .seg').getByRole('button', { name: /Combat/ }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: /Combat/ }).click()
   await app.getByRole('button', { name: /Add all/ }).click()
   await app.getByLabel('Initiative of Knight').fill('18')
   await app.getByLabel('Initiative of Knight').press('Enter')
@@ -1335,11 +1336,11 @@ test('combat: waiting, a lair line, legendary actions, reminders and effects tha
   await app.getByRole('dialog').locator('button[type=submit]').click()
   await app.getByRole('button', { name: 'Next turn' }).click()
   await app.getByRole('button', { name: 'Next turn' }).click()
-  await app.locator('.tt-panel .seg').getByRole('button', { name: /Chat/ }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: /Chat/ }).click()
   await expect(app.getByRole('list', { name: 'Chat' })).toContainText('The knight remembers the oath.')
 
   // an effect that ends with the turn
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Token', exact: true }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Token', exact: true }).click()
   await app.getByLabel('Spell effect', { exact: true }).fill('Stunned')
   await app.getByLabel('Until the end of their next turn').check()
   await app.getByRole('button', { name: 'Apply', exact: true }).click()
@@ -1355,7 +1356,7 @@ test('chat: speaking as someone, out of character, and applying a damage roll to
   await app.getByLabel('Hit points', { exact: true }).fill('30')
   await app.getByLabel('Hit points', { exact: true }).press('Enter')
   await expect(app.getByLabel('Hit points', { exact: true })).toHaveValue('30')
-  await app.locator('.tt-panel .seg').getByRole('button', { name: /Chat/ }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: /Chat/ }).click()
   const chat = app.getByRole('list', { name: 'Chat' })
   const say = async (text: string) => { await app.getByLabel('Chat message').fill(text); await app.getByLabel('Chat message').press('Enter') }
   await say('/as "Old Mara" Welcome, travellers.')
@@ -1367,14 +1368,14 @@ test('chat: speaking as someone, out of character, and applying a damage roll to
   const apply = chat.getByRole('button', { name: /Apply 5 damage to the selected tokens/ })
   await expect(apply).toBeVisible()
   await apply.click()
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Token', exact: true }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Token', exact: true }).click()
   await expect(app.getByLabel('Hit points', { exact: true })).toHaveValue('25')
 })
 
 test('the jukebox can play a stream from an address and tie a track to a scene', { tag: '@feature:table.jukebox-more' }, async ({ app }) => {
   await openTable(app)
   await makeScene(app, 'Orchard')
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Tables and decks' }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Tables and decks' }).click()
   await app.getByRole('button', { name: 'Add a stream' }).click()
   await app.getByRole('dialog').getByRole('textbox').fill('http://example.com/not-secure.ogg')
   await app.getByRole('dialog').locator('button[type=submit]').click()
@@ -1402,7 +1403,7 @@ test('the GM can ask if everyone is ready, mute a player and send one away', { t
   const { page: player } = await as('editor', world.id)
   await player.goto('/')
   await openTable(player)
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Table', exact: true }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Table', exact: true }).click()
   await app.getByRole('button', { name: 'Ready check' }).click()
   const banner = player.getByRole('status', { name: 'Ready check' })
   await expect(banner).toBeVisible()
@@ -1414,7 +1415,7 @@ test('the GM can ask if everyone is ready, mute a player and send one away', { t
   // mute: the player cannot talk until unmuted
   await app.getByRole('button', { name: /^Mute / }).click()
   await expect(app.getByRole('button', { name: /^Unmute / })).toBeVisible()
-  await player.locator('.tt-panel .seg').getByRole('button', { name: /Chat/ }).click()
+  await player.locator('.tt-tabs').getByRole('button', { name: /Chat/ }).click()
   await player.getByLabel('Chat message').fill('hello')
   await player.getByLabel('Chat message').press('Enter')
   await expect(player.getByRole('alert')).toContainText('muted')
@@ -1429,7 +1430,7 @@ test('the GM can ask if everyone is ready, mute a player and send one away', { t
 test('the asset library lists every file, searches by name and tag, adds many at once and deletes', { tag: '@feature:table.assets' }, async ({ app }) => {
   await openTable(app)
   await makeScene(app, 'Studio')
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Scene', exact: true }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Scene', exact: true }).click()
   await app.getByRole('button', { name: 'Asset library' }).click()
   const lib = app.getByRole('dialog', { name: 'Asset library' })
   const chooser = app.waitForEvent('filechooser')
@@ -1463,11 +1464,11 @@ test('the last session can be played back: tokens moving and what was said', { t
   await openTable(app)
   await makeScene(app, 'Arena')
   await makeToken(app, 'Scout')
-  await app.locator('.tt-panel .seg').getByRole('button', { name: /Chat/ }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: /Chat/ }).click()
   await app.getByLabel('Chat message').fill('We are off.')
   await app.getByLabel('Chat message').press('Enter')
   await expect(app.getByRole('list', { name: 'Chat' })).toContainText('We are off.')
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Table', exact: true }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Table', exact: true }).click()
   await app.getByRole('button', { name: 'Replay the last session' }).click()
   const replay = app.getByRole('dialog', { name: 'Session replay' })
   await expect(replay).toContainText('The start of the session')
@@ -1484,7 +1485,7 @@ test('the last session can be played back: tokens moving and what was said', { t
 test('macro folders group macros by a name with a slash, and the panel can go on the left', { tag: '@feature:table.layout-more' }, async ({ app }) => {
   await openTable(app)
   await makeScene(app, 'Camp')
-  await app.locator('.tt-panel .seg').getByRole('button', { name: /Chat/ }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: /Chat/ }).click()
   await app.getByRole('button', { name: 'Macros', exact: true }).click()
   await app.getByRole('button', { name: 'New macro' }).click()
   await app.getByLabel('Macro name').fill('Spells/Bless')
@@ -1495,7 +1496,7 @@ test('macro folders group macros by a name with a slash, and the panel can go on
   await expect(bar.getByRole('button', { name: 'Bless', exact: true })).toBeHidden()
   await bar.getByText('Spells', { exact: true }).click()
   await expect(bar.getByRole('button', { name: 'Bless', exact: true })).toBeVisible()
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Table', exact: true }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Table', exact: true }).click()
   await app.getByLabel('Panel on the left (for left-handed use)').check()
   await expect(app.locator('html')).toHaveClass(/tt-lefty/)
   const panel = (await app.locator('.tt-panel').boundingBox())!, map = (await app.locator('.tt-canvas').boundingBox())!
@@ -1552,7 +1553,7 @@ test('a token has a walking speed the drag ruler counts against', { tag: '@featu
 test('a roll template shows as a card with its rolls', { tag: '@feature:table.card' }, async ({ app }) => {
   await openTable(app)
   await makeScene(app, 'Armory')
-  await app.locator('.tt-panel .seg').getByRole('button', { name: /Chat/ }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: /Chat/ }).click()
   await app.getByLabel('Chat message').fill('/card Longsword | Attack: [[1d20+5]] | Damage: [[1d8+3]] slashing')
   await app.getByLabel('Chat message').press('Enter')
   const card = app.getByRole('group', { name: 'Card: Longsword' })
@@ -1567,13 +1568,15 @@ test('a light can be a cone, and a wall can be terrain', { tag: '@feature:table.
   await makeToken(app, 'Beacon')
   await app.getByLabel('Bright light').fill('30')
   await app.getByLabel('Bright light').press('Enter')
+  // a cone is asked for; its angle and direction appear then
+  await app.getByLabel('Shines in a cone').click()
   await app.getByLabel('Light angle').fill('90')
   await app.getByLabel('Light angle').press('Enter')
   await app.getByLabel('Light faces').fill('180')
   await app.getByLabel('Light faces').press('Enter')
   await expect(app.getByLabel('Light angle')).toHaveValue('90')
   await expect(app.getByLabel('Light faces')).toHaveValue('180')
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Scene' }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Scene' }).click()
   await app.getByRole('button', { name: 'Draw walls' }).click()
   const kinds = app.getByRole('group', { name: 'Kind of wall' })
   await kinds.getByRole('button', { name: 'Terrain', exact: true }).click()
@@ -1583,7 +1586,7 @@ test('a light can be a cone, and a wall can be terrain', { tag: '@feature:table.
 test('the GM can make named layers for props and hide, lock or hand them to the players', { tag: '@feature:table.layers' }, async ({ app }) => {
   await openTable(app)
   await makeScene(app, 'Manor')
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Scene' }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Scene' }).click()
   await app.getByRole('button', { name: 'Add a layer' }).click()
   await app.getByRole('dialog').getByRole('textbox').fill('Secrets')
   await app.getByRole('dialog').locator('button[type=submit]').click()
@@ -1638,7 +1641,7 @@ test('a token can share its sight with the whole party', { tag: '@feature:table.
 test('the shortcut keys of the table can be changed', { tag: '@feature:table.keys' }, async ({ app }) => {
   await openTable(app)
   await makeScene(app, 'Keys')
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Table', exact: true }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Table', exact: true }).click()
   const fit = app.getByLabel('Fit the map to the screen')
   await expect(fit).toHaveValue('F')
   await fit.press('g')
@@ -1648,7 +1651,7 @@ test('the shortcut keys of the table can be changed', { tag: '@feature:table.key
   await expect(fit).toHaveValue('G')
   await app.reload()
   await openTable(app)
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Table', exact: true }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Table', exact: true }).click()
   await expect(app.getByLabel('Fit the map to the screen')).toHaveValue('G')
   await app.getByRole('button', { name: /^Reset to F/ }).click()
   await expect(app.getByLabel('Fit the map to the screen')).toHaveValue('F')
@@ -1657,7 +1660,7 @@ test('the shortcut keys of the table can be changed', { tag: '@feature:table.key
 test('a chat message can be kept as a macro', { tag: '@feature:table.chat-macro' }, async ({ app }) => {
   await openTable(app)
   await makeScene(app, 'Camp')
-  await app.locator('.tt-panel .seg').getByRole('button', { name: /Chat/ }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: /Chat/ }).click()
   await app.getByLabel('Chat message').fill('/roll 1d20+5 stealth')
   await app.getByLabel('Chat message').press('Enter')
   await expect(app.getByRole('list', { name: 'Chat' })).toContainText('stealth')
@@ -1671,7 +1674,7 @@ test('a chat message can be kept as a macro', { tag: '@feature:table.chat-macro'
 test('tracks named Playlist/Track make a playlist the GM plays all at once', { tag: '@feature:table.playlist' }, async ({ app }) => {
   await openTable(app)
   await makeScene(app, 'Inn')
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Tables and decks' }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Tables and decks' }).click()
   for (const [url, name] of [['https://example.com/fiddle.ogg', 'Tavern/Fiddle'], ['https://example.com/drum.ogg', 'Tavern/Drum']]) {
     await app.getByRole('button', { name: 'Add a stream' }).click()
     await app.getByRole('dialog').getByRole('textbox').fill(url)
@@ -1691,14 +1694,14 @@ test('tracks named Playlist/Track make a playlist the GM plays all at once', { t
 test('options for a slow machine, and the frame rate can be shown', { tag: '@feature:table.perf' }, async ({ app }) => {
   await openTable(app)
   await makeScene(app, 'Slow')
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Table', exact: true }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Table', exact: true }).click()
   await app.getByLabel('Show frames per second').check()
   await expect(app.getByRole('status', { name: 'Performance' })).toContainText('fps', { timeout: 6000 })
   await app.getByLabel('Lighter drawing: coarser fog, no weather, no moving lights').check()
   await app.getByLabel('Work out the fog when a token is put down').check()
   await app.reload()
   await openTable(app)
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Table', exact: true }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Table', exact: true }).click()
   await expect(app.getByLabel('Lighter drawing: coarser fog, no weather, no moving lights')).toBeChecked()
   await expect(app.getByLabel('Work out the fog when a token is put down')).toBeChecked()
   await expect(app.getByLabel('Show frames per second')).toBeChecked()
@@ -1709,11 +1712,11 @@ test('options for a slow machine, and the frame rate can be shown', { tag: '@fea
 test('a trigger can be stairs that take a token to another scene', { tag: '@feature:table.stairs' }, async ({ app }) => {
   await openTable(app)
   await makeScene(app, 'Ground floor')
-  await app.locator('.tt-bar').getByRole('button', { name: 'Scene', exact: true }).click()
+  await app.locator('.tt-bar').getByRole('button', { name: 'New scene' }).click()
   await app.getByPlaceholder('The crypt under the chapel').fill('Loft')
   await app.getByRole('button', { name: 'Create' }).click()
   await expect(app.getByRole('alert')).toHaveCount(0)
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Scene', exact: true }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Scene', exact: true }).click()
   await app.getByRole('button', { name: 'New trigger' }).click()
   await app.getByLabel('Trigger name').fill('Ladder')
   await expect(async () => {
@@ -1739,7 +1742,9 @@ test('a trigger can be stairs that take a token to another scene', { tag: '@feat
 test('the time of day sets how dark a scene is', { tag: '@feature:table.daylight' }, async ({ app }) => {
   await openTable(app)
   await makeScene(app, 'Meadow')
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Scene', exact: true }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Scene', exact: true }).click()
+  // the time of day is part of the scene's lighting
+  await app.getByLabel(/^Lighting:/).click()
   const group = app.getByRole('group', { name: 'Time of day' })
   await expect(group).toContainText('12:00, Midday')
   await group.getByLabel('This scene follows the time of day').click()
@@ -1756,7 +1761,7 @@ test('the time of day sets how dark a scene is', { tag: '@feature:table.daylight
 test('a looping video can be the map', { tag: '@feature:table.videomap' }, async ({ app }) => {
   await openTable(app)
   await makeScene(app, 'Bonfire')
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Scene', exact: true }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Scene', exact: true }).click()
   const chooser = app.waitForEvent('filechooser')
   await app.getByRole('button', { name: 'Set map image or loop' }).click()
   await (await chooser).setFiles({ name: 'fire.webm', mimeType: 'video/webm', buffer: Buffer.from(Array.from({ length: 2000 }, (_, i) => i % 251)) })
@@ -1767,7 +1772,7 @@ test('a looping video can be the map', { tag: '@feature:table.videomap' }, async
 test('the map editor: a cave brush, windows and secret doors, and a dungeon made by itself', { tag: '@feature:table.map-editor-more' }, async ({ app }) => {
   await openTable(app)
   await makeScene(app, 'Hollow')
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Scene', exact: true }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Scene', exact: true }).click()
   await app.getByRole('button', { name: 'Open the map editor' }).click()
   const editor = app.getByRole('dialog', { name: 'Map editor' })
   const map = editor.getByLabel('Map', { exact: true })
@@ -1800,15 +1805,15 @@ test('the map editor: a cave brush, windows and secret doors, and a dungeon made
 test('a roll tumbles across the map as dice, unless that is switched off', { tag: '@feature:table.dice3d' }, async ({ app }) => {
   await openTable(app)
   await makeScene(app, 'Tavern')
-  await app.locator('.tt-panel .seg').getByRole('button', { name: /Chat/ }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: /Chat/ }).click()
   await app.getByLabel('Chat message').fill('/roll 2d6+3 damage')
   await app.getByLabel('Chat message').press('Enter')
   await expect(app.locator('.tt-dice .die')).toHaveCount(2)
   await expect(app.locator('.tt-dice .die').first()).toContainText('d6')
   await expect(app.locator('.tt-dice .die')).toHaveCount(0, { timeout: 8000 })
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Table', exact: true }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Table', exact: true }).click()
   await app.getByLabel('No tumbling dice when someone rolls').check()
-  await app.locator('.tt-panel .seg').getByRole('button', { name: /Chat/ }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: /Chat/ }).click()
   await app.getByLabel('Chat message').fill('/roll 1d20')
   await app.getByLabel('Chat message').press('Enter')
   await expect(app.getByRole('list', { name: 'Chat' }).locator('.tt-rollout')).toHaveCount(2)
@@ -1842,12 +1847,12 @@ test('a token can be put on a named layer', { tag: '@feature:table.layers' }, as
   await openTable(app)
   await makeScene(app, 'Crypt')
   await makeToken(app, 'Wisp')
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Scene', exact: true }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Scene', exact: true }).click()
   await app.getByRole('button', { name: 'Add a layer' }).click()
   await app.getByRole('dialog').getByRole('textbox').fill('Spirits')
   await app.getByRole('dialog').locator('button[type=submit]').click()
   await expect(app.getByRole('list', { name: 'Layers of this scene' })).toContainText('Spirits')
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Token', exact: true }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Token', exact: true }).click()
   await expect(async () => {
     await app.getByTitle('The named layer this token is on').click()
     await app.getByRole('option', { name: 'Spirits' }).click({ timeout: 1500 })
@@ -1875,7 +1880,7 @@ test('a roll button on a sheet can be kept as a macro with a right click', { tag
   await app.locator('.tt-sheet button.tt-roll').first().click({ button: 'right' })
   await app.getByRole('dialog').getByRole('textbox').fill('Quick check')
   await app.getByRole('dialog').locator('button[type=submit]').click()
-  await app.locator('.tt-panel .seg').getByRole('button', { name: /Chat/ }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: /Chat/ }).click()
   const macro = app.getByRole('group', { name: 'Macros' }).getByRole('button', { name: 'Quick check', exact: true })
   await expect(macro).toBeVisible()
   await expect(macro).toHaveAttribute('title', /^\/roll 1d20/)
@@ -1884,7 +1889,7 @@ test('a roll button on a sheet can be kept as a macro with a right click', { tag
 test('the map editor: diagonal walls and pictures of your own as props', { tag: '@feature:table.map-editor-more' }, async ({ app }) => {
   await openTable(app)
   await makeScene(app, 'Tower')
-  await app.locator('.tt-panel .seg').getByRole('button', { name: 'Scene', exact: true }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: 'Scene', exact: true }).click()
   await app.getByRole('button', { name: 'Open the map editor' }).click()
   const editor = app.getByRole('dialog', { name: 'Map editor' })
   const map = editor.getByLabel('Map', { exact: true })
@@ -1914,7 +1919,7 @@ test('the map editor: diagonal walls and pictures of your own as props', { tag: 
 test('a chat line can be added to the session notes page', { tag: '@feature:table.chat-notes' }, async ({ app, api, world }) => {
   await openTable(app)
   await makeScene(app, 'Council')
-  await app.locator('.tt-panel .seg').getByRole('button', { name: /Chat/ }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: /Chat/ }).click()
   await app.getByLabel('Chat message').fill('The duke agrees to open the gates.')
   await app.getByLabel('Chat message').press('Enter')
   await app.getByRole('button', { name: 'Add this message to the session notes' }).first().click()

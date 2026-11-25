@@ -219,11 +219,11 @@ test('a system pack changes what the table shows, brings its content, and can be
   // the table offers the pack's conditions and damage types, and its macro is there
   await app.getByRole('button', { name: 'Tabletop' }).click()
   await expect(app.locator('.tt-canvas canvas')).toBeVisible()
-  await app.locator('.tt-bar').getByRole('button', { name: 'Scene', exact: true }).click()
+  await app.locator('.tt-bar').getByRole('button', { name: 'New scene' }).click()
   await app.getByPlaceholder('The crypt under the chapel').fill('Ruin')
   await app.getByRole('button', { name: 'Create' }).click()
   await expect(app.locator('.tt-bar')).toContainText('Ruin')
-  await app.locator('.tt-bar').getByRole('button', { name: 'Token' }).click()
+  await app.locator('.tt-rail').getByRole('button', { name: 'New token' }).click()
   await app.getByPlaceholder('Goblin 1').fill('Wretch')
   await app.getByRole('button', { name: 'Add' }).click()
   await app.locator('.tt-canvas canvas').click({ position: { x: 5, y: 5 } })
@@ -232,7 +232,7 @@ test('a system pack changes what the table shows, brings its content, and can be
   await expect(chips).toContainText('Bleeding')
   await expect(chips).toContainText('Cursed')
   await expect(chips).not.toContainText('Prone')
-  await app.locator('.tt-panel .seg').getByRole('button', { name: /Chat/ }).click()
+  await app.locator('.tt-tabs').getByRole('button', { name: /Chat/ }).click()
   await expect(app.getByRole('group', { name: 'Macros' }).getByRole('button', { name: 'Brace', exact: true })).toBeVisible()
 
   // it can be exported, and removed

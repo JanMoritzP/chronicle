@@ -181,6 +181,8 @@ test('a person page gets a character sheet that works out the numbers', { tag: '
   await app.reload()
   await openPage(app, 'Aria')
   await expect(app.getByText('Proficiency +3')).toBeVisible()
+  // a sheet with a class opens to play from; the form is one click away
+  await app.getByRole('button', { name: 'Edit sheet' }).click()
   await expect(app.getByLabel('Intelligence', { exact: true })).toHaveValue('18')
   await expect(app.getByRole('button', { name: /^Arcana \+10, expertise/ })).toBeVisible()
   await expect(app.getByLabel('Item 1')).toHaveValue('Rope')
@@ -311,6 +313,7 @@ test('a character from Foundry, D&D Beyond or Roll20 can be imported, and a char
   const chooser = app.waitForEvent('filechooser')
   await app.getByRole('button', { name: 'Import a character' }).click()
   await (await chooser).setFiles({ name: 'seraphine.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(actor)) })
+  await app.getByRole('button', { name: 'Edit sheet' }).click()
   await expect(app.getByLabel('Class 1', { exact: true })).toHaveValue('Rogue')
   await expect(app.getByLabel('Level of Rogue')).toHaveValue('5')
   await expect(app.getByLabel('Maximum hit points', { exact: true })).toHaveValue('30')
