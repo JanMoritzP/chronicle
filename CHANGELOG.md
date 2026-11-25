@@ -2,6 +2,11 @@
 
 Newest first. The version in `electron/package.json` is the app version; the release notes on GitHub are what the in-app update dialog shows, so keep each entry short and in plain words. Sections after 0.2.0 are written by `scripts/release.mjs` from the commit subjects, so the commit messages carry the release notes.
 
+## 0.83.0 (2026-11-25)
+
+### Features
+- pictures and side boxes that the text flows around, a block handle to drag blocks, a formatting bubble, and wider, looser special pages
+
 ## 0.82.1 (2026-11-25)
 
 ### Bug Fixes
