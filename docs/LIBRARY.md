@@ -65,6 +65,8 @@ A homebrew library travels between Chronicle servers as one JSON file, `<name>.c
 
 Values out of range are clamped and unknown skills dropped when the rules are read.
 
+Without `rules`, the builder still offers a class, species or background, with rules worked out from its `fields` (`hit_die`, `saves`, `primary`) and defaults for the rest.
+
 **Class.** `die` (6, 8, 10 or 12), `primary` (up to two abilities: `str`, `dex`, `con`, `int`, `wis`, `cha`), `saves` (two abilities), `skills` (`count` and `from`: a list of skill names in lower case, or `"any"`), `spell` (the spellcasting ability, or empty), `armor` (`base`, `dex`: `full`, `max2` or `none`, `plus`: another ability, `shield`: true for +2, `note`), `features` and `attacks` (`ability`: `str`, `dex` or `finesse`, `damage` like `1d8`), `kit` (`name`, `qty`, `weight`, `equipped`), `spells` (text for the sheet).
 
 **Species.** `size` (`Tiny`, `Small`, `Medium`, `Large`), `speed`, `darkvision` (feet), `languages`, `asi` (2014 rules: the scores it raises, `{ "wis": 2 }`), `freeAsi` (2014: how many more scores the player raises by 1), `hpPerLevel`, `skills`, `traits`.

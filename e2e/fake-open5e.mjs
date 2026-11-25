@@ -55,6 +55,9 @@ const data = {
   species: [
     { key: 'elf', name: 'Elf', document: doc, desc: 'Graceful and long lived.', is_subspecies: false, traits: [{ name: 'Darkvision', desc: '**_Darkvision._** You can see in dim light within 60 feet.', order: 1 }, { name: 'Fey Ancestry', desc: 'You have advantage against being Charmed.', order: 2 }] },
     { key: 'high-elf', name: 'High Elf', document: doc, desc: 'A scholarly elf.', is_subspecies: true, subspecies_of: 'elf', traits: [] },
+    // a species the character builder does not have itself, with a subspecies, so it offers them from the library
+    { key: 'catfolk', name: 'Catfolk', document: doc, desc: 'Lithe hunters.', is_subspecies: false, traits: [{ name: 'Ability Score Increase', desc: 'Your Dexterity score increases by 2.' }, { name: 'Speed', desc: 'Your base walking speed is 30 feet.' }, { name: 'Size', desc: 'Your size is Medium.' }, { name: "Hunter's Senses", desc: 'You have proficiency in the Perception and Stealth skills.' }] },
+    { key: 'malkin', name: 'Malkin', document: doc, desc: 'A curious catfolk.', is_subspecies: true, subspecies_of: 'catfolk', traits: [{ name: 'Ability Score Increase', desc: 'Your Intelligence score increases by 1.' }, { name: 'Curiously Clever', desc: 'You have proficiency in the Investigation skill.' }] },
   ],
   backgrounds: [{ key: 'sage', name: 'Sage', document: doc, desc: 'You spent years learning the lore of the multiverse.', benefits: [{ name: 'Skill Proficiencies', desc: 'Arcana, History' }, { name: 'Feature: Researcher', desc: 'You know where to find answers.' }] }],
   feats: [{ key: 'alert', name: 'Alert', document: doc, type: 'GENERAL', prerequisite: 'Level 4 or higher', desc: 'You are always on the lookout for danger.', benefits: [{ desc: 'You add your proficiency bonus to initiative.' }, { desc: 'You cannot be surprised while conscious.' }] }],

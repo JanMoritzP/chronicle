@@ -233,11 +233,47 @@ export async function importCollection(file: LibraryFile, user: string, replace:
   return { collection: getCollection(collection.id)!, entries: n }
 }
 
-/** The classes, species and backgrounds of every homebrew library that carry rules for the character builder. */
-export function builderEntries(): { key: string; category: string; name: string; library: string; rules: Record<string, unknown> }[] {
-  const out: { key: string; category: string; name: string; library: string; rules: Record<string, unknown> }[] = []
-  for (const r of libDb().prepare("SELECT h.key, h.category, h.name, c.name AS library, h.data FROM homebrew h JOIN collections c ON c.id = h.collection_id WHERE h.category IN ('class','species','background') ORDER BY h.name COLLATE NOCASE").all() as { key: string; category: string; name: string; library: string; data: string }[]) {
-    try { const d = JSON.parse(r.data); if (d.rules && typeof d.rules === 'object') out.push({ key: r.key, category: r.category, name: r.name, library: r.library, rules: d.rules }) } catch { /* a damaged entry is left out */ }
+export interface BuilderEntry {
+  key: string; category: string; name: string
+  /** the homebrew library or the Open5e book it is from */
+  library: string
+  /** homebrew: the builder rules, when it has them, and its fields to work them out from when not */
+  rules?: Record<string, unknown> | null
+  fields?: Record<string, unknown> | null
+  /** Open5e: the parts of the entry the builder reads (game system, traits, benefits, the class's level 1) */
+  open5e?: Record<string, unknown>
+}
+
+/** What a class keeps for the builder: its tables of proficiencies and gear, and the features of level 1. */
+const BUILDER_FEATURES = new Set(['CORE_TRAITS_TABLE', 'PROFICIENCIES', 'STARTING_EQUIPMENT'])
+function trimClass(d: any) {
+  const features = (Array.isArray(d.features) ? d.features : []).filter((f: any) => BUILDER_FEATURES.has(f?.feature_type) || (f?.feature_type === 'CLASS_LEVEL_FEATURE' && (f.gained_at ?? []).some((g: any) => g?.level === 1)))
+    .map((f: any) => ({ name: f.name, desc: f.desc, feature_type: f.feature_type, gained_at: (f.gained_at ?? []).map((g: any) => ({ level: g?.level })) }))
+  return { system: d.system, hit_dice: d.hit_dice, saving_throws: d.saving_throws, primary_abilities: d.primary_abilities, caster_type: d.caster_type, features }
+}
+
+/**
+ * Every class, species and background the character builder can offer besides its own: all of the homebrew libraries (with or
+ * without rules), and Open5e's classes (not subclasses), species and backgrounds, cut down to what the builder reads.
+ */
+export function builderEntries(): BuilderEntry[] {
+  const db = libDb()
+  const out: BuilderEntry[] = []
+  for (const r of db.prepare("SELECT h.key, h.category, h.name, c.name AS library, h.data FROM homebrew h JOIN collections c ON c.id = h.collection_id WHERE h.category IN ('class','species','background') ORDER BY h.name COLLATE NOCASE").all() as { key: string; category: string; name: string; library: string; data: string }[]) {
+    try {
+      const d = JSON.parse(r.data)
+      out.push({ key: r.key, category: r.category, name: r.name, library: r.library, rules: d.rules && typeof d.rules === 'object' ? d.rules : null, fields: d.fields && typeof d.fields === 'object' ? d.fields : null })
+    } catch { /* a damaged entry is left out */ }
+  }
+  const books = new Map((db.prepare('SELECT key, name FROM sources').all() as { key: string; name: string }[]).map((s) => [s.key, s.name]))
+  for (const r of db.prepare("SELECT key, category, name, source, data FROM entries WHERE category IN ('class','species','background') ORDER BY name COLLATE NOCASE").all() as { key: string; category: string; name: string; source: string; data: string }[]) {
+    let d: any
+    try { d = JSON.parse(r.data) } catch { continue }
+    if (r.category === 'class' && d.subclass_of) continue
+    const open5e = r.category === 'class' ? trimClass(d)
+      : r.category === 'species' ? { system: d.system, traits: d.traits, is_subspecies: d.is_subspecies, subspecies_of: d.subspecies_of }
+        : { system: d.system, benefits: (Array.isArray(d.benefits) ? d.benefits : []).filter((b: any) => ['ability_score', 'skill_proficiency', 'tool_proficiency', 'language', 'feat', 'equipment'].includes(b?.type)) }
+    out.push({ key: r.key, category: r.category, name: r.name, library: books.get(r.source) ?? r.source, open5e })
   }
   return out
 }

@@ -106,4 +106,5 @@ export interface HomebrewEntry {
   id?: string; category: LibraryCategory; name: string; sub?: string; type?: string
   fields?: Record<string, any>; sheet?: Record<string, any>; rules?: Record<string, any>; content?: any; text?: string; portrait?: string; tags?: string[]
 }
-export interface BuilderEntry { key: string; category: 'class' | 'species' | 'background'; name: string; library: string; rules: Record<string, any> }
+/** A class, species or background for the character builder: homebrew (with rules, or fields to work them out from) or Open5e. */
+export interface BuilderEntry { key: string; category: 'class' | 'species' | 'background'; name: string; library: string; rules?: Record<string, any> | null; fields?: Record<string, any> | null; open5e?: Record<string, any> }

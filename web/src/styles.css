@@ -1290,3 +1290,4 @@ button.cs-roll:disabled { cursor: default; }
 @media (max-width: 600px) { .cs.has-banner .cs-head { padding-top: 80px; } .cs-portrait { width: 64px; height: 64px; } }
 /* messages and questions stay above every other dialog, homebrew ones included */
 .dialog-host { z-index: 350; }
+.cb-filter { margin-bottom: 10px; width: 100%; max-width: 360px; }

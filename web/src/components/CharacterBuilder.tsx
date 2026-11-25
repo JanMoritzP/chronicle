@@ -23,7 +23,7 @@ export function CharacterBuilder({ ruleset, name, onCreate, onClose }: { ruleset
   const an = rules.abilities
   const [step, setStepState] = useState(0)
   const [reached, setReached] = useState(0)
-  const setStep = (i: number) => { setStepState(i); setReached((r) => Math.max(r, i)) }
+  const setStep = (i: number) => { setStepState(i); setReached((r) => Math.max(r, i)); setFilter('') }
   const [method, setMethod] = useState<Method>('standard')
   const [rolled, setRolled] = useState<number[]>([])
   const [c, setC] = useState<Choices>({
@@ -38,7 +38,21 @@ export function CharacterBuilder({ ruleset, name, onCreate, onClose }: { ruleset
   const [making, setMaking] = useState<RulesCategory | null>(null)
   useEffect(() => { let live = true; loadHomebrew(pages).then((h) => live && setHomebrew(h)).catch(() => {}); return () => { live = false } }, [])
   const cat = useMemo(() => homebrewCatalog(ruleset, homebrew), [ruleset, homebrew])
-  const fromOf = (id: string) => homebrew.find((h) => h.id === id)?.from
+  /** Where a choice that is not the builder's own comes from: "Homebrew · this world", "Open5e · Tome of Heroes". */
+  const origin = (id: string) => {
+    const h = homebrew.find((x) => x.id === id)
+    if (!h) return null
+    return <span className="hb-from" title={h.guessed ? 'It has no rules for the builder yet: these are worked out from its page. Set them on its page.' : undefined}>{h.kind === 'open5e' ? 'Open5e' : 'Homebrew'} · {h.from}{h.guessed ? ' · rules guessed' : ''}</span>
+  }
+  // the lists grow long with Open5e and homebrew; a name filter keeps them usable
+  const [filter, setFilter] = useState('')
+  const shown = <T extends { id: string; name: string }>(list: T[], chosen: string) => {
+    const q = filter.trim().toLowerCase()
+    return q ? list.filter((x) => x.id === chosen || x.name.toLowerCase().includes(q) || (homebrew.find((h) => h.id === x.id)?.from ?? '').toLowerCase().includes(q)) : list
+  }
+  const filterBox = (count: number, label: string) => count > 12 && (
+    <input className="input cb-filter" type="search" aria-label={`Filter ${label}`} placeholder={`Filter ${count} ${label} by name or book`} value={filter} onChange={(e) => setFilter(e.target.value)} />
+  )
   const cls = cat.classes.find((x) => x.id === c.classId)
   const species = cat.species.find((s) => s.id === c.speciesId)
   const bg = cat.backgrounds.find((b) => b.id === c.backgroundId)
@@ -59,24 +73,29 @@ export function CharacterBuilder({ ruleset, name, onCreate, onClose }: { ruleset
 
   // ---- the steps ----
   const classStep = (
+    <>
+    {filterBox(cat.classes.length, 'classes')}
     <div className="cb-cards" role="radiogroup" aria-label="Class">
-      {cat.classes.map((k) => (
+      {shown(cat.classes, c.classId).map((k) => (
         <button key={k.id} role="radio" aria-checked={c.classId === k.id} className={`cb-card${c.classId === k.id ? ' on' : ''}`} onClick={() => pickClass(k.id)}>
           <b>{k.name}</b>
-          {fromOf(k.id) && <span className="hb-from">Homebrew · {fromOf(k.id)}</span>}
+          {origin(k.id)}
           <span className="muted">d{k.die} hit die · {k.primary.map((a) => an[a].name).join(' and ')}{k.spell ? ' · casts spells' : ''}</span>
           <small>{k.features[0] ? `${k.features[0].name}: ${k.features[0].text}` : 'No features yet'}</small>
         </button>
       ))}
       {canMake && <button className="cb-card hb-new" onClick={() => setMaking('class')}><Plus size={16} /><b>New class</b><small>Make a class of your own, right here.</small></button>}
     </div>
+    </>
   )
   const speciesStep = (
+    <>
+    {filterBox(cat.species.length, 'species')}
     <div className="cb-cards" role="radiogroup" aria-label="Species">
-      {cat.species.map((s) => (
+      {shown(cat.species, c.speciesId).map((s) => (
         <button key={s.id} role="radio" aria-checked={c.speciesId === s.id} className={`cb-card${c.speciesId === s.id ? ' on' : ''}`} onClick={() => set({ speciesId: s.id, bonus: { ...c.bonus, free: [] } })}>
           <b>{s.name}</b>
-          {fromOf(s.id) && <span className="hb-from">Homebrew · {fromOf(s.id)}</span>}
+          {origin(s.id)}
           <span className="muted">{s.size}, speed {s.speed} ft{s.darkvision ? `, darkvision ${s.darkvision} ft` : ''}</span>
           {s.asi && <small>{Object.entries(s.asi).map(([a, n]) => `${an[a as Ability].short} +${n}`).join(', ')}{s.freeAsi ? `, and +1 to two others` : ''}</small>}
           <small>{s.traits.map((t) => t.name).join(', ') || (s.asi ? 'Versatile: +1 to every score' : 'No traits')}</small>
@@ -84,13 +103,16 @@ export function CharacterBuilder({ ruleset, name, onCreate, onClose }: { ruleset
       ))}
       {canMake && <button className="cb-card hb-new" onClick={() => setMaking('species')}><Plus size={16} /><b>New species</b><small>Make a species of your own, right here.</small></button>}
     </div>
+    </>
   )
   const backgroundStep = (
+    <>
+    {filterBox(cat.backgrounds.length, 'backgrounds')}
     <div className="cb-cards" role="radiogroup" aria-label="Background">
-      {cat.backgrounds.map((b) => (
+      {shown(cat.backgrounds, c.backgroundId).map((b) => (
         <button key={b.id} role="radio" aria-checked={c.backgroundId === b.id} className={`cb-card${c.backgroundId === b.id ? ' on' : ''}`} onClick={() => set({ backgroundId: b.id, skills: c.skills.filter((s) => !b.skills.includes(s)), bonus: { ...c.bonus, plus2: undefined, plus1: undefined } })}>
           <b>{b.name}</b>
-          {fromOf(b.id) && <span className="hb-from">Homebrew · {fromOf(b.id)}</span>}
+          {origin(b.id)}
           <span className="muted">{b.skills.map(titleCase).join(' and ')}</span>
           {b.abilities && <small>Raises {b.abilities.map((a) => an[a].short).join(', ')}; feat: {b.feat}</small>}
           <small>{b.tools}</small>
@@ -98,6 +120,7 @@ export function CharacterBuilder({ ruleset, name, onCreate, onClose }: { ruleset
       ))}
       {canMake && <button className="cb-card hb-new" onClick={() => setMaking('background')}><Plus size={16} /><b>New background</b><small>Make a background of your own, right here.</small></button>}
     </div>
+    </>
   )
 
   const placeArray = (a: Ability, v: number) => {

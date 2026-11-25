@@ -1,8 +1,9 @@
 import { api } from '../api'
-import type { FullPage, HomebrewEntry, LibraryCategory, LibraryEntry } from '../types'
-import { catalogFor, type BackgroundDef, type Catalog, type ClassDef, type Ruleset, type SpeciesDef } from './builder'
+import type { BuilderEntry, FullPage, HomebrewEntry, LibraryCategory, LibraryEntry } from '../types'
+import { BACKGROUNDS_2014, BACKGROUNDS_2024, catalogFor, CLASSES, SPECIES_2014, SPECIES_2024, type BackgroundDef, type Catalog, type ClassDef, type Ruleset, type SpeciesDef } from './builder'
 import { categoryLabel } from './library'
 import { PAGE_TYPE, textDoc } from './open5e'
+import { abilitiesIn, backgroundRulesFromOpen5e, classRulesFromOpen5e, sameAsBuiltin, speciesRulesFromOpen5e } from './open5eRules'
 import { ABILITIES, SKILLS, type Ability } from './sheet'
 
 // Homebrew: classes, species, backgrounds and any other page people make themselves, kept as pages of the world and, if they
@@ -105,8 +106,16 @@ export function backgroundDef(id: string, name: string, raw: any, ruleset: Rules
   return { id, name, skills: r.skills, tools: r.tools, ...(ruleset === '5e-2024' && r.abilities?.length === 3 ? { abilities: r.abilities } : {}), ...(r.feat ? { feat: r.feat } : {}) }
 }
 
-/** One homebrew class, species or background the builder can offer, from a page of the world or an entry of a library. */
-export interface HomebrewOption { id: string; category: RulesCategory; name: string; rules: any; from: string; pageId?: string; libKey?: string }
+/** One class, species or background the builder can offer besides its own: from a page of the world, a homebrew library or Open5e. */
+export interface HomebrewOption {
+  id: string; category: RulesCategory; name: string; rules: any
+  /** this world, the library's name or the Open5e book */
+  from: string
+  pageId?: string; libKey?: string
+  kind?: 'homebrew' | 'open5e'
+  /** homebrew without rules of its own: they were worked out from its fields, or are the defaults */
+  guessed?: boolean
+}
 
 /** The builder's choices with the homebrew ones added. Ids are "page:<id>" or "lib:<key>". */
 export function homebrewCatalog(ruleset: Ruleset, options: HomebrewOption[]): Catalog {
@@ -117,9 +126,46 @@ export function homebrewCatalog(ruleset: Ruleset, options: HomebrewOption[]): Ca
   })
 }
 
+/** Rules worked out from a class page's fields (hit die, saving throws, main abilities), for homebrew that has none yet. */
+export function rulesFromFields(c: RulesCategory, fields: Record<string, any> | null | undefined): Rules {
+  const base = emptyRules(c)
+  if (c !== 'class' || !fields) return base
+  const names = (v: unknown) => (Array.isArray(v) ? v.map((r: any) => r?.name ?? '').join(' ') : String(v ?? ''))
+  const die = Number(/(\d+)/.exec(String(fields.hit_die ?? ''))?.[1])
+  return { ...(base as ClassRules), ...([6, 8, 10, 12].includes(die) ? { die } : {}), saves: abilitiesIn(names(fields.saves)).slice(0, 2), primary: abilitiesIn(names(fields.primary)).slice(0, 2), skills: { count: 2, from: 'any' } }
+}
+
+const BUILTIN_NAMES: Record<RulesCategory, string[]> = {
+  class: CLASSES.map((x) => x.name),
+  species: [...SPECIES_2014, ...SPECIES_2024].map((x) => x.name),
+  background: [...BACKGROUNDS_2014, ...BACKGROUNDS_2024].map((x) => x.name),
+}
+
+/** Open5e's classes, species and backgrounds the builder does not have itself, as options. A subspecies brings its parent's traits. */
+export function open5eOptions(entries: BuilderEntry[]): HomebrewOption[] {
+  const o5e = entries.filter((e) => e.open5e)
+  const byKey = new Map(o5e.map((e) => [e.key, e]))
+  const parents = new Set(o5e.filter((e) => e.category === 'species' && e.open5e?.subspecies_of).map((e) => `species:${e.open5e!.subspecies_of}`))
+  const out: HomebrewOption[] = []
+  for (const e of o5e) {
+    if (sameAsBuiltin(e.name, BUILTIN_NAMES[e.category])) continue
+    // a species with subspecies is chosen through one of them, as the builder's own (hill dwarf, high elf) are
+    if (e.category === 'species' && parents.has(e.key)) continue
+    const d = e.open5e!
+    const parent = e.category === 'species' && d.subspecies_of ? byKey.get(`species:${d.subspecies_of}`) : undefined
+    const rules = e.category === 'class' ? classRulesFromOpen5e(d)
+      : e.category === 'species' ? speciesRulesFromOpen5e(d, parent?.open5e)
+        : backgroundRulesFromOpen5e(d)
+    // a subspecies says what it belongs to: "Malkin (Catfolk)"
+    out.push({ id: `lib:${e.key}`, category: e.category, name: parent ? `${e.name} (${parent.name})` : e.name, rules, from: e.library, libKey: e.key, kind: 'open5e' })
+  }
+  return out.sort((x, y) => x.name.localeCompare(y.name))
+}
+
 /**
- * Every homebrew class, species and background: the world's pages of those types that carry rules, then the library entries
- * with rules. A page made from a library entry stands in for the entry, since it may have been changed in this world.
+ * Every class, species and background besides the builder's own: the world's pages of those types (with rules, or with rules
+ * worked out from their fields), the homebrew libraries' entries, then Open5e. A page made from a library entry stands in for
+ * the entry, since it may have been changed in this world. A page imported from Open5e without rules of its own is left to Open5e.
  */
 export async function loadHomebrew(pages: { id: string; title: string; type?: string | null; library?: string | null }[]): Promise<HomebrewOption[]> {
   const candidates = pages.filter((p) => p.type && hasRules(p.type))
@@ -127,14 +173,20 @@ export async function loadHomebrew(pages: { id: string; title: string; type?: st
   const out: HomebrewOption[] = []
   const covered = new Set<string>()
   full.forEach((pg, i) => {
-    const meta = candidates[i]
-    if (!pg?.props?.rules) return
-    out.push({ id: `page:${pg.id}`, category: meta.type as RulesCategory, name: pg.title || 'Untitled', rules: pg.props.rules, from: 'this world', pageId: pg.id })
-    if (pg.props.library) covered.add(pg.props.library)
+    const category = candidates[i].type as RulesCategory
+    if (!pg) return
+    const lib = typeof pg.props?.library === 'string' ? pg.props.library : ''
+    if (!pg.props?.rules && lib && !isHomebrewKey(lib)) return
+    const rules = pg.props?.rules ?? rulesFromFields(category, pg.props?.data)
+    out.push({ id: `page:${pg.id}`, category, name: pg.title || 'Untitled', rules, from: 'this world', pageId: pg.id, kind: 'homebrew', ...(pg.props?.rules ? {} : { guessed: true }) })
+    if (lib) covered.add(lib)
   })
-  for (const e of await api.libraryBuilder().catch(() => [])) {
-    if (!covered.has(e.key)) out.push({ id: `lib:${e.key}`, category: e.category, name: e.name, rules: e.rules, from: e.library, libKey: e.key })
+  const entries = await api.libraryBuilder().catch(() => [] as BuilderEntry[])
+  for (const e of entries) {
+    if (e.open5e || covered.has(e.key)) continue
+    out.push({ id: `lib:${e.key}`, category: e.category, name: e.name, rules: e.rules ?? rulesFromFields(e.category, e.fields), from: e.library, libKey: e.key, kind: 'homebrew', ...(e.rules ? {} : { guessed: true }) })
   }
+  out.push(...open5eOptions(entries).filter((o) => !covered.has(o.libKey!)))
   return out
 }
 

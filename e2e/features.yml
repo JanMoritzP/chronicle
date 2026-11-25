@@ -426,6 +426,9 @@ areas:
       - id: sheet.builder
         name: "Build a character step by step: class, species, background, scores, skills, and a sheet with the numbers worked out"
         files: [web/src/components/CharacterBuilder.tsx, web/src/lib/builder.ts]
+      - id: sheet.builder-library
+        name: "The builder offers Open5e classes, species and backgrounds it does not have, and every homebrew one, with or without rules"
+        files: [web/src/lib/open5eRules.ts, web/src/lib/homebrew.ts, web/src/components/CharacterBuilder.tsx]
       - id: sheet.players
         name: "A page names who plays it; a reader who plays it may change its sheet"
         files: [web/src/components/PlayedBy.tsx, web/src/components/PageView.tsx]

@@ -53,6 +53,40 @@ test('a new class is made in the character builder and chosen there', { tag: '@f
   await expect(app.locator('.lib-collection')).toContainText('Storm knight')
 })
 
+test('the builder offers Open5e species it does not have and homebrew without rules', { tag: '@feature:sheet.builder-library' }, async ({ app, api, makePage }) => {
+  // the library is shared by every test; download it from the stand-in when no other test has yet
+  const status = await api.json<{ open5e: number }>('get', '/api/library/status')
+  if (!status.open5e) await api.json('post', '/api/library/refresh')
+  await expect.poll(async () => (await api.json<{ open5e: number; running: boolean }>('get', '/api/library/status')).open5e, { timeout: 30_000 }).toBeGreaterThan(5)
+  await makePage('Tide warden', { props: { type: 'class', data: { hit_die: 'd12', saves: [{ name: 'Wisdom' }, { name: 'Constitution' }] } } })
+  await makePage('Pell', { props: { type: 'person' } })
+  await app.reload()
+  await openPage(app, 'Pell')
+  await app.getByRole('button', { name: 'Build a character' }).click()
+  const d = app.getByRole('dialog', { name: 'Build a character' })
+  // a class page without rules is offered with rules worked out from its fields
+  const warden = d.getByRole('radio', { name: /Tide warden/ })
+  await expect(warden).toContainText('rules guessed')
+  await expect(warden).toContainText('d12 hit die')
+  await warden.click()
+  await d.getByRole('button', { name: 'Next' }).click()
+  // Open5e: the subspecies with its parent's traits; the parent and the builder's own elves are not repeated
+  const malkin = d.getByRole('radio', { name: /Malkin \(Catfolk\)/ })
+  await expect(malkin).toContainText('Open5e')
+  await expect(malkin).toContainText('DEX +2, INT +1')
+  await expect(d.getByRole('radio', { name: /^Catfolk/ })).toHaveCount(0)
+  await expect(d.getByRole('radio', { name: /^High Elf/ })).toHaveCount(0)
+  await malkin.click()
+  await d.getByRole('button', { name: 'Next' }).click()
+  await d.getByRole('radio', { name: /^Sage/ }).first().click()
+  await d.getByRole('button', { name: 'Next' }).click()
+  await d.getByRole('button', { name: 'Next' }).click()
+  for (const box of (await d.locator('.cb-skill input:not(:disabled):not(:checked)').all()).slice(0, 2)) await box.check()
+  await d.getByRole('button', { name: 'Next' }).click()
+  await expect(d.getByLabel('The finished character')).toContainText('malkin (catfolk) tide warden')
+  await expect(d.getByLabel('The finished character')).toContainText("Hunter's Senses")
+})
+
 test('a page goes into a library, comes out as a file, and goes away again', { tag: '@feature:library.homebrew-push' }, async ({ app, api, makePage }) => {
   const lib = await api.json<{ id: string; name: string }>('post', '/api/library/collections', { name: unique('Push brew') })
   await makePage('The drowned god', { props: { type: 'rule' } })
