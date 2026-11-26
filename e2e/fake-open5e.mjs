@@ -4,7 +4,8 @@ import http from 'node:http'
 
 const doc = 'srd-2014'
 const data = {
-  documents: [{ key: doc, name: 'SRD 2014', display_name: 'System Reference Document 5.1', publication_date: '2014-01-01', licenses: [{ name: 'Open Gaming License' }], gamesystem: { key: '5e-2014' }, permalink: 'https://example.test/srd' }],
+  documents: [{ key: doc, name: 'SRD 2014', display_name: 'System Reference Document 5.1', publication_date: '2014-01-01', licenses: [{ name: 'Open Gaming License' }], gamesystem: { key: '5e-2014' }, permalink: 'https://example.test/srd' },
+    { key: 'srd-2024', name: 'SRD 2024', display_name: 'System Reference Document 5.2', publication_date: '2025-01-01', licenses: [{ name: 'Creative Commons Attribution 4.0' }], gamesystem: { key: '5e-2024' }, permalink: 'https://example.test/srd-2024' }],
   spells: [
     {
       key: 'srd_fireball', name: 'Fireball', document: doc, level: 3, school: { name: 'Evocation', key: 'evocation' }, casting_time: 'action', range_text: '150 feet', duration: 'instantaneous',
@@ -50,6 +51,27 @@ const data = {
         { name: 'Arcane Tradition', feature_type: 'CLASS_LEVEL_FEATURE', desc: 'Choose a school of magic.', gained_at: [{ level: 2 }] },
       ],
     },
+    // the fighter of both editions: the library keeps both, and a 2014 sheet levels with the 2014 one
+    { key: 'srd_fighter', name: 'Fighter', document: doc, desc: 'A master of martial combat.', hit_points: { hit_dice_name: 'D10' }, features: [
+      { name: 'Second Wind', feature_type: 'CLASS_LEVEL_FEATURE', desc: 'Regain hit points as a bonus action.', gained_at: [{ level: 1, detail: null }] },
+      { name: 'Action Surge', feature_type: 'CLASS_LEVEL_FEATURE', desc: 'Take one additional action.', gained_at: [{ level: 17, detail: 'two uses' }, { level: 2, detail: 'one use' }] },
+      { name: 'Martial Archetype', feature_type: 'CLASS_LEVEL_FEATURE', desc: 'Choose an archetype.', gained_at: [{ level: 3, detail: null }] },
+      { name: 'Ability Score Improvement', feature_type: 'CLASS_LEVEL_FEATURE', desc: 'Raise your scores.', gained_at: [4, 6, 8, 12, 14, 16, 19].map((level) => ({ level, detail: null })) },
+      { name: 'Extra Attack', feature_type: 'CLASS_LEVEL_FEATURE', desc: 'Attack twice when you take the Attack action.', gained_at: [{ level: 5, detail: '1' }, { level: 11, detail: '2' }, { level: 20, detail: '3' }] },
+      { name: 'Indomitable', feature_type: 'CLASS_LEVEL_FEATURE', desc: 'Reroll a failed saving throw.', gained_at: [{ level: 9, detail: 'one use' }, { level: 13, detail: 'two uses' }, { level: 17, detail: 'three uses' }] },
+    ] },
+    { key: 'srd_champion', name: 'Champion', document: doc, desc: 'Raw physical power.', subclass_of: { name: 'Fighter', key: 'srd_fighter' }, features: [
+      { name: 'Improved Critical', feature_type: 'CLASS_LEVEL_FEATURE', desc: 'You score a critical hit on a 19 or 20.', gained_at: [{ level: 3, detail: null }] },
+      { name: 'Remarkable Athlete', feature_type: 'CLASS_LEVEL_FEATURE', desc: 'Add half your proficiency bonus to some checks.', gained_at: [{ level: 7, detail: null }] },
+      { name: 'Superior Critical', feature_type: 'CLASS_LEVEL_FEATURE', desc: 'You score a critical hit on an 18 to 20.', gained_at: [{ level: 15, detail: null }] },
+      { name: 'Survivor', feature_type: 'CLASS_LEVEL_FEATURE', desc: 'Regain hit points at the start of each turn.', gained_at: [{ level: 18, detail: null }] },
+    ] },
+    { key: 'srd-2024_fighter', name: 'Fighter', document: 'srd-2024', desc: 'A master of all arms.', hit_points: { hit_dice_name: 'D10' }, features: [
+      { name: 'Weapon Mastery', feature_type: 'CLASS_LEVEL_FEATURE', desc: 'Use the mastery properties of weapons.', gained_at: [{ level: 1, detail: null }] },
+      { name: 'Tactical Mind', feature_type: 'CLASS_LEVEL_FEATURE', desc: 'Use Second Wind on a failed check.', gained_at: [{ level: 2, detail: null }] },
+    ] },
+    { key: 'srd-2024_champion', name: 'Champion', document: 'srd-2024', desc: 'Athletic excellence.', subclass_of: { name: 'Fighter', key: 'srd-2024_fighter' }, features: [{ name: 'Remarkable Athlete', feature_type: 'CLASS_LEVEL_FEATURE', desc: 'Advantage on initiative.', gained_at: [{ level: 3, detail: null }] }] },
+    { key: 'tdcs_juggernaut', name: 'Path of Steel', document: doc, desc: 'Not a fighter subclass.', subclass_of: { name: 'Barbarian', key: 'srd_barbarian' }, features: [] },
     { key: 'evoker', name: 'Evoker', document: doc, desc: 'A master of destructive magic.', subclass_of: { name: 'Wizard', key: 'wizard' }, features: [{ name: 'Sculpt Spells', feature_type: 'CLASS_LEVEL_FEATURE', desc: 'You shape your spells around allies.', gained_at: [{ level: 2 }] }] },
   ],
   species: [

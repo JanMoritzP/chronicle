@@ -125,3 +125,6 @@ export function searchLibrary(index: LibraryIndex | null, q: string, category: L
   out.sort((a, b) => b.score - a.score || a.row[2].length - b.row[2].length)
   return out.slice(0, limit)
 }
+
+/** False for an entry of the other edition of the System Reference Document than the sheet plays by (the 2014 Fighter on a 2024 sheet). */
+export const fitsRules = (row: LibraryRow, ruleset: string) => row[3] !== (ruleset === '5e-2024' ? 'srd-2014' : 'srd-2024')

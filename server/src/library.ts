@@ -195,11 +195,15 @@ export function crText(cr: unknown): string {
   return String(n)
 }
 
+const SRD_EDITION: Record<string, string> = { 'srd-2014': '2014', 'srd-2024': '2024' }
 /** Subclasses and subspecies share names across books, so the parent is part of what makes an entry the same. */
 function identity(category: CategoryId, d: any): string {
   // the same rule name appears in several sections, so the section (without its book prefix) belongs to the identity
   const parent = category === 'class' ? d.subclass_of?.name : category === 'species' ? d.subspecies_of : category === 'rule' ? String(d.ruleset ?? '').replace(/^[^_]+_/, '') : ''
-  return `${category}:${norm(d.name ?? '')}:${norm(String(parent ?? ''))}`
+  // the 2014 and 2024 classes differ level by level, so a 2014 character's level up needs the 2014 copy too
+  const source = typeof d.document === 'string' ? d.document : d.document?.key
+  const edition = category === 'class' && SRD_EDITION[source] ? `:${SRD_EDITION[source]}` : ''
+  return `${category}:${norm(d.name ?? '')}:${norm(String(parent ?? ''))}${edition}`
 }
 
 const EDITION: Record<string, number> = { '5e-2024': 3, '5e-2014': 2 }

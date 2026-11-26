@@ -15,7 +15,7 @@ import { homebrewBackgroundPatch, homebrewSpeciesPatch } from '../lib/homebrew'
 import { useStore } from '../store'
 import type { LibraryRow } from '../types'
 import { api } from '../api'
-import { fetchLibraryEntry } from '../lib/library'
+import { fetchLibraryEntry, fitsRules } from '../lib/library'
 import { HomebrewDialog } from './Homebrew'
 import { exportCharacter } from '../lib/importers'
 import { FeatureEditor, type SheetPatch } from './SheetView'
@@ -124,7 +124,7 @@ export function CharacterSheet({ sheet, set, roll, pictures }: { sheet: Sheet; s
     else act(kind === 'species' ? speciesPatch(sheet, e.data, p.name) : backgroundPatch(sheet, e.data, p.name))
   }
   const isSubclass = (r: LibraryRow) => r[4].startsWith('Subclass of')
-  const subclassOf = (cls: string) => (r: LibraryRow) => isSubclass(r) && (!cls.trim() || r[4].toLowerCase() === `subclass of ${cls.trim().toLowerCase()}`)
+  const subclassOf = (cls: string) => (r: LibraryRow) => isSubclass(r) && fitsRules(r, sheet.ruleset) && (!cls.trim() || r[4].toLowerCase() === `subclass of ${cls.trim().toLowerCase()}`)
   const addItem = (p: Picked) => {
     const w = Number(p.entry?.data?.weight)
     setItems([...items, { name: p.name, qty: 1, equipped: false, note: p.entry?.data?.requires_attunement ? 'requires attunement' : '', ...(w > 0 ? { weight: w } : {}) }])
@@ -172,7 +172,7 @@ export function CharacterSheet({ sheet, set, roll, pictures }: { sheet: Sheet; s
             <span key={i} className="cs-class">
               {edit ? (
                 <>
-                  <LibraryInput value={c.name} label={`Class ${i + 1}`} placeholder="Class" categories={['class']} filter={(r) => !isSubclass(r)} onChange={(v) => act({ classes: classes.map((x, j) => (j === i ? { ...x, name: v } : x)) })} />
+                  <LibraryInput value={c.name} label={`Class ${i + 1}`} placeholder="Class" categories={['class']} filter={(r) => !isSubclass(r) && fitsRules(r, sheet.ruleset)} onChange={(v) => act({ classes: classes.map((x, j) => (j === i ? { ...x, name: v } : x)) })} />
                   <Num value={c.level} label={`Level of ${c.name || `class ${i + 1}`}`} min={0} max={20} width={48} onChange={(n) => act({ classes: classes.map((x, j) => (j === i ? { ...x, level: Math.min(20, n) } : x)) })} />
                   <LibraryInput value={c.subclass ?? ''} label={`Subclass ${i + 1}`} placeholder="Subclass" categories={['class']} filter={subclassOf(c.name)} onChange={(v) => act({ classes: classes.map((x, j) => (j === i ? { ...x, subclass: v } : x)) })} />
                   {classes.length > 1 && <button className="icon-btn" aria-label={`Remove class ${i + 1}`} onClick={() => act({ classes: classes.filter((_, j) => j !== i) })}><Trash2 size={12} /></button>}

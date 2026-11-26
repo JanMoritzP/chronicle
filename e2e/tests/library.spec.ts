@@ -235,3 +235,98 @@ test('the names on a character sheet link to their library entries', { tag: '@fe
   await expect(peek).toHaveCount(0)
   await expect(app.getByLabel('Page title')).toHaveValue('Ilyra')
 })
+
+test('a fighter and a wizard level from 1 to 20 by the 2014 rules, with subclasses and features from the library', { tag: '@feature:sheet.levelup-career' }, async ({ app, api, world, makePage }) => {
+  test.setTimeout(240_000)
+  await api.json('patch', `/api/workspaces/${world.id}`, { settings: { system: '5e' } })
+  type Panel = ReturnType<typeof app.getByRole>
+  const career = async (title: string, cls: string, con: number, choices: Record<number, (panel: Panel) => Promise<void>>) => {
+    await makePage(title, { props: { type: 'pc' } })
+    await app.reload()
+    await openPage(app, title)
+    await app.getByRole('button', { name: 'Add a character sheet' }).click()
+    await app.getByLabel('Constitution', { exact: true }).fill(String(con))
+    await app.getByLabel('Constitution', { exact: true }).blur()
+    const panel = app.getByRole('dialog', { name: 'Level up' })
+    for (let level = 1; level <= 20; level++) {
+      await app.getByRole('button', { name: 'Level up', exact: true }).click()
+      if (level === 1) {
+        await expect(panel).toContainText('First level')
+        await panel.getByLabel('Name of the new class').fill(cls)
+      }
+      await expect(panel.getByLabel('What changes')).toContainText(`Level ${level}: ${cls} ${level}`)
+      await choices[level]?.(panel)
+      await panel.getByRole('button', { name: `Level up to ${level}`, exact: true }).click()
+      await expect(panel).toHaveCount(0)
+      await expect(app.getByLabel(`Level of ${cls}`)).toHaveValue(String(level))
+    }
+    // level 20 is the end
+    await app.getByRole('button', { name: 'Level up', exact: true }).click()
+    await expect(panel).toContainText('cannot go past level 20')
+    await panel.getByRole('button', { name: 'Cancel' }).click()
+  }
+  const point = (a: string) => async (panel: Panel) => {
+    for (let i = 0; i < 2; i++) await panel.getByRole('button', { name: `Add a point to ${a}` }).click()
+  }
+
+  // a fighter: the 2014 class and Champion from the library, not the 2024 ones of the same names
+  await career('Brannoc', 'Fighter', 14, {
+    1: async (panel) => {
+      await expect(panel.getByLabel('What changes')).toContainText('12 hit points (the whole d10, +2 Constitution)')
+      await expect(panel.getByLabel('Class features gained')).toContainText('Second Wind')
+      await expect(panel.getByLabel('Class features gained')).not.toContainText('Weapon Mastery')
+    },
+    2: async (panel) => {
+      await expect(panel.getByLabel('Class features gained')).toContainText('Action Surge (one use)')
+      await expect(panel.getByLabel('Class features gained')).not.toContainText('Tactical Mind')
+    },
+    3: async (panel) => {
+      const box = panel.getByRole('combobox', { name: 'Subclass' })
+      await box.focus()
+      const list = app.getByRole('listbox')
+      await expect(list.getByRole('option', { name: /^Champion/ })).toHaveCount(1)
+      await expect(list.getByRole('option', { name: /^Path of Steel/ })).toHaveCount(0)
+      await list.getByRole('option', { name: /^Champion/ }).dispatchEvent('mousedown')
+      await expect(box).toHaveValue('Champion')
+      // the subclass's own feature of this level, not the "choose an archetype" feature the panel asks for itself, not the 2024 Champion's
+      const gained = panel.getByLabel('Class features gained')
+      await expect(gained).toContainText('Improved Critical')
+      await expect(gained).not.toContainText('Martial Archetype')
+      await expect(gained).not.toContainText('Remarkable Athlete')
+    },
+    4: point('STR'), 6: point('STR'), 8: point('CON'), 12: point('STR'), 14: point('DEX'), 16: point('CON'),
+    11: async (panel) => { await expect(panel.getByLabel('Class features gained')).toContainText('already on the sheet') },
+    17: async (panel) => { await expect(panel.getByLabel('Class features gained')).toContainText('Action Surge (two uses)') },
+    19: async (panel) => {
+      await panel.getByRole('combobox', { name: 'Feat taken instead' }).focus()
+      await app.getByRole('listbox').getByRole('option', { name: /^Alert/ }).dispatchEvent('mousedown')
+      await expect(panel.getByLabel('What changes')).toContainText('Feat: Alert')
+    },
+  })
+  await expect(app.getByLabel('Constitution', { exact: true })).toHaveValue('18')
+  // d10 + 19 x 6 + 20 x the final Constitution modifier (+4)
+  await expect(app.getByLabel('Maximum hit points', { exact: true })).toHaveValue('204')
+  await app.getByRole('button', { name: 'Done editing' }).click()
+  const sheet = app.getByLabel('Character sheet')
+  for (const f of ['Second Wind', 'Action Surge', 'Improved Critical', 'Extra Attack', 'Indomitable', 'Survivor', 'Alert']) await expect(sheet, f).toContainText(f)
+  await expect(sheet).toContainText('Fighter 20 (Champion)')
+
+  // a wizard: the subclass at 2, spell slots up to level 9
+  await career('Ysolde', 'Wizard', 12, {
+    1: async (panel) => { await expect(panel.getByLabel('What changes')).toContainText('Spellbook: six wizard spells of level 1') },
+    2: async (panel) => {
+      await panel.getByRole('combobox', { name: 'Subclass' }).focus()
+      await app.getByRole('listbox').getByRole('option', { name: /^Evoker/ }).dispatchEvent('mousedown')
+      await expect(panel.getByLabel('Class features gained')).toContainText('Sculpt Spells')
+      await expect(panel.getByLabel('Class features gained')).not.toContainText('Arcane Tradition')
+    },
+    4: point('INT'), 8: point('INT'), 12: point('CON'), 16: point('CON'), 19: point('DEX'),
+    10: async (panel) => { await expect(panel.getByLabel('What changes')).toContainText('Cantrips known: 4 to 5 (learn 1 more)') },
+    17: async (panel) => { await expect(panel.getByLabel('What changes')).toContainText('Wizard spells of level 9 can now be learned and cast') },
+    20: async (panel) => { await expect(panel.getByLabel('What changes')).toContainText('Spell slots: 4 / 3 / 3 / 3 / 3 / 2 / 2 / 1 / 1') },
+  })
+  // d6 + 19 x 4 + 20 x the final Constitution modifier (+3)
+  await expect(app.getByLabel('Maximum hit points', { exact: true })).toHaveValue('142')
+  await app.getByRole('button', { name: 'Done editing' }).click()
+  await expect(app.getByLabel('Character sheet')).toContainText('Wizard 20 (Evoker)')
+})

@@ -30,10 +30,12 @@ interface Props {
   onMake?: (name: string) => void
   /** leaves out library entries that do not fit here (subclasses in a box for the class) */
   filter?: (row: LibraryRow) => boolean
+  /** names to offer besides the library's, such as the basic rules' subclasses when the library is not downloaded */
+  extra?: string[]
   className?: string
 }
 
-export function LibraryInput({ value, onChange, categories, label, placeholder, onPick, onAdd, onMake, filter, className = 'sv-text' }: Props) {
+export function LibraryInput({ value, onChange, categories, label, placeholder, onPick, onAdd, onMake, filter, extra, className = 'sv-text' }: Props) {
   const index = useLibrary((s) => s.index)
   const loaded = useLibrary((s) => s.loaded)
   const pages = useStore((s) => s.data.pages)
@@ -69,11 +71,15 @@ export function LibraryInput({ value, onChange, categories, label, placeholder, 
         pick: async () => { const entry = await fetchLibraryEntry(h.row[0]); return { name: entry.name, entry } },
       })
     }
+    for (const name of extra ?? []) {
+      const h = fuzzy(q, name)
+      if (h && !out.some((o) => o.label.toLowerCase() === name.toLowerCase())) out.push({ key: `x:${name}`, label: name, sub: 'Basic rules', indices: h.indices, pick: () => ({ name }) })
+    }
     const shown = out.slice(0, 12)
     if (onAdd && q && !shown.some((o) => o.label.toLowerCase() === q.toLowerCase())) shown.unshift({ key: 'text', label: `Add “${q}”`, sub: 'As you typed it', indices: [], pick: () => ({ name: q }) })
     if (onMake) shown.push({ key: 'new', label: `New ${kind}${q ? ` “${q}”` : ''}…`, sub: 'Make it yourself, as a page of this world or in a library', indices: [], pick: () => { onMake(q); return null } })
     return shown
-  }, [open, q, pages, index, categories, onAdd, onMake, filter, kind])
+  }, [open, q, pages, index, categories, onAdd, onMake, filter, extra, kind])
 
   // an add box starts on its first line; a box that holds a name only on the entry of that exact name, so Enter keeps what was typed
   useEffect(() => {
