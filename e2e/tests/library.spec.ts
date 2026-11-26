@@ -216,7 +216,7 @@ test('the names on a character sheet link to their library entries', { tag: '@fe
   await app.reload()
   await openPage(app, 'Ilyra')
   await app.getByRole('button', { name: 'Add a character sheet' }).click()
-  await app.getByLabel('Species', { exact: true }).fill('Elf')
+  await app.getByLabel('Species', { exact: true }).fill('High Elf')
   await app.getByLabel('Class 1', { exact: true }).fill('Wizard')
   await app.getByLabel('Spells', { exact: true }).fill('Cantrips: Light\nLevel 3: Fireball, Unknown Spell')
   await app.getByLabel('New item').fill('Bag of Holding')
@@ -234,6 +234,27 @@ test('the names on a character sheet link to their library entries', { tag: '@fe
   await app.keyboard.press('Escape')
   await expect(peek).toHaveCount(0)
   await expect(app.getByLabel('Page title')).toHaveValue('Ilyra')
+
+  // a skill's name leads to the skill, the rest of its row still belongs to the skill's button
+  await sheet.locator('.cs-skill .sheet-link', { hasText: 'Stealth' }).click()
+  await expect(app.getByRole('dialog', { name: 'Stealth' })).toBeVisible()
+  await app.keyboard.press('Escape')
+  await sheet.getByRole('button', { name: 'Edit sheet' }).click()
+  await sheet.getByRole('button', { name: /^Stealth [+-]/ }).click()
+  await expect(sheet.getByRole('button', { name: /^Stealth .*, proficient$/ })).toBeVisible()
+
+  // features of the class and traits of the species open the entry that gives them
+  for (const [i, name] of ['Arcane Recovery', 'Darkvision'].entries()) {
+    await sheet.getByRole('button', { name: 'Add a trait' }).click()
+    await sheet.getByLabel(`Name of traits ${i + 1}`).fill(name)
+  }
+  await sheet.getByRole('button', { name: 'Done editing' }).click()
+  await sheet.getByTitle('From Wizard').click()
+  await expect(app.getByRole('dialog', { name: 'Wizard' }).getByRole('heading', { name: /^Arcane Recovery/ })).toBeInViewport()
+  await app.keyboard.press('Escape')
+  await sheet.getByTitle('From Elf').click()
+  await expect(app.getByRole('dialog', { name: 'Elf' }).getByRole('heading', { name: 'Darkvision' })).toBeInViewport()
+  await app.keyboard.press('Escape')
 })
 
 test('a fighter and a wizard level from 1 to 20 by the 2014 rules, with subclasses and features from the library', { tag: '@feature:sheet.levelup-career' }, async ({ app, api, world, makePage }) => {

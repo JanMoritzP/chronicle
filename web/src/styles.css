@@ -984,7 +984,9 @@ button.cs-roll:disabled { cursor: default; }
 .cs-save, .cs-skill { border: 0; background: transparent; color: inherit; font: inherit; font-size: 12px; cursor: pointer; padding: 2px 4px; border-radius: 6px; display: flex; gap: 6px; align-items: center; text-align: left; }
 .cs-save:hover, .cs-skill:hover { background: var(--bg-hover); }
 .cs-skillgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 0 12px; }
-.cs-skill { width: 100%; }
+.cs-skill { width: 100%; position: relative; }
+.cs-skill-hit { position: absolute; inset: 0; width: 100%; border: 0; background: transparent; border-radius: inherit; cursor: pointer; }
+.cs-skill .sheet-link { position: relative; color: inherit; }
 .cs-mark { width: 14px; color: var(--accent); }
 .cs-slots { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px; margin: 6px 0; }
 .cs-slot { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; }

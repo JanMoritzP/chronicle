@@ -20,7 +20,7 @@ import { HomebrewDialog } from './Homebrew'
 import { exportCharacter } from '../lib/importers'
 import { FeatureEditor, type SheetPatch } from './SheetView'
 import { Select } from './Select'
-import { EntryLink, ListLinks, SheetLinksHost, SpellLinks } from './SheetLinks'
+import { EntryLink, FeatureLink, ListLinks, SheetLinksHost, SpellLinks, type Origin } from './SheetLinks'
 import { makeLinker, useAutoLinks } from './useAutoLinks'
 
 // A player character: the same sheet as a creature, with what a player tracks through a game. Editable by people who can edit the page;
@@ -138,9 +138,15 @@ export function CharacterSheet({ sheet, set, roll, pictures }: { sheet: Sheet; s
     sheet.background && <EntryLink key="b" name={sheet.background} categories={['background']} />,
     sheet.alignment && <EntryLink key="a" name={sheet.alignment} categories={['alignment']} />, sheet.player && `played by ${sheet.player}`,
   ].filter(Boolean)
+  const origins: Origin[] = [
+    ...classes.map((c) => ({ name: c.name, category: 'class' as const })),
+    ...classes.map((c) => ({ name: c.subclass ?? '', category: 'class' as const })),
+    { name: sheet.species ?? '', category: 'species' as const },
+    { name: sheet.background ?? '', category: 'background' as const },
+  ].filter((o) => o.name.trim())
 
   return (
-    <SheetLinksHost ruleset={sheet.ruleset}>
+    <SheetLinksHost ruleset={sheet.ruleset} origins={origins}>
     <div className={`cs${pictures?.banner ? ' has-banner' : ''}`} aria-label="Character sheet">
       {pictures?.banner && <div className="cs-banner" aria-hidden style={{ backgroundImage: `url("${pictures.banner}")` }} />}
       <header className="cs-head">
@@ -247,11 +253,13 @@ export function CharacterSheet({ sheet, set, roll, pictures }: { sheet: Sheet; s
       <section className="cs-skills" aria-label="Skills" {...place('skills')}>
         <h4>Skills <small className="muted">{edit ? 'click the mark to cycle none, proficient, expertise; Shift-click rolls' : ''}</small></h4>
         <div className="cs-skillgrid">
+          {/* the button lies under the whole row, so the name can be a link of its own */}
           {Object.keys(SKILLS).map((k) => (
-            <button key={k} className="cs-skill" aria-label={`${title(k)} ${signed(skillBonus(sheet, k))}${profs.skills[k] === 'e' ? ', expertise' : profs.skills[k] === 'p' ? ', proficient' : ''}`}
-              onClick={(e) => { if (edit && !e.shiftKey) { const n = next(profs.skills[k]); const skills = { ...profs.skills }; if (n) skills[k] = n; else delete skills[k]; act({ profs: { ...profs, skills } }) } else check(skillBonus(sheet, k), `${title(k)} check`) }}>
-              <span className="cs-mark">{mark(profs.skills[k])}</span><span className="grow">{title(k)} <small className="muted">{SKILLS[k].toUpperCase()}</small></span><b>{signed(skillBonus(sheet, k))}</b>
-            </button>
+            <div key={k} className="cs-skill">
+              <button className="cs-skill-hit" aria-label={`${title(k)} ${signed(skillBonus(sheet, k))}${profs.skills[k] === 'e' ? ', expertise' : profs.skills[k] === 'p' ? ', proficient' : ''}`}
+              onClick={(e) => { if (edit && !e.shiftKey) { const n = next(profs.skills[k]); const skills = { ...profs.skills }; if (n) skills[k] = n; else delete skills[k]; act({ profs: { ...profs, skills } }) } else check(skillBonus(sheet, k), `${title(k)} check`) }} />
+              <span className="cs-mark">{mark(profs.skills[k])}</span><span className="grow"><EntryLink name={title(k)} categories={['skill']} /> <small className="muted">{SKILLS[k].toUpperCase()}</small></span><b>{signed(skillBonus(sheet, k))}</b>
+            </div>
           ))}
         </div>
         <div className="cs-line"><span><b>Passive Perception</b> {passivePerception(sheet)}</span></div>
@@ -293,10 +301,10 @@ export function CharacterSheet({ sheet, set, roll, pictures }: { sheet: Sheet; s
       <section className="cs-features" aria-label="Features and attacks" {...place('features')}>
         <h4>Attacks and spells</h4>
         {edit ? <FeatureEditor group="actions" categories={['item', 'magicitem', 'spell']} list={features('actions')} set={(list) => act({ 'features.actions': list })} />
-          : features('actions').map((f, i) => <p key={i}><b><i><EntryLink name={f.name} categories={['spell', 'item', 'magicitem']} />.</i></b> {featureText(f.text)}</p>)}
+          : features('actions').map((f, i) => <p key={i}><b><i><FeatureLink name={f.name} categories={['spell', 'item', 'magicitem']} />.</i></b> {featureText(f.text)}</p>)}
         <h4>Features and traits</h4>
         {edit ? <FeatureEditor group="traits" categories={['feat', 'rule', 'condition', 'spell']} list={features('traits')} set={(list) => act({ 'features.traits': list })} />
-          : features('traits').map((f, i) => <p key={i}><b><i><EntryLink name={f.name} categories={['feat', 'rule', 'condition', 'spell']} />.</i></b> {featureText(f.text)}</p>)}
+          : features('traits').map((f, i) => <p key={i}><b><i><FeatureLink name={f.name} categories={['feat', 'rule', 'condition', 'spell']} />.</i></b> {featureText(f.text)}</p>)}
       </section>
 
       {rules.sheetFields.length > 0 && (

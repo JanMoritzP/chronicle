@@ -509,8 +509,8 @@ areas:
         name: "A species or background from the library put on a character sheet"
         files: [web/src/lib/origin.ts, web/src/components/CharacterSheet.tsx]
       - id: library.sheet-links
-        name: "The class, species, background, spells, features and items on a character sheet open their library entry"
-        files: [web/src/components/SheetLinks.tsx, web/src/components/CharacterSheet.tsx]
+        name: "The class, species, background, spells, skills, features and items on a character sheet open their library entry"
+        files: [web/src/components/SheetLinks.tsx, web/src/lib/sheetFeatures.ts, web/src/components/CharacterSheet.tsx]
       - id: sheet.import-pathbuilder
         name: "A Pathfinder 2e character imported from Pathbuilder"
         files: [web/src/lib/importers.ts, web/src/components/PageView.tsx]
