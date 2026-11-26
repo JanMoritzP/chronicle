@@ -2,6 +2,11 @@
 
 Newest first. The version in `electron/package.json` is the app version; the release notes on GitHub are what the in-app update dialog shows, so keep each entry short and in plain words. Sections after 0.2.0 are written by `scripts/release.mjs` from the commit subjects, so the commit messages carry the release notes.
 
+## 0.86.2 (2026-11-26)
+
+### Bug Fixes
+- levelling up a 2014 character offers the 2014 subclasses and class features from the library, asks again for a missed subclass, and lists what the class table changes (rages, Sneak Attack, spells known and prepared) with a warning when multiclassing lacks the 13s
+
 ## 0.86.1 (2026-11-26)
 
 ### Bug Fixes
