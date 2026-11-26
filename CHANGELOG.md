@@ -2,6 +2,11 @@
 
 Newest first. The version in `electron/package.json` is the app version; the release notes on GitHub are what the in-app update dialog shows, so keep each entry short and in plain words. Sections after 0.2.0 are written by `scripts/release.mjs` from the commit subjects, so the commit messages carry the release notes.
 
+## 0.86.1 (2026-11-26)
+
+### Bug Fixes
+- the "Write something…" hint on an empty line next to a picture stays on that line instead of slipping under the picture and over the next paragraph
+
 ## 0.86.0 (2026-11-26)
 
 ### Features
