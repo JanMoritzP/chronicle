@@ -1,7 +1,7 @@
 import { Check, ChevronLeft, ChevronRight, Dices, Plus, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import {
-  buildCharacter, finalScores, grantedSkills, POINT_BUDGET, POINT_COST, pointsSpent, problems, rollScores, STANDARD_ARRAY, suggestedScores,
+  buildCharacter, finalScores, givesVersatileFeat, grantedSkills, POINT_BUDGET, POINT_COST, pointsSpent, problems, rollScores, STANDARD_ARRAY, suggestedScores,
   type Choices, type Ruleset,
 } from '../lib/builder'
 import { classDef, homebrewCatalog, loadHomebrew, type HomebrewOption, type RulesCategory } from '../lib/homebrew'
@@ -11,6 +11,8 @@ import { ABILITIES, abilityMod, signed, SKILLS, type Ability, type Sheet } from 
 import { useRules } from '../lib/pack'
 import { Select } from './Select'
 import { LibraryInput } from './LibraryInput'
+import { featFromLibrary, featText, useLibrary } from '../lib/library'
+import type { LibraryRow } from '../types'
 
 // Making a character step by step, for a person page. Each step shows only what has to be decided there, says what the
 // choice does, and the last step shows the finished sheet's numbers before anything is written to the page.
@@ -62,6 +64,34 @@ export function CharacterBuilder({ ruleset, name, onCreate, onClose }: { ruleset
   const issues = problems(c, cat)
   const preview = useMemo(() => (issues.length ? null : buildCharacter(c, cat)), [c, cat, issues.length])
 
+  // an Origin feat named here gets what it does from the library: the background's own, one chosen instead, a human's Versatile feat
+  const index = useLibrary((s) => s.index)
+  const origins = useMemo(() => (index?.rows ?? []).some((r) => r[1] === 'feat' && r[4] === 'Origin'), [index])
+  const originFeat = (r: LibraryRow) => !origins || r[4] === 'Origin'
+  const lookUp = (which: 'feat' | 'versatileFeat') => {
+    const f = c[which]
+    if (!f?.name.trim() || f.text != null) return
+    let live = true
+    const t = setTimeout(() => {
+      featFromLibrary(f.name, ruleset).then((hit) => live && setC((x) => (x[which]?.name === f.name ? { ...x, [which]: { name: f.name, text: hit?.text ?? '' } } : x))).catch(() => {})
+    }, 300)
+    return () => { live = false; clearTimeout(t) }
+  }
+  useEffect(() => lookUp('feat'), [c.feat?.name, c.feat?.text])
+  useEffect(() => lookUp('versatileFeat'), [c.versatileFeat?.name, c.versatileFeat?.text])
+  const featBox = (which: 'feat' | 'versatileFeat', title: string, placeholder: string) => {
+    const f = c[which]
+    return (
+      <div className="cb-bonus" role="group" aria-label={title}>
+        <b>{title}</b>
+        <LibraryInput className="input" label={title} categories={['feat']} filter={originFeat} value={f?.name ?? ''} placeholder={placeholder}
+          onChange={(v) => set({ [which]: v.trim() ? { name: v } : undefined })}
+          onPick={(p) => set({ [which]: { name: p.name, text: p.entry ? featText(p.entry.data) : undefined } })} />
+        {f?.name.trim() && <small className="muted cb-feat">{f.text == null ? 'Looking it up in the library.' : f.text || 'Not in the library. Write what it does on the sheet afterwards.'}</small>}
+      </div>
+    )
+  }
+
   useEffect(() => { const on = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }; window.addEventListener('keydown', on); return () => window.removeEventListener('keydown', on) }, [onClose])
 
   const pickClass = (id: string) => {
@@ -104,6 +134,7 @@ export function CharacterBuilder({ ruleset, name, onCreate, onClose }: { ruleset
       ))}
       {canMake && <button className="cb-card hb-new" onClick={() => setMaking('species')}><Plus size={16} /><b>New species</b><small>Make a species of your own, right here.</small></button>}
     </div>
+    {givesVersatileFeat(species) && featBox('versatileFeat', 'Versatile: an Origin feat of your choice', 'Skilled')}
     </>
   )
   const backgroundStep = (
@@ -111,7 +142,7 @@ export function CharacterBuilder({ ruleset, name, onCreate, onClose }: { ruleset
     {filterBox(cat.backgrounds.length, 'backgrounds')}
     <div className="cb-cards" role="radiogroup" aria-label="Background">
       {shown(cat.backgrounds, c.backgroundId).map((b) => (
-        <button key={b.id} role="radio" aria-checked={c.backgroundId === b.id} className={`cb-card${c.backgroundId === b.id ? ' on' : ''}`} onClick={() => set({ backgroundId: b.id, skills: c.skills.filter((s) => !b.skills.includes(s)), bonus: { ...c.bonus, plus2: undefined, plus1: undefined } })}>
+        <button key={b.id} role="radio" aria-checked={c.backgroundId === b.id} className={`cb-card${c.backgroundId === b.id ? ' on' : ''}`} onClick={() => set({ backgroundId: b.id, skills: c.skills.filter((s) => !b.skills.includes(s)), bonus: { ...c.bonus, plus2: undefined, plus1: undefined }, feat: b.feat ? { name: b.feat } : undefined })}>
           <b>{b.name}</b>
           {origin(b.id)}
           <span className="muted">{b.skills.map(titleCase).join(' and ')}</span>
@@ -121,6 +152,7 @@ export function CharacterBuilder({ ruleset, name, onCreate, onClose }: { ruleset
       ))}
       {canMake && <button className="cb-card hb-new" onClick={() => setMaking('background')}><Plus size={16} /><b>New background</b><small>Make a background of your own, right here.</small></button>}
     </div>
+    {ruleset === '5e-2024' && bg?.feat && featBox('feat', `Origin feat of the ${bg.name.toLowerCase()} background`, bg.feat)}
     </>
   )
 
@@ -281,7 +313,7 @@ export function CharacterBuilder({ ruleset, name, onCreate, onClose }: { ruleset
           // what was just made is chosen
           if (category === 'class') set({ classId: opt.id, skills: [], ...(method === 'standard' && !c.classId ? { base: suggestedScores(classDef(opt.id, m.name, m.rules)) } : {}) })
           if (category === 'species') set({ speciesId: opt.id, bonus: { ...c.bonus, free: [] } })
-          if (category === 'background') set({ backgroundId: opt.id, bonus: { ...c.bonus, plus2: undefined, plus1: undefined } })
+          if (category === 'background') set({ backgroundId: opt.id, bonus: { ...c.bonus, plus2: undefined, plus1: undefined }, feat: (m.rules as { feat?: string }).feat ? { name: (m.rules as { feat: string }).feat } : undefined })
         }} />}
       </div>
     </div>

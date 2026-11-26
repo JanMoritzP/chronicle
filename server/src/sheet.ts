@@ -22,6 +22,7 @@ const bonus = int(-30, 60)
 
 const abilityKey = z.enum(['str', 'dex', 'con', 'int', 'wis', 'cha'])
 const count = (max: number) => int(0, max)
+const recovery = z.enum(['short', 'long', 'one'])
 const character = {
   kind: z.enum(['creature', 'character']).optional(),
   player: text(80).optional(),
@@ -37,6 +38,8 @@ const character = {
   custom: z.record(z.string().regex(/^[a-z][a-z0-9-]{0,19}$/), z.union([text(300), z.number().min(-1e9).max(1e9), z.boolean()])).refine((o) => Object.keys(o).length <= 24, 'too many fields').optional(),
   inventory: z.array(z.object({ name: text(120), qty: count(99999), equipped: z.boolean(), note: text(300), weight: z.number().min(0).max(100000).optional(), attuned: z.boolean().optional(), charges: z.object({ used: int(0, 999), max: int(0, 999) }).optional(), acBonus: int(-5, 10).optional(), in: text(120).optional(), weightless: z.boolean().optional(), saveBonus: int(-5, 10).optional(), spellBonus: int(-5, 10).optional() })).max(200).optional(),
   currency: z.object({ cp: count(10_000_000), sp: count(10_000_000), ep: count(10_000_000), gp: count(10_000_000), pp: count(10_000_000) }).optional(),
+  spent: z.record(z.string().regex(/^[a-z0-9 '’.()-]{1,80}$/), z.object({ used: count(1000), rest: recovery })).refine((r) => Object.keys(r).length <= 40, 'too many resources').optional(),
+  counters: z.array(z.object({ name: text(80), max: count(1000), used: count(1000), rest: z.enum(['short', 'long']) })).max(30).optional(),
 }
 
 const rank = int(0, 4)

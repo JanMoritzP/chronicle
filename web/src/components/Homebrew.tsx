@@ -13,6 +13,7 @@ import { useRules } from '../lib/pack'
 import { useStore } from '../store'
 import type { LibraryCategory, LibraryCollection } from '../types'
 import { Select } from './Select'
+import { LibraryInput } from './LibraryInput'
 
 // Making homebrew where it is needed (a class in the character builder, a species on a sheet, a spell in a field) and putting
 // pages into libraries. What is made is a page of the world, an entry of a library, or both.
@@ -279,7 +280,7 @@ export function RulesForm({ category, rules, onChange, ruleset }: { category: Ru
       {ruleset === '5e-2024' && (
         <Section title="Ability scores and feat">
           <div className="cb-row"><b className="hb-label">Scores it may raise (three)</b><Toggles label="Scores the background may raise" options={abilityOptions} value={r.abilities ?? []} max={3} onChange={(v) => set({ abilities: v })} /></div>
-          <input className="input" aria-label="Origin feat" placeholder="Alert" value={r.feat ?? ''} onChange={(e) => set({ feat: e.target.value })} />
+          <LibraryInput className="input" label="Origin feat" placeholder="Alert" categories={['feat']} value={r.feat ?? ''} onChange={(v) => set({ feat: v })} />
         </Section>
       )}
     </>

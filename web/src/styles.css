@@ -1335,6 +1335,21 @@ button.cs-roll:disabled { cursor: default; }
 .cs-slot { padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
 .cs-slot > b { font-size: 11px; font-weight: 600; color: var(--muted); width: 100%; }
 .cs-notes { white-space: pre-wrap; line-height: 1.6; }
+.cs-res-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin-bottom: 8px; }
+.cs-res { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); min-width: 0; }
+.cs-res > b { font-size: 13px; font-weight: 600; }
+.cs-res-n { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; font-variant-numeric: tabular-nums; }
+.cs-resources > .btn { margin-top: 6px; }
+.cs-book { display: flex; flex-direction: column; gap: 8px; margin: 6px 0; }
+.cs-book-limits { margin: 0; font-size: 12px; }
+.cs-book-level { padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
+.cs-book-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+.cs-book-head > b { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; min-width: 76px; }
+.cs-book-slots { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cs-spell-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.cs-spell { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; }
+.cs-spell .btn.sm { padding: 1px 6px; font-size: 11px; }
+.cs-book .cs-warn { color: var(--danger); }
 .cs-features p { margin: 0 0 8px; line-height: 1.5; }
 .cs-items li { padding: 4px 0; border-bottom: 1px dashed color-mix(in srgb, var(--border) 60%, transparent); flex-wrap: wrap; }
 .cs-items li:last-child { border-bottom: 0; }
@@ -1469,7 +1484,6 @@ button.cs-roll:disabled { cursor: default; }
 /* names on a character sheet that lead to their library entry or page */
 .sheet-link { background: none; border: 0; padding: 0; font: inherit; color: var(--link); cursor: pointer; border-bottom: 1px dotted var(--link); text-align: inherit; }
 .sheet-link:hover { border-bottom-style: solid; }
-.cs-spell-line { display: block; }
 .peek-overlay { z-index: 320; }
 .peek { width: 720px; max-height: 86vh; }
 .peek-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px 10px 20px; border-bottom: 1px solid var(--border); }

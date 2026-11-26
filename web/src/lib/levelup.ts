@@ -1,4 +1,4 @@
-import { abilityMod, ABILITIES, type Ability, type Sheet } from './sheet'
+import { abilityMod, ABILITIES, type Ability, type Recovery, type Sheet } from './sheet'
 
 // Levelling a 5e character up, the weight a character carries and the features a class page lists for a level.
 // Pure functions: they return the changes as a sheet patch (field path to value), never touch the sheet.
@@ -138,41 +138,38 @@ export interface Column { name: string; at: (level: number) => string | null }
 const by = (values: (string | number)[]) => (l: number) => { const v = values[l - 1]; return v == null || v === 0 || v === '' ? null : String(v) }
 const steps = (s: [number, string][]) => (l: number) => { let v: string | null = null; for (const [from, x] of s) if (l >= from) v = x; return v }
 const cantrips = (a: number) => steps([[1, String(a)], [4, String(a + 1)], [10, String(a + 2)]])
-const fromLevel = (first: number) => (l: number) => (l >= first ? String(l) : null)
+const RAGE_DAMAGE = steps([[1, '+2'], [9, '+3'], [16, '+4']])
+const BARD_DIE = steps([[1, 'd6'], [5, 'd8'], [10, 'd10'], [15, 'd12']])
+const UNARMORED_MOVEMENT = steps([[2, '+10 ft.'], [6, '+15 ft.'], [10, '+20 ft.'], [14, '+25 ft.'], [18, '+30 ft.']])
+const SNEAK_ATTACK = (l: number) => `${Math.ceil(l / 2)}d6`
 const THIRD_KNOWN = by([0, 0, 3, 4, 4, 4, 5, 6, 6, 7, 8, 8, 9, 10, 10, 11, 11, 11, 12, 13])
 
 /** The columns of the 2014 Player's Handbook class tables that are not spell slots or features. */
 const TABLE_2014: Record<string, Column[]> = {
-  barbarian: [
-    { name: 'Rages', at: by([2, 2, 3, 3, 3, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 6, 6, 6, 'unlimited']) },
-    { name: 'Rage damage', at: steps([[1, '+2'], [9, '+3'], [16, '+4']]) },
-  ],
+  barbarian: [{ name: 'Rage damage', at: RAGE_DAMAGE }],
   bard: [
     { name: 'Cantrips known', at: cantrips(2) },
     { name: 'Spells known', at: by([4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 15, 15, 16, 18, 19, 19, 20, 22, 22, 22]) },
-    { name: 'Bardic Inspiration die', at: steps([[1, 'd6'], [5, 'd8'], [10, 'd10'], [15, 'd12']]) },
+    { name: 'Bardic Inspiration die', at: BARD_DIE },
     { name: 'Song of Rest die', at: steps([[2, 'd6'], [9, 'd8'], [13, 'd10'], [17, 'd12']]) },
   ],
   cleric: [
     { name: 'Cantrips known', at: cantrips(3) },
-    { name: 'Channel Divinity uses per rest', at: steps([[2, '1'], [6, '2'], [18, '3']]) },
     { name: 'Destroy Undead', at: steps([[5, 'CR 1/2'], [8, 'CR 1'], [11, 'CR 2'], [14, 'CR 3'], [17, 'CR 4']]) },
   ],
   druid: [
     { name: 'Cantrips known', at: cantrips(2) },
-    { name: 'Wild Shape', at: steps([[2, 'CR 1/4, no flying or swimming speed'], [4, 'CR 1/2, no flying speed'], [8, 'CR 1']]) },
+    { name: 'Wild Shape limit', at: steps([[2, 'CR 1/4, no flying or swimming speed'], [4, 'CR 1/2, no flying speed'], [8, 'CR 1']]) },
   ],
   monk: [
     { name: 'Martial Arts die', at: steps([[1, 'd4'], [5, 'd6'], [11, 'd8'], [17, 'd10']]) },
-    { name: 'Ki points', at: fromLevel(2) },
-    { name: 'Unarmored Movement', at: steps([[2, '+10 ft.'], [6, '+15 ft.'], [10, '+20 ft.'], [14, '+25 ft.'], [18, '+30 ft.']]) },
+    { name: 'Unarmored Movement', at: UNARMORED_MOVEMENT },
   ],
   ranger: [{ name: 'Spells known', at: by([0, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11]) }],
-  rogue: [{ name: 'Sneak Attack', at: (l) => `${Math.ceil(l / 2)}d6` }],
+  rogue: [{ name: 'Sneak Attack', at: SNEAK_ATTACK }],
   sorcerer: [
     { name: 'Cantrips known', at: cantrips(4) },
     { name: 'Spells known', at: by([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 12, 13, 13, 14, 14, 15, 15, 15, 15]) },
-    { name: 'Sorcery points', at: fromLevel(2) },
   ],
   warlock: [
     { name: 'Cantrips known', at: cantrips(2) },
@@ -186,18 +183,48 @@ const THIRD_2014: Record<string, Column[]> = {
   'eldritch knight': [{ name: 'Cantrips known', at: steps([[3, '2'], [10, '3']]) }, { name: 'Spells known', at: THIRD_KNOWN }],
   'arcane trickster': [{ name: 'Cantrips known', at: steps([[3, '3'], [10, '4']]) }, { name: 'Spells known', at: THIRD_KNOWN }],
 }
+/** Spells a 2024 class prepares, by class level. */
+const PREP_FULL = by([4, 5, 6, 7, 9, 10, 11, 12, 14, 15, 16, 16, 17, 17, 18, 18, 19, 20, 21, 22])
+const PREP_HALF = by([2, 3, 4, 5, 6, 6, 7, 7, 9, 9, 10, 10, 11, 11, 12, 12, 14, 14, 15, 15])
+/** The columns of the 2024 class tables that are not spell slots, features or counted uses. */
+const TABLE_2024: Record<string, Column[]> = {
+  barbarian: [{ name: 'Rage damage', at: RAGE_DAMAGE }],
+  bard: [{ name: 'Bardic Inspiration die', at: BARD_DIE }, { name: 'Cantrips known', at: cantrips(2) }, { name: 'Prepared spells', at: PREP_FULL }],
+  cleric: [{ name: 'Cantrips known', at: cantrips(3) }, { name: 'Prepared spells', at: PREP_FULL }],
+  druid: [{ name: 'Cantrips known', at: cantrips(2) }, { name: 'Prepared spells', at: PREP_FULL }],
+  monk: [{ name: 'Martial Arts die', at: steps([[1, 'd6'], [5, 'd8'], [11, 'd10'], [17, 'd12']]) }, { name: 'Unarmored Movement', at: UNARMORED_MOVEMENT }],
+  paladin: [{ name: 'Prepared spells', at: PREP_HALF }],
+  ranger: [{ name: 'Prepared spells', at: PREP_HALF }],
+  rogue: [{ name: 'Sneak Attack', at: SNEAK_ATTACK }],
+  sorcerer: [{ name: 'Cantrips known', at: cantrips(4) }, { name: 'Prepared spells', at: by([2, 4, 6, 7, 9, 10, 11, 12, 14, 15, 16, 16, 17, 17, 18, 18, 19, 20, 21, 22]) }],
+  warlock: [
+    { name: 'Cantrips known', at: cantrips(2) }, { name: 'Prepared spells', at: by([2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 11, 11, 12, 12, 13, 13, 14, 14, 15, 15]) },
+    { name: 'Eldritch Invocations', at: steps([[1, '1'], [2, '3'], [5, '5'], [7, '6'], [9, '7'], [12, '8'], [15, '9'], [18, '10']]) },
+  ],
+  wizard: [{ name: 'Cantrips known', at: cantrips(3) }, { name: 'Prepared spells', at: by([4, 5, 6, 7, 9, 10, 11, 12, 14, 15, 16, 16, 17, 18, 19, 21, 22, 23, 24, 25]) }],
+}
 /** Classes that prepare their spells each day in the 2014 rules: the ability and whether half the class level counts. */
 const PREPARES_2014: Record<string, { ability: Ability; half?: boolean }> = { cleric: { ability: 'wis' }, druid: { ability: 'wis' }, paladin: { ability: 'cha', half: true }, wizard: { ability: 'int' } }
 
-/** The class table columns the level up shows: the 2014 tables for the classes of the 2014 rules, else what the class brings (Open5e). */
+/** A column's name for comparing two tables: "Cantrips" and "Cantrips known", "Rage Damage" and "Rage damage" are the same column. */
+const columnKey = (name: string) => name.toLowerCase().replace(/\b(known|die|uses|points?)\b/g, '').replace(/s\b/g, '').replace(/\s+/g, ' ').trim()
+
+/**
+ * The class table columns of a class: the counted uses (rages, ki) and the 2014 tables for the classes of the 2014 rules, else what the class
+ * brings (Open5e). Under 2024 the brought table (the book's own) comes first and the rules here fill in the columns it lacks.
+ */
 export function columnsOf(className: string, subclass = '', ruleset: string = '5e', brought: Column[] = []): Column[] {
   const n = key(className), s = subclass.trim().toLowerCase()
-  if (rulesetOf(ruleset) !== '5e') return brought
+  const counted = resourceColumns(className, ruleset)
+  if (rulesetOf(ruleset) !== '5e') {
+    const have = new Set(brought.map((c) => columnKey(c.name)))
+    return [...brought, ...[...(TABLE_2024[n] ?? []), ...counted].filter((c) => !have.has(columnKey(c.name)))]
+  }
   if (n === 'fighter' || n === 'rogue') {
     const third = Object.entries(THIRD_2014).find(([name]) => s.includes(name))
-    return [...(TABLE_2014[n] ?? []), ...(third?.[1] ?? [])]
+    return [...(TABLE_2014[n] ?? []), ...counted, ...(third?.[1] ?? [])]
   }
-  return TABLE_2014[n] ?? brought
+  return TABLE_2014[n] ? [...TABLE_2014[n], ...counted] : counted.length ? counted : brought
 }
 
 /** Columns from an Open5e class (its "CLASS_TABLE_DATA" features), leaving out spell slots, which the level up works out itself. */
@@ -371,6 +398,155 @@ function spellLines(abilities: Record<Ability, number>, c: ClassLevel, ruleset: 
   const swaps = ['bard', 'sorcerer', 'warlock', 'ranger'].includes(n) || (['fighter', 'rogue'].includes(n) && /eldritch knight|arcane trickster/i.test(c.subclass ?? ''))
   if (swaps && was > 0) out.push('You may also swap one spell you know for another of this class')
   return out
+}
+
+/** What a class lets a character have of spells at its level: cantrips known, spells known, or spells prepared each day. */
+export interface SpellLimit { from: string; cantrips?: number; known?: number; prepared?: number }
+export function spellLimits(s: Sheet): SpellLimit[] {
+  const out: SpellLimit[] = []
+  const ruleset = rulesetOf(s.ruleset)
+  for (const c of s.classes ?? []) {
+    if (c.level < 1) continue
+    const cols = columnsOf(c.name, c.subclass, ruleset)
+    const num = (re: RegExp) => { const v = Number(cols.find((x) => re.test(x.name))?.at(c.level)); return Number.isFinite(v) && v > 0 ? v : undefined }
+    const limit: SpellLimit = { from: c.name }
+    const cantrips = num(/^cantrips known$/i), known = num(/^spells known$/i)
+    let prepared = num(/^prepared spells$/i)
+    const prep = ruleset === '5e' ? PREPARES_2014[key(c.name)] : undefined
+    if (prep && spellLevelOf(c, ruleset, {}) > 0) prepared = Math.max(1, abilityMod(s.abilities[prep.ability]) + (prep.half ? Math.floor(c.level / 2) : c.level))
+    if (cantrips) limit.cantrips = cantrips
+    if (known) limit.known = known
+    if (prepared) limit.prepared = prepared
+    if (cantrips || known || prepared) out.push(limit)
+  }
+  return out
+}
+
+// ---------- class resources ----------
+
+// What the classes of the basic rules count through a day: rages, ki or focus points, channel divinity, second wind. How many a class
+// level gives, and how they come back, follow the 2014 Player's Handbook and the 2024 rules (System Reference Document 5.1 and 5.2).
+// The numbers are worked out from the sheet each time it is drawn, so a level typed by hand is followed too; only the spent uses are
+// stored, in `spent` by resource id. Counters of other classes or feats are kept by hand in `counters`.
+
+export interface Resource {
+  /** the key of the spent count, e.g. "barbarian.rage" */
+  id: string
+  /** what the sheet calls it ("Rages", "Ki points") */
+  name: string
+  /** the class feature it belongs to, for the link to its text ("Rage", "Ki") */
+  feature: string
+  /** null: unlimited */
+  max: number | null
+  rest: Recovery
+  /** a pool of points spent a few at a time (Lay on Hands): a number, not circles */
+  pool?: boolean
+  from: string
+}
+
+type Def = { id: string; name: string; feature: string; max: (level: number, s: Sheet) => number | null; /** the count follows an ability score */ byAbility?: true; rest: Recovery | ((level: number) => Recovery); pool?: boolean }
+const upTo = (s: [number, number][]) => (l: number) => { let v = 0; for (const [from, n] of s) if (l >= from) v = n; return v }
+const each = (values: (number | null)[]) => (l: number) => values[Math.min(20, Math.max(1, l)) - 1]
+const mod = (s: Sheet, a: 'cha') => abilityMod(s.abilities[a])
+
+const RESOURCES: Record<Ruleset5e, Record<string, Def[]>> = {
+  '5e': {
+    barbarian: [{ id: 'rage', name: 'Rages', feature: 'Rage', max: each([2, 2, 3, 3, 3, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 6, 6, 6, null]), rest: 'long' }],
+    bard: [{ id: 'inspiration', name: 'Bardic Inspiration', feature: 'Bardic Inspiration', max: (_, s) => Math.max(1, mod(s, 'cha')), byAbility: true, rest: (l) => (l >= 5 ? 'short' : 'long') }],
+    cleric: [{ id: 'channel', name: 'Channel Divinity', feature: 'Channel Divinity', max: upTo([[2, 1], [6, 2], [18, 3]]), rest: 'short' }],
+    druid: [{ id: 'wildshape', name: 'Wild Shape', feature: 'Wild Shape', max: upTo([[2, 2]]), rest: 'short' }],
+    fighter: [
+      { id: 'secondwind', name: 'Second Wind', feature: 'Second Wind', max: upTo([[1, 1]]), rest: 'short' },
+      { id: 'surge', name: 'Action Surge', feature: 'Action Surge', max: upTo([[2, 1], [17, 2]]), rest: 'short' },
+      { id: 'indomitable', name: 'Indomitable', feature: 'Indomitable', max: upTo([[9, 1], [13, 2], [17, 3]]), rest: 'long' },
+    ],
+    monk: [{ id: 'ki', name: 'Ki points', feature: 'Ki', max: (l) => (l >= 2 ? l : 0), rest: 'short' }],
+    paladin: [
+      { id: 'sense', name: 'Divine Sense', feature: 'Divine Sense', max: (_, s) => Math.max(1, 1 + mod(s, 'cha')), byAbility: true, rest: 'long' },
+      { id: 'layonhands', name: 'Lay on Hands', feature: 'Lay on Hands', max: (l) => 5 * l, rest: 'long', pool: true },
+      { id: 'channel', name: 'Channel Divinity', feature: 'Channel Divinity', max: upTo([[3, 1]]), rest: 'short' },
+    ],
+    sorcerer: [{ id: 'points', name: 'Sorcery points', feature: 'Font of Magic', max: (l) => (l >= 2 ? l : 0), rest: 'long' }],
+    wizard: [{ id: 'recovery', name: 'Arcane Recovery', feature: 'Arcane Recovery', max: upTo([[1, 1]]), rest: 'long' }],
+  },
+  '5e-2024': {
+    barbarian: [{ id: 'rage', name: 'Rages', feature: 'Rage', max: each([2, 2, 3, 3, 3, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 6, 6, 6, 6]), rest: 'one' }],
+    bard: [{ id: 'inspiration', name: 'Bardic Inspiration', feature: 'Bardic Inspiration', max: (_, s) => Math.max(1, mod(s, 'cha')), byAbility: true, rest: (l) => (l >= 5 ? 'short' : 'long') }],
+    cleric: [{ id: 'channel', name: 'Channel Divinity', feature: 'Channel Divinity', max: upTo([[2, 2], [6, 3], [18, 4]]), rest: 'one' }],
+    druid: [{ id: 'wildshape', name: 'Wild Shape', feature: 'Wild Shape', max: upTo([[2, 2], [6, 3], [17, 4]]), rest: 'one' }],
+    fighter: [
+      { id: 'secondwind', name: 'Second Wind', feature: 'Second Wind', max: upTo([[1, 2], [4, 3], [10, 4]]), rest: 'one' },
+      { id: 'surge', name: 'Action Surge', feature: 'Action Surge', max: upTo([[2, 1], [17, 2]]), rest: 'short' },
+      { id: 'indomitable', name: 'Indomitable', feature: 'Indomitable', max: upTo([[9, 1], [13, 2], [17, 3]]), rest: 'long' },
+    ],
+    monk: [{ id: 'ki', name: 'Focus points', feature: "Monk's Focus", max: (l) => (l >= 2 ? l : 0), rest: 'short' }],
+    paladin: [
+      { id: 'layonhands', name: 'Lay on Hands', feature: 'Lay on Hands', max: (l) => 5 * l, rest: 'long', pool: true },
+      { id: 'channel', name: 'Channel Divinity', feature: 'Channel Divinity', max: upTo([[3, 2], [11, 3]]), rest: 'one' },
+    ],
+    ranger: [{ id: 'favored', name: "Favored Enemy (free Hunter's Mark)", feature: 'Favored Enemy', max: upTo([[1, 2], [5, 3], [9, 4], [13, 5], [17, 6]]), rest: 'long' }],
+    sorcerer: [
+      { id: 'innate', name: 'Innate Sorcery', feature: 'Innate Sorcery', max: upTo([[1, 2]]), rest: 'long' },
+      { id: 'points', name: 'Sorcery points', feature: 'Font of Magic', max: (l) => (l >= 2 ? l : 0), rest: 'long' },
+    ],
+    warlock: [{ id: 'cunning', name: 'Magical Cunning', feature: 'Magical Cunning', max: upTo([[2, 1]]), rest: 'long' }],
+    wizard: [{ id: 'recovery', name: 'Arcane Recovery', feature: 'Arcane Recovery', max: upTo([[1, 1]]), rest: 'long' }],
+  },
+}
+
+/** The counted resources of a character's classes at their levels, in the sheet's rules edition. */
+export function classResources(s: Sheet): Resource[] {
+  const out: Resource[] = []
+  for (const c of s.classes ?? []) {
+    if (c.level < 1) continue
+    for (const d of RESOURCES[rulesetOf(s.ruleset)][key(c.name)] ?? []) {
+      const max = d.max(c.level, s)
+      if (max === 0) continue
+      out.push({ id: `${key(c.name)}.${d.id}`, name: d.name, feature: d.feature, max, rest: typeof d.rest === 'function' ? d.rest(c.level) : d.rest, from: c.name, ...(d.pool ? { pool: true } : {}) })
+    }
+  }
+  return out
+}
+
+/** The resource counts as class table columns, for the level up ("Rages: 2 to 3"). Counts that follow an ability score are left out. */
+export function resourceColumns(className: string, ruleset: string): Column[] {
+  return (RESOURCES[rulesetOf(ruleset)][key(className)] ?? []).filter((d) => !d.byAbility).map((d) => ({
+    name: d.name,
+    // a count that does not follow an ability score never reads the sheet
+    at: (l: number) => { const n = d.max(l, {} as Sheet); return n === null ? 'unlimited' : n ? String(n) : null },
+  }))
+}
+
+export const spentOf = (s: Sheet, id: string) => s.spent?.[id]?.used ?? 0
+/** The patch that sets how many uses of a resource are spent. */
+export const spendPatch = (s: Sheet, r: Resource, used: number): Record<string, unknown> => {
+  const spent = { ...(s.spent ?? {}) }
+  if (used > 0) spent[r.id] = { used: r.max == null ? used : Math.min(r.max, used), rest: r.rest }; else delete spent[r.id]
+  return { spent }
+}
+export const recoveryText = (r: Recovery) => (r === 'short' ? 'back on a short rest' : r === 'long' ? 'back on a long rest' : 'one back on a short rest, all on a long rest')
+
+/** A short rest: resources of a short rest come back (one of a 2024 "one" resource), and so do a warlock's Pact Magic slots. */
+export function shortRestPatch(s: Sheet, infos: ClassInfos = {}): Record<string, unknown> {
+  const patch: Record<string, unknown> = {}
+  const spent = { ...(s.spent ?? {}) }
+  const rules = new Map(classResources(s).map((r) => [r.id, r.rest]))
+  for (const [id, x] of Object.entries(spent)) {
+    // the class rules decide; a resource the classes no longer give keeps what was stored with it
+    const rest = rules.get(id) ?? x.rest
+    if (rest === 'short' || (rest === 'one' && x.used <= 1)) delete spent[id]
+    else if (rest === 'one') spent[id] = { used: x.used - 1, rest }
+  }
+  patch.spent = spent
+  if (s.counters?.some((c) => c.rest === 'short' && c.used)) patch.counters = s.counters.map((c) => (c.rest === 'short' ? { ...c, used: 0 } : c))
+  const warlock = (s.classes ?? []).filter((c) => casterOf(c.name, c.subclass, infos[key(c.name)]) === 'pact').reduce((n, c) => n + c.level, 0)
+  const pact = pactSlots(warlock)
+  const slots = s.spellcasting?.slots ?? []
+  if (pact && slots[pact.slotLevel - 1]?.used) {
+    // the pact slots sit among the other slots of their level: as many as the pact gives come back
+    patch['spellcasting.slots'] = slots.map((x, i) => (i === pact.slotLevel - 1 ? { ...x, used: Math.max(0, x.used - pact.count) } : x))
+  }
+  return patch
 }
 
 // ---------- carrying ----------

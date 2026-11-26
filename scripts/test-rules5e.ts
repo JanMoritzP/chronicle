@@ -44,6 +44,11 @@ const short = shortRest(base, 2, () => 6)
 check('a short rest spends the largest dice first and heals', short.spent === 2 && short.healed === 16 && short.sheet.hp.current === 21)
 check('a short rest only readies features that come back on a rest', short.sheet.features.traits[1].used === 0 && short.sheet.features.traits[0].used === 2)
 check('a short rest cannot spend more dice than are left', shortRest(base, 9, () => 1).spent === 3)
+const counted = { ...base, spent: { 'barbarian.rage': { used: 2, rest: 'one' }, 'fighter.surge': { used: 1, rest: 'short' }, 'fighter.indomitable': { used: 1, rest: 'long' } }, counters: [{ name: 'Lucky', max: 3, used: 3, rest: 'long' }, { name: 'Focus', max: 2, used: 1, rest: 'short' }] } as unknown as Sheet
+const countedShort = shortRest(counted, 0, () => 1).sheet
+check('a short rest at the table gives back class resources and counters as they say', countedShort.spent!['barbarian.rage'].used === 1 && !countedShort.spent!['fighter.surge'] && countedShort.spent!['fighter.indomitable'].used === 1 && countedShort.counters![0].used === 3 && countedShort.counters![1].used === 0)
+const countedLong = longRest(counted).sheet
+check('a long rest at the table gives every class resource and counter back', Object.keys(countedLong.spent!).length === 0 && countedLong.counters!.every((c) => c.used === 0))
 check('a short rest never heals beyond the maximum', shortRest(base, 3, () => 10).sheet.hp.current === 30)
 
 check('proficiency follows total level', proficiencyOf({ classes: [{ name: 'Fighter', level: 1 }] }) === 2 && proficiencyOf({ classes: [{ name: 'Fighter', level: 5 }] }) === 3 && proficiencyOf({ classes: [{ name: 'A', level: 10 }, { name: 'B', level: 7 }] }) === 6)

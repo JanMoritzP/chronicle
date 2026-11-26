@@ -143,30 +143,12 @@ function openTarget(e: MouseEvent, target: Shown, peek: (t: Shown) => void) {
  * The name of a feature or action. One that a class, species or background of the sheet gives opens that entry at its section
  * (and not a spell or rule that only shares the name, as Darkvision does); any other is looked up by name.
  */
-export function FeatureLink({ name, categories }: { name: string; categories: LibraryCategory[] }) {
+export function FeatureLink({ name, categories, children }: { name: string; categories: LibraryCategory[]; children?: ReactNode }) {
   const { givers, peek } = useContext(LinksContext)
   const hit = name.trim() ? matchFeature(givers, name) : null
-  if (!hit) return <EntryLink name={name} categories={categories} />
+  if (!hit) return <EntryLink name={name} categories={categories}>{children}</EntryLink>
   // no hover card: it would show the whole class or species, not this feature
-  return <button type="button" className="sheet-link" title={`From ${hit.found.from}`} onClick={(e) => openTarget(e, { ...hit.found.target, section: hit.section }, peek)}>{name}</button>
-}
-
-/** "Level 1: Magic Missile, Shield" with each spell linked; lines and the label before a colon stay as they are. */
-export function SpellLinks({ text }: { text: string }) {
-  return (
-    <>
-      {text.split('\n').map((line, i) => {
-        const m = /^([^:]{0,40}:\s*)?(.*)$/.exec(line)!
-        const parts = (m[2] ?? '').split(/(,\s*|;\s*)/)
-        return (
-          <span key={i} className="cs-spell-line">
-            {m[1] && <span className="muted">{m[1]}</span>}
-            {parts.map((p, k) => (k % 2 ? p : <EntryLink key={k} name={p} categories={['spell']} />))}
-          </span>
-        )
-      })}
-    </>
-  )
+  return <button type="button" className="sheet-link" title={`From ${hit.found.from}`} onClick={(e) => openTarget(e, { ...hit.found.target, section: hit.section }, peek)}>{children ?? name}</button>
 }
 
 /** "Thieves' tools, Common, Elvish" with each part that names an entry linked. */

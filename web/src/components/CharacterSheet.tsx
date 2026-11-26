@@ -1,12 +1,15 @@
 import { useRules } from '../lib/pack'
 import type { SheetSection } from '../lib/systems'
-import { Heart, ImageIcon, Moon, Plus, Shield, Trash2, X } from 'lucide-react'
+import { Coffee, Heart, ImageIcon, Moon, Plus, Shield, Trash2, X } from 'lucide-react'
 import { useState } from 'react'
 import {
   ABILITIES, SKILLS, abilityMod, characterLevel, initiativeBonus, longRestPatch, passivePerception, proficiency, saveBonus, signed, skillBonus, spellAttack, spellDC,
   type Ability, type Feature, type InventoryItem, type Proficiency, type Sheet,
 } from '../lib/sheet'
-import { attunedCount, capacityOf, carriedWeight, loadOf, MAX_ATTUNED } from '../lib/levelup'
+import { attunedCount, capacityOf, carriedWeight, loadOf, MAX_ATTUNED, shortRestPatch, spellLimits } from '../lib/levelup'
+import { addSpell } from '../lib/spellbook'
+import { Spellbook } from './Spellbook'
+import { SheetResources } from './SheetResources'
 import { LevelUpPanel } from './LevelUpPanel'
 import { LibraryInput, type Picked } from './LibraryInput'
 import { PersonInput } from './PersonInput'
@@ -15,12 +18,13 @@ import { homebrewBackgroundPatch, homebrewSpeciesPatch } from '../lib/homebrew'
 import { useStore } from '../store'
 import type { LibraryRow } from '../types'
 import { api } from '../api'
-import { fetchLibraryEntry, fitsRules } from '../lib/library'
+import { featFromLibrary, featText, fetchLibraryEntry, fitsRules } from '../lib/library'
 import { HomebrewDialog } from './Homebrew'
 import { exportCharacter } from '../lib/importers'
+import { alertDialog } from '../lib/dialog'
 import { FeatureEditor, type SheetPatch } from './SheetView'
 import { Select } from './Select'
-import { EntryLink, FeatureLink, ListLinks, SheetLinksHost, SpellLinks, type Origin } from './SheetLinks'
+import { EntryLink, FeatureLink, ListLinks, SheetLinksHost, type Origin } from './SheetLinks'
 import { makeLinker, useAutoLinks } from './useAutoLinks'
 
 // A player character: the same sheet as a creature, with what a player tracks through a game. Editable by people who can edit the page;
@@ -100,6 +104,7 @@ export function CharacterSheet({ sheet, set, roll, pictures }: { sheet: Sheet; s
   const ratio = sheet.hp.max ? Math.max(0, Math.min(1, cur / sheet.hp.max)) : 0
   const [adding, setAdding] = useState('')
   const [addingSpell, setAddingSpell] = useState('')
+  const [addingFeat, setAddingFeat] = useState('')
   const [levelling, setLevelling] = useState(false)
   const act = (patch: SheetPatch) => set?.(patch)
   const bonus = (n: number) => `${n >= 0 ? '+' : '-'}${Math.abs(n)}`
@@ -115,13 +120,30 @@ export function CharacterSheet({ sheet, set, roll, pictures }: { sheet: Sheet; s
     if (!e && p.pageId) {
       const page = await api.getPage(p.pageId).catch(() => null)
       const rules = page?.props?.rules
-      if (rules) { act(kind === 'species' ? homebrewSpeciesPatch(sheet, p.name, rules) : homebrewBackgroundPatch(sheet, p.name, rules)); return }
+      if (rules) { act(await withFeatTexts(kind === 'species' ? homebrewSpeciesPatch(sheet, p.name, rules) : homebrewBackgroundPatch(sheet, p.name, rules))); return }
       const key = page?.props?.library
       if (typeof key === 'string') e = await fetchLibraryEntry(key).catch(() => undefined)
     }
     if (!e) act({ [kind]: p.name })
-    else if (e.homebrew && e.data?.rules) act(kind === 'species' ? homebrewSpeciesPatch(sheet, p.name, e.data.rules) : homebrewBackgroundPatch(sheet, p.name, e.data.rules))
-    else act(kind === 'species' ? speciesPatch(sheet, e.data, p.name) : backgroundPatch(sheet, e.data, p.name))
+    else if (e.homebrew && e.data?.rules) act(await withFeatTexts(kind === 'species' ? homebrewSpeciesPatch(sheet, p.name, e.data.rules) : homebrewBackgroundPatch(sheet, p.name, e.data.rules)))
+    else act(await withFeatTexts(kind === 'species' ? speciesPatch(sheet, e.data, p.name) : backgroundPatch(sheet, e.data, p.name)))
+  }
+  /** The feat a background gives gets what it does from the library, after the line that says where it is from. */
+  const withFeatTexts = async (patch: Record<string, unknown>) => {
+    const traits = patch['features.traits'] as Feature[] | undefined
+    if (!traits) return patch
+    const had = new Set(sheet.features.traits.map((t) => t.name.toLowerCase()))
+    const filled = await Promise.all(traits.map(async (t) => {
+      if (had.has(t.name.toLowerCase()) || !/feat from the .* background\.$/i.test(t.text)) return t
+      const f = await featFromLibrary(t.name, sheet.ruleset).catch(() => null)
+      return f?.text ? { ...t, text: `${t.text} ${f.text}` } : t
+    }))
+    return { ...patch, 'features.traits': filled }
+  }
+  const addFeat = async (p: Picked) => {
+    if (sheet.features.traits.some((t) => t.name.toLowerCase() === p.name.toLowerCase())) return
+    const text = p.entry ? featText(p.entry.data) : (await featFromLibrary(p.name, sheet.ruleset).catch(() => null))?.text ?? ''
+    act({ 'features.traits': [...sheet.features.traits, { name: p.name, text }] })
   }
   const isSubclass = (r: LibraryRow) => r[4].startsWith('Subclass of')
   const subclassOf = (cls: string) => (r: LibraryRow) => isSubclass(r) && fitsRules(r, sheet.ruleset) && (!cls.trim() || r[4].toLowerCase() === `subclass of ${cls.trim().toLowerCase()}`)
@@ -196,7 +218,8 @@ export function CharacterSheet({ sheet, set, roll, pictures }: { sheet: Sheet; s
         <div className="cs-tools">
           {canSet && <button className={`btn sm${editing ? ' primary' : ''}`} aria-pressed={editing} onClick={() => setEditing(!editing)}>{editing ? 'Done editing' : 'Edit sheet'}</button>}
           {canSet && <button className="btn sm" onClick={() => setLevelling((v) => !v)}>Level up</button>}
-          {canSet && <button className="btn sm" title="Full hit points, every spell slot back, half the hit dice back" onClick={() => act(longRestPatch(sheet))}><Moon size={12} /> Long rest</button>}
+          {canSet && <button className="btn sm" title="Class resources of a short rest and a warlock's Pact Magic slots come back. Spend hit dice by clicking them." onClick={() => act(shortRestPatch(sheet))}><Coffee size={12} /> Short rest</button>}
+          {canSet && <button className="btn sm" title="Full hit points, every spell slot and class resource back, half the hit dice back" onClick={() => act(longRestPatch(sheet))}><Moon size={12} /> Long rest</button>}
           <span className="grow" />
           {edit && pictures?.set && <PictureSlots pictures={pictures} />}
           <button className="btn ghost sm" title="Save this character as a file to share or keep" onClick={() => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(exportCharacter(sheet), null, 2)], { type: 'application/json' })); a.download = `${(sheet.name || 'character').replace(/[^\w\- ]+/g, '').trim() || 'character'}.chronicle-character.json`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000) }}>Export this character</button>
@@ -235,6 +258,7 @@ export function CharacterSheet({ sheet, set, roll, pictures }: { sheet: Sheet; s
           <span className="cs-ds">Failures <Bubbles label="Death save failures" total={3} used={sheet.deathSaves?.fail ?? 0} onChange={(n) => canSet && act({ deathSaves: { ok: sheet.deathSaves?.ok ?? 0, fail: n } })} /></span>
         </div>
       </section>
+      <SheetResources sheet={sheet} set={set} edit={edit} {...place('combat')} />
 
       <section className="cs-abilities" aria-label="Abilities" {...place('abilities')}>
         {ABILITIES.map((a) => (
@@ -268,7 +292,7 @@ export function CharacterSheet({ sheet, set, roll, pictures }: { sheet: Sheet; s
           : profs.tools ? <div className="cs-line"><b>Proficiencies</b> <span><ListLinks text={profs.tools} categories={['language', 'item', 'skill', 'weaponproperty']} /></span></div> : null}
       </section>
 
-      {(edit || !!sheet.spellcasting?.ability || slots.some((x) => x.total > 0) || !!sheet.spells?.trim()) && <section className="cs-spells" aria-label="Spellcasting" {...place('spells')}>
+      {(edit || !!sheet.spellcasting?.ability || slots.some((x) => x.total > 0) || !!sheet.spells?.trim() || spellLimits(sheet).length > 0) && <section className="cs-spells" aria-label="Spellcasting" {...place('spells')}>
         <h4>Spellcasting</h4>
         <div className="cs-line">
           {edit ? (
@@ -280,22 +304,12 @@ export function CharacterSheet({ sheet, set, roll, pictures }: { sheet: Sheet; s
           ) : sheet.spellcasting?.ability ? <span><b>Ability</b> {an[sheet.spellcasting.ability].name}</span> : null}
           {spellDC(sheet) != null && <><span><b>Save DC</b> {spellDC(sheet)}</span><button className="cs-roll" disabled={!roll} onClick={() => check(spellAttack(sheet)!, 'Spell attack')}>Attack {signed(spellAttack(sheet)!)}</button></>}
         </div>
-        {(sheet.spellcasting?.ability || slots.length > 0) && (
-          <div className="cs-slots">
-            {Array.from({ length: 9 }, (_, i) => slots[i] ?? { total: 0, used: 0 }).map((sl, i) => (edit || sl.total > 0) && (
-              <div key={i} className="cs-slot"><b>Level {i + 1}</b>
-                <Bubbles label={`Level ${i + 1} slots used`} total={sl.total} used={sl.used} onChange={(n) => canSet && act({ 'spellcasting.slots': Array.from({ length: Math.max(slots.length, i + 1) }, (_, j) => (j === i ? { ...sl, used: n } : slots[j] ?? { total: 0, used: 0 })) })} />
-                {edit && <Num label={`Level ${i + 1} slots`} value={sl.total} max={20} width={44} onChange={(n) => act({ 'spellcasting.slots': Array.from({ length: Math.max(slots.length, i + 1) }, (_, j) => (j === i ? { total: n, used: Math.min(sl.used, n) } : slots[j] ?? { total: 0, used: 0 })) })} />}
-              </div>
-            ))}
-          </div>
-        )}
+        <Spellbook sheet={sheet} set={set} edit={edit} />
         {edit && <LibraryInput value={addingSpell} onChange={setAddingSpell} label="Add a spell" placeholder="Add a spell: Fire Bolt, Shield" categories={['spell']} onAdd={(p) => {
           const lv = Number(p.entry?.data?.level ?? p.entry?.data?.level_int ?? NaN)
-          act({ spells: `${sheet.spells ? `${sheet.spells}\n` : ''}${lv > 0 ? `Level ${lv}: ` : lv === 0 ? 'Cantrip: ' : ''}${p.name}` })
+          act({ spells: addSpell(sheet.spells ?? '', p.name, Number.isInteger(lv) && lv >= 0 && lv <= 9 ? lv : null) })
         }} />}
-        {edit ? <textarea className="sv-area" aria-label="Spells" rows={3} placeholder="Cantrips and spells known or prepared" value={sheet.spells ?? ''} onChange={(e) => act({ spells: e.target.value })} />
-          : sheet.spells ? <p className="cs-notes"><SpellLinks text={sheet.spells} /></p> : null}
+        {edit && <textarea className="sv-area" aria-label="Spells" rows={3} placeholder={'Cantrips: Fire Bolt, Light\nLevel 1: Magic Missile, Shield'} value={sheet.spells ?? ''} onChange={(e) => act({ spells: e.target.value })} />}
       </section>}
 
       <section className="cs-features" aria-label="Features and attacks" {...place('features')}>
@@ -303,6 +317,7 @@ export function CharacterSheet({ sheet, set, roll, pictures }: { sheet: Sheet; s
         {edit ? <FeatureEditor group="actions" categories={['item', 'magicitem', 'spell']} list={features('actions')} set={(list) => act({ 'features.actions': list })} />
           : features('actions').map((f, i) => <p key={i}><b><i><FeatureLink name={f.name} categories={['spell', 'item', 'magicitem']} />.</i></b> {featureText(f.text)}</p>)}
         <h4>Features and traits</h4>
+        {edit && <LibraryInput value={addingFeat} onChange={setAddingFeat} label="Add a feat" placeholder="Add a feat: Alert, Tough" categories={['feat']} onAdd={(p) => void addFeat(p).catch((e) => alertDialog(e.message))} />}
         {edit ? <FeatureEditor group="traits" categories={['feat', 'rule', 'condition', 'spell']} list={features('traits')} set={(list) => act({ 'features.traits': list })} />
           : features('traits').map((f, i) => <p key={i}><b><i><FeatureLink name={f.name} categories={['feat', 'rule', 'condition', 'spell']} />.</i></b> {featureText(f.text)}</p>)}
       </section>

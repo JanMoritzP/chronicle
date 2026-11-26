@@ -1,6 +1,6 @@
-import { columnLines, columnsOf, multiclassNeed, open5eColumns, givesAsi, givesEpicBoon, subclassLevel, needsSubclass, allSlots, pactSlots, attunedCount, capacityOf, carriedWeight, classFeaturesAt, hitDieOf, levelUp, loadOf, slotsFor } from '../web/src/lib/levelup'
+import { classResources, shortRestPatch, spendPatch, spellLimits, columnLines, columnsOf, multiclassNeed, open5eColumns, givesAsi, givesEpicBoon, subclassLevel, needsSubclass, allSlots, pactSlots, attunedCount, capacityOf, carriedWeight, classFeaturesAt, hitDieOf, levelUp, loadOf, slotsFor } from '../web/src/lib/levelup'
 import { lightItems, lightOf } from '../web/src/lib/lightitems'
-import { emptyCharacter, patchSheetLocal } from '../web/src/lib/sheet'
+import { emptyCharacter, longRestPatch, patchSheetLocal } from '../web/src/lib/sheet'
 
 let failed = 0
 const check = (name: string, ok: boolean, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name} ${extra}`); if (!ok) failed++ }
@@ -183,7 +183,41 @@ const o5 = open5eColumns({ features: [
   { feature_type: 'CLASS_TABLE_DATA', name: 'Odd', data_for_class_table: [{ level: 4, column_value: '2' }, { level: 4, column_value: '3' }] },
 ] })
 check('open5e columns leave out slots and levels listed twice', o5.map((c) => c.name).join() === 'Focus Points,Odd' && o5[1].at(4) === null && columnLines(o5, 2, 3).join() === 'Focus Points: 2 to 3')
-check('2024 sheets use the columns the class brings, 2014 sheets the book', columnsOf('Monk', '', '5e-2024', o5) === o5 && columnsOf('Monk', '', '5e', o5) !== o5 && columnsOf('Marshal', '', '5e', o5) === o5)
+const monk24 = columnsOf('Monk', '', '5e-2024', o5).map((c) => c.name)
+check('2024 sheets use the columns the class brings first, then the rules fill in the rest', monk24[0] === 'Focus Points' && monk24.includes('Martial Arts die') && !monk24.includes('Focus points'), monk24.join())
+check('2014 sheets use the book, and unknown classes what they bring', !columnsOf('Monk', '', '5e', o5).includes(o5[0]) && columnsOf('Marshal', '', '5e', o5) === o5)
+
+// class resources
+const bb = (level: number, ruleset: '5e' | '5e-2024' = '5e') => ({ ...emptyCharacter(ruleset), classes: [{ name: 'Barbarian', level }] }) as any
+const rage = (s: any) => classResources(s).find((r) => r.id === 'barbarian.rage')
+check('a barbarian counts rages by level', rage(bb(1))!.max === 2 && rage(bb(3))!.max === 3 && rage(bb(17))!.max === 6)
+check('a 2014 barbarian of level 20 rages without limit, a 2024 one has six', rage(bb(20))!.max === null && rage(bb(20, '5e-2024'))!.max === 6)
+check('the level up names the rages at the first level and when they change', has(levelUp({ ...emptyCharacter('5e-2024'), classes: [{ name: '', level: 1 }] } as any, 'Barbarian').lines, 'Rages: 2')
+  && has((levelUp(bb(2, '5e-2024'), 'Barbarian') as any).lines, 'Rages: 2 to 3') && has((levelUp(bb(8, '5e-2024'), 'Barbarian') as any).lines, 'Rage damage: +2 to +3'))
+const bard = (cha: number, level: number) => ({ ...emptyCharacter('5e'), abilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha }, classes: [{ name: 'Bard', level }] }) as any
+const insp = (s: any) => classResources(s).find((r) => r.id === 'bard.inspiration')!
+check('bardic inspiration follows Charisma and comes back on a short rest from level 5', insp(bard(16, 1)).max === 3 && insp(bard(8, 1)).max === 1 && insp(bard(16, 4)).rest === 'long' && insp(bard(16, 5)).rest === 'short')
+check('a paladin has a pool of lay on hands', classResources({ ...emptyCharacter('5e'), classes: [{ name: 'Paladin', level: 4 }] } as any).find((r) => r.id === 'paladin.layonhands')?.max === 20)
+check('a multiclass character has the resources of each class', classResources({ ...emptyCharacter('5e'), classes: [{ name: 'Fighter', level: 2 }, { name: 'Monk', level: 2 }] } as any).map((r) => r.id).join() === 'fighter.secondwind,fighter.surge,monk.ki')
+check('a level 1 monk has no ki yet', !classResources({ ...emptyCharacter('5e'), classes: [{ name: 'Monk', level: 1 }] } as any).length)
+const raging = patchSheetLocal(bb(5, '5e-2024'), spendPatch(bb(5, '5e-2024'), rage(bb(5, '5e-2024'))!, 3)) as any
+check('spending keeps how the uses come back', raging.spent['barbarian.rage'].used === 3 && raging.spent['barbarian.rage'].rest === 'one')
+check('spending never goes past the count, none spent removes the entry', (spendPatch(raging, rage(raging)!, 9).spent as any)['barbarian.rage'].used === 3 && !('barbarian.rage' in (spendPatch(raging, rage(raging)!, 0).spent as any)))
+const rested = patchSheetLocal(raging, shortRestPatch(raging)) as any
+check('a 2024 short rest gives one rage back, a long rest all', rested.spent['barbarian.rage'].used === 2 && Object.keys((longRestPatch(raging) as any).spent).length === 0)
+const ki = { ...emptyCharacter('5e'), classes: [{ name: 'Monk', level: 4 }], spent: { 'monk.ki': { used: 3, rest: 'short' } }, counters: [{ name: 'Lucky', max: 3, used: 2, rest: 'long' }, { name: 'Focus', max: 1, used: 1, rest: 'short' }] } as any
+const kiRest = patchSheetLocal(ki, shortRestPatch(ki)) as any
+check('a short rest gives ki and short counters back, long counters wait', !kiRest.spent['monk.ki'] && kiRest.counters[0].used === 2 && kiRest.counters[1].used === 0)
+check('a long rest gives every counter back', (longRestPatch(ki).counters as any[]).every((c) => c.used === 0))
+const wl = { ...emptyCharacter('5e'), classes: [{ name: 'Wizard', level: 3 }, { name: 'Warlock', level: 3 }], spellcasting: { ability: 'cha', slots: [{ total: 4, used: 4 }, { total: 4, used: 4 }] } } as any
+const lockRest = shortRestPatch(wl)['spellcasting.slots'] as any[]
+check("a short rest gives a warlock's pact slots back, not the wizard's", lockRest[0].used === 4 && lockRest[1].used === 2)
+
+// spells a class allows
+const wiz = { ...emptyCharacter('5e'), abilities: { str: 10, dex: 10, con: 10, int: 16, wis: 10, cha: 10 }, classes: [{ name: 'Wizard', level: 3 }] } as any
+check('a 2014 wizard knows cantrips and prepares Intelligence plus level', JSON.stringify(spellLimits(wiz)) === '{"from":"Wizard","cantrips":3,"prepared":6}'.replace(/^/, '[').replace(/$/, ']'), JSON.stringify(spellLimits(wiz)))
+check('a 2024 wizard prepares by the table', spellLimits({ ...wiz, ruleset: '5e-2024' })[0].prepared === 6 && spellLimits({ ...wiz, ruleset: '5e-2024', classes: [{ name: 'Wizard', level: 4 }] })[0].cantrips === 4)
+check('a sorcerer knows spells, a fighter has no limits', spellLimits({ ...wiz, classes: [{ name: 'Sorcerer', level: 2 }] })[0].known === 3 && !spellLimits({ ...wiz, classes: [{ name: 'Fighter', level: 2 }] }).length)
 const m24 = career('Wizard', { int: 15, con: 14 }, { 3: { subclass: 'Evoker' } }, '5e-2024')
 check('2024: a wizard to 20 chooses the subclass at 3 and gets an Epic Boon at 19', m24.length === 20 && has(m24[2].lines, 'Subclass: Evoker') && has(m24[18].lines, 'Epic Boon') && !has(m24[0].lines, 'Prepare up to'))
 console.log(failed ? `\n${failed} failed` : '\nall passed')

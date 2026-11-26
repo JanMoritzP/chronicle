@@ -91,7 +91,19 @@ export interface CharacterPart {
   spells?: string
   inventory?: InventoryItem[]
   currency?: Currency
+  /**
+   * uses spent of the class resources (rages, ki), by resource id; how many there are follows the classes (`classResources`). The way they
+   * come back is kept with them so a rest at the table, on the server, gives them back without the class rules.
+   */
+  spent?: Record<string, { used: number; rest: Recovery }>
+  /** counters kept by hand: a feat's uses, a homebrew class's points */
+  counters?: Counter[]
 }
+
+/** How spent uses come back: all on a short rest, all on a long rest, or one on a short rest and all on a long rest (2024). */
+export type Recovery = 'short' | 'long' | 'one'
+/** A counter kept by hand on a character sheet, and when its uses come back. */
+export interface Counter { name: string; max: number; used: number; rest: 'short' | 'long' }
 
 export interface Sheet extends CharacterPart {
   v: 1
@@ -194,9 +206,11 @@ export const spellAbilityMod = (s: Sheet) => s.spellcasting?.ability ? abilityMo
 export const spellDC = (s: Sheet) => { const m = spellAbilityMod(s); return m == null ? null : 8 + proficiency(s) + m + itemBonus(s, 'spellBonus') }
 export const spellAttack = (s: Sheet) => { const m = spellAbilityMod(s); return m == null ? null : proficiency(s) + m + itemBonus(s, 'spellBonus') }
 
-/** The fields a long rest changes: full hit points, no temporary ones, every slot back, half the hit dice back (at least one), death saves cleared. */
+/** The fields a long rest changes: full hit points, no temporary ones, every slot and class resource back, half the hit dice back (at least one), death saves cleared. */
 export function longRestPatch(s: Sheet): Record<string, unknown> {
   const patch: Record<string, unknown> = { 'hp.current': s.hp.max, 'hp.temp': 0, deathSaves: { ok: 0, fail: 0 } }
+  if (s.spent && Object.keys(s.spent).length) patch.spent = {}
+  if (s.counters?.length) patch.counters = s.counters.map((c) => ({ ...c, used: 0 }))
   if (s.spellcasting) patch['spellcasting.slots'] = s.spellcasting.slots.map((x) => ({ ...x, used: 0 }))
   if (s.hitDice?.length) {
     let back = Math.max(1, Math.floor((s.hitDice.reduce((n, d) => n + d.total, 0)) / 2))

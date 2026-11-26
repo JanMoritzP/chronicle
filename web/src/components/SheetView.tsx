@@ -5,7 +5,9 @@ import { ABILITIES, FEATURE_GROUPS, SENSES, SPEED_MODES, abilityMod, crFromText,
 import { xpOfCr } from '../tabletop/encounter'
 import { Select } from './Select'
 import { LibraryInput } from './LibraryInput'
-import type { LibraryCategory } from '../types'
+import type { LibraryCategory, LibraryEntry } from '../types'
+import { featText } from '../lib/library'
+import { firstParagraph } from '../lib/open5eRules'
 import { makeLinker, useAutoLinks, type Linker } from './useAutoLinks'
 
 // The sheet of a creature as the printed stat block. With `set` it can be edited in place; every change is one or two field paths
@@ -34,6 +36,9 @@ function usageText(f: Feature) {
 }
 
 /** With `categories`, the name suggests entries of the library (a weapon, a spell, a feat) so that the sheet links it. */
+/** What a chosen library entry does, for the text of a feature: a feat with its benefits, anything else its first paragraph. */
+const entryText = (e: LibraryEntry) => (e.category === 'feat' ? featText(e.data) : firstParagraph(e.data?.desc, 1200))
+
 export function FeatureEditor({ group, list, set, categories }: { group: FeatureGroup; list: Feature[]; set: (next: Feature[]) => void; categories?: LibraryCategory[] }) {
   const change = (i: number, p: Partial<Feature>) => set(list.map((f, j) => (j === i ? { ...f, ...p } : f)))
   return (
@@ -42,7 +47,8 @@ export function FeatureEditor({ group, list, set, categories }: { group: Feature
         <div key={i} className="sv-feature">
           <div className="sv-feature-head">
             {categories
-              ? <LibraryInput className="sv-text sv-fname" value={f.name} label={`Name of ${GROUP_TITLE[group].toLowerCase()} ${i + 1}`} placeholder="Name" categories={categories} onChange={(v) => change(i, { name: v })} />
+              ? <LibraryInput className="sv-text sv-fname" value={f.name} label={`Name of ${GROUP_TITLE[group].toLowerCase()} ${i + 1}`} placeholder="Name" categories={categories} onChange={(v) => change(i, { name: v })}
+                  onPick={(p) => change(i, { name: p.name, ...(!f.text.trim() && p.entry ? { text: entryText(p.entry) } : {}) })} />
               : <Txt className="sv-fname" value={f.name} label={`Name of ${GROUP_TITLE[group].toLowerCase()} ${i + 1}`} placeholder="Name" onChange={(v) => change(i, { name: v })} />}
             <Select className="sv-usage" title="How often" value={f.usage?.type ?? ''} onChange={(t) => {
               const { usage: _drop, ...rest } = f

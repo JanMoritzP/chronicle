@@ -128,3 +128,38 @@ export function searchLibrary(index: LibraryIndex | null, q: string, category: L
 
 /** False for an entry of the other edition of the System Reference Document than the sheet plays by (the 2014 Fighter on a 2024 sheet). */
 export const fitsRules = (row: LibraryRow, ruleset: string) => row[3] !== (ruleset === '5e-2024' ? 'srd-2014' : 'srd-2024')
+
+const plainName = (s: string) => s.toLowerCase().replace(/[’']/g, "'").replace(/\s+/g, ' ').trim()
+
+/**
+ * The feat of the library a name means, in the sheet's edition: "Magic Initiate (Cleric)" and "Alert (feat)" find "Magic Initiate" and "Alert".
+ * Homebrew comes first, then the edition's own book, then any other.
+ */
+export function findFeat(index: LibraryIndex | null, name: string, ruleset: string): LibraryRow | null {
+  const want = [plainName(name), plainName(name.replace(/\s*\([^)]*\)\s*$/, '')), plainName(name.replace(/\s*\(.*\)\s*$/, ''))]
+  const modern = ruleset === '5e-2024'
+  const rank = (r: LibraryRow) => (r[0].includes(':hb.') ? 0 : r[3].includes('2024') === modern ? 1 : 2)
+  for (const n of want) {
+    const hits = (index?.rows ?? []).filter((r) => r[1] === 'feat' && plainName(r[2]) === n)
+    if (hits.length) return hits.sort((a, b) => rank(a) - rank(b))[0]
+  }
+  return null
+}
+
+/** What a feat does, from its entry: the description and each benefit, in plain words. */
+export function featText(data: any, max = 1800): string {
+  const strip = (t: unknown) => String(t ?? '').replace(/\*\*?|__?|^#+\s*/gm, '').replace(/\s+/g, ' ').trim()
+  const parts = [strip(data?.desc), ...(Array.isArray(data?.benefits) ? data.benefits.map((b: any) => strip(b?.desc)) : [])].filter(Boolean)
+  const all = parts.join(' ')
+  return all.length > max ? `${all.slice(0, max - 1).trimEnd()}…` : all
+}
+
+/** The library's feat of a name and what it does, or null when the library has none of that name. Loads the library index when needed. */
+export async function featFromLibrary(name: string, ruleset: string): Promise<{ key: string; name: string; text: string } | null> {
+  if (!name.trim()) return null
+  if (!useLibrary.getState().loaded) await useLibrary.getState().load().catch(() => {})
+  const row = findFeat(useLibrary.getState().index, name, ruleset)
+  if (!row) return null
+  const e = await fetchLibraryEntry(row[0])
+  return { key: row[0], name: row[2], text: featText(e.data) }
+}

@@ -222,7 +222,14 @@ export interface Choices {
   /** skills picked from the class's list */
   skills: string[]
   alignment?: string
+  /** 2024: the Origin feat taken instead of the background's own, and what it does (from the library) */
+  feat?: { name: string; text?: string }
+  /** 2024: the Origin feat of a human's Versatile trait */
+  versatileFeat?: { name: string; text?: string }
 }
+
+/** A species whose Versatile trait gives an Origin feat of choice (the 2024 human). */
+export const givesVersatileFeat = (sp: SpeciesDef | undefined) => !!sp?.traits.some((t) => t.name === 'Versatile' && /origin feat/i.test(t.text))
 
 /** The final scores: the base, plus what the species (2014) or the background (2024) adds. Never above 20. */
 export function finalScores(c: Choices, cat: Catalog = catalogFor(c.ruleset)): Record<Ability, number> {
@@ -291,8 +298,13 @@ export function buildCharacter(c: Choices, cat: Catalog = catalogFor(c.ruleset))
   const traits: Feature[] = [
     ...cls.features.map((f) => ({ name: f.name, text: f.text })),
     ...species.traits.map((t) => ({ name: t.name, text: t.text })),
-    ...(bg.feat ? [{ name: `${bg.feat} (feat)`, text: `Origin feat from the ${bg.name.toLowerCase()} background.` }] : []),
   ]
+  const feat = c.feat?.name.trim() || bg.feat
+  if (feat) traits.push({ name: feat, text: [`Origin feat from the ${bg.name.toLowerCase()} background.`, c.feat?.name.trim() ? c.feat.text : ''].filter(Boolean).join(' ') })
+  const versatile = givesVersatileFeat(species) && c.versatileFeat?.name.trim()
+  if (versatile && !traits.some((t) => t.name.toLowerCase() === versatile.toLowerCase())) {
+    traits.push({ name: versatile, text: [`Origin feat from the ${species.name.toLowerCase()}'s Versatile trait.`, c.versatileFeat?.text].filter(Boolean).join(' ') })
+  }
   const kit: InventoryItem[] = cls.kit.map((k) => ({ name: k.name, qty: k.qty ?? 1, equipped: !!k.equipped, note: k.note ?? '', ...(k.weight ? { weight: k.weight } : {}) }))
   const slots = allSlots([{ name: cls.name, level: 1 }], c.ruleset, { [cls.name.trim().toLowerCase()]: { die: cls.die, caster: cls.caster ?? null } }) ?? []
   const base = emptyCharacter(c.ruleset)

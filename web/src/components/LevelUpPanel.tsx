@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api'
 import { CLASSES } from '../lib/builder'
 import { cleanRules, loadHomebrew, type ClassRules, type HomebrewOption } from '../lib/homebrew'
-import { fetchLibraryEntry, fitsRules, useLibrary } from '../lib/library'
+import { featText, fetchLibraryEntry, fitsRules, useLibrary } from '../lib/library'
 import { classFeaturesAt, givesAsi, givesEpicBoon, hitDieOf, levelUp, needsSubclass, open5eColumns, SUBCLASSES, subclassLevel, totalLevel, type ClassInfo, type ClassInfos, type Column } from '../lib/levelup'
 import { firstParagraph } from '../lib/open5eRules'
 import { ABILITIES, type Ability, type Feature, type Sheet } from '../lib/sheet'
@@ -210,7 +210,7 @@ export function LevelUpPanel({ sheet, set, onClose }: { sheet: Sheet; set: (patc
           </div>
           {spent === 0 && <div className="cs-line">
             <LibraryInput value={feat} onChange={setFeat} label="Feat taken instead" placeholder={boon ? 'Boon of Fate' : 'A feat instead: Alert'} categories={['feat']}
-              onPick={(p) => { setFeat(p.name); if (p.entry && !featNote.trim()) setFeatNote(firstParagraph(p.entry.data?.desc, 1800)) }} />
+              onPick={(p) => { setFeat(p.name); if (p.entry && !featNote.trim()) setFeatNote(featText(p.entry.data)) }} />
             {feat.trim() && <input className="sv-text" aria-label="What the feat does" placeholder="What it does (optional)" value={featNote} onChange={(e) => setFeatNote(e.target.value)} />}
           </div>}
         </div>

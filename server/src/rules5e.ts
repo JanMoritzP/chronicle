@@ -73,6 +73,13 @@ export function shortRest(sheet: Sheet, spend: number, rng: Rng): { sheet: Sheet
   }
   let features = 0
   for (const group of Object.values(next.features)) for (const f of group) if (f.usage?.type === 'rest' && (f.used ?? 0) > 0) { f.used = 0; features++ }
+  // class resources and counters of a short rest come back; a 2024 "one" resource gives back one use
+  for (const [id, x] of Object.entries(next.spent ?? {})) {
+    if (x.rest === 'long' || !x.used) continue
+    features++
+    if (x.rest === 'short' || x.used <= 1) delete next.spent![id]; else x.used -= 1
+  }
+  for (const c of next.counters ?? []) if (c.rest === 'short' && c.used) { c.used = 0; features++ }
   const lines = [`takes a short rest`]
   if (spent) lines.push(`spends ${spent} hit ${spent === 1 ? 'die' : 'dice'} and heals ${healed}`)
   if (features) lines.push(`${features} ${features === 1 ? 'feature is' : 'features are'} ready again`)
@@ -93,6 +100,9 @@ export function longRest(sheet: Sheet): { sheet: Sheet; lines: string[] } {
   for (const d of [...dice].sort((a, b) => b.sides - a.sides)) { const give = Math.min(back, d.used); d.used -= give; back -= give }
   let features = 0
   for (const group of Object.values(next.features)) for (const f of group) if ((f.usage?.type === 'rest' || f.usage?.type === 'perDay') && (f.used ?? 0) > 0) { f.used = 0; features++ }
+  features += Object.values(next.spent ?? {}).filter((x) => x.used > 0).length + (next.counters ?? []).filter((c) => c.used > 0).length
+  if (next.spent) next.spent = {}
+  for (const c of next.counters ?? []) c.used = 0
   const lines = ['takes a long rest and is at full hit points']
   if (slots) lines.push(`${slots} spell ${slots === 1 ? 'slot is' : 'slots are'} back`)
   if (features) lines.push(`${features} ${features === 1 ? 'feature is' : 'features are'} ready again`)

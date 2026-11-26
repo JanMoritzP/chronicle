@@ -597,6 +597,15 @@ areas:
       - id: sheet.levelup
         name: "Level up a character with hit points, hit dice, spell slots and class features, and count weight and attunement"
         files: [web/src/components/LevelUpPanel.tsx, web/src/lib/levelup.ts, web/src/components/CharacterSheet.tsx]
+      - id: sheet.resources
+        name: "Class resources on the sheet (rages, ki, channel divinity) follow the level, are spent there and come back on a short or long rest; counters kept by hand"
+        files: [web/src/components/SheetResources.tsx, web/src/lib/levelup.ts, server/src/rules5e.ts]
+      - id: sheet.spellbook
+        name: "The spellbook groups cantrips and spells by level with that level's slots, shows what the classes allow, and casting spends a slot"
+        files: [web/src/components/Spellbook.tsx, web/src/lib/spellbook.ts]
+      - id: sheet.feats
+        name: "Feats come from the library: added on the sheet, the background's Origin feat and a human's Versatile feat in the builder"
+        files: [web/src/components/CharacterBuilder.tsx, web/src/lib/library.ts, web/src/lib/builder.ts]
       - id: table.macros
         name: "Macros: saved chat lines with questions and references to the selected token, shared by the GM"
         files: [web/src/components/TableMacros.tsx, web/src/lib/macro.ts, server/src/routes/macros.ts]
