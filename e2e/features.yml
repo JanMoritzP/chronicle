@@ -143,6 +143,9 @@ areas:
       - id: pages.width
         name: "Normal, wide and full page width"
         files: [web/src/lib/pageWidth.ts]
+      - id: pages.article
+        name: "Contents, connections rail and cover on wide screens"
+        files: [web/src/components/PageArticle.tsx, web/src/components/PageView.tsx]
       - id: pages.trash
         name: "Trash and restore"
         files: [web/src/components/Views.tsx]

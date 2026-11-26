@@ -1,5 +1,5 @@
 import { EditorContent, useEditor } from '@tiptap/react'
-import { BookMarked, BookUp, Clock, Copy, Globe, LayoutTemplate, Maximize2, MoreHorizontal, MoveHorizontal, PanelRightOpen, Trash2 } from 'lucide-react'
+import { BookMarked, BookUp, Clock, Copy, Globe, ImagePlus, LayoutTemplate, Maximize2, MoreHorizontal, MoveHorizontal, PanelRightOpen, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, ApiError } from '../api'
 import { buildExtensions } from '../editor/extensions'
@@ -16,7 +16,8 @@ import { searchPages } from '../lib/linkSearch'
 import { useStore } from '../store'
 import { alertDialog, askText, confirmDialog } from '../lib/dialog'
 import { importCharacter } from '../lib/importers'
-import { infoboxNode, typeOf, zonesInText, type BoxZone } from '../lib/pageTypes'
+import { coverBlock, infoboxNode, typeOf, zonesInText, type BoxZone } from '../lib/pageTypes'
+import { PageCover, PageOutline, useArticleSize } from './PageArticle'
 import type { Node as PMNode } from '@tiptap/pm/model'
 import { TypeIcon, useTypes } from './TypeIcon'
 import { TypeLayout, ZoneBlocks } from './TypeLayout'
@@ -405,20 +406,41 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
       </div>
     </InfoboxContext.Provider>
   )
-  const folderName = folders.find((f) => f.id === meta?.folderId)?.name
+  const worldName = useStore((s) => s.workspaces.find((w) => w.id === s.wsId)?.name)
+  const folderPath = useMemo(() => {
+    const out: string[] = []
+    const seen = new Set<string>()
+    for (let f = folders.find((x) => x.id === meta?.folderId); f && !seen.has(f.id); f = folders.find((x) => x.id === f!.parentId)) { seen.add(f.id); out.unshift(f.name) }
+    return out
+  }, [folders, meta?.folderId])
+  const articleRef = useRef<HTMLDivElement>(null)
+  const size = useArticleSize(articleRef)
+  const isCharacter = sheetOf(props)?.kind === 'character' || pageType?.id === 'pc'
+  // the picture across the top: a layout's banner when its top zone is just that, otherwise a cover any page can have
+  const typeCover = pageType && !boxZones.has('top') ? coverBlock(pageType.layout) : null
+  const cover = isCharacter || (pageType && !typeCover && pageType.layout.top.length > 0) ? null
+    : typeCover ? { key: typeCover.key, label: (typeCover.label ?? 'banner').toLowerCase() } : { key: 'cover', label: 'cover' }
+  const coverUrl = cover ? (cover.key === 'portrait' ? props.portrait : props.data?.[cover.key]) : null
+  const showCover = !zen && !!cover && typeof coverUrl === 'string' && !!coverUrl
+  const addCover = !zen && !!cover && !showCover && !readOnly
+  const state = readOnly ? (conn === 'offline' ? 'offline' : 'readonly') : conn === 'offline' || save === 'error' ? 'offline' : !live ? 'connecting' : save
 
   return (
-    <div className={zen ? 'zen' : ''}>
+    <div ref={articleRef} className={`article${zen ? ' zen' : ''}`} data-size={size}>
       {!zen && (
-        <div className="toolbar">
-          <span className="muted ellipsis grow" style={{ fontSize: 13 }}>{folderName ? `${folderName} /` : ''} {title || 'Untitled'}</span>
+        <div className="toolbar page-toolbar">
+          <nav className="crumbs grow" aria-label="Where this page is">
+            {worldName && <span className="crumb">{worldName}</span>}
+            {folderPath.map((f, i) => <span key={i} className="crumb">{f}</span>)}
+            <span className="crumb here">{title || 'Untitled'}</span>
+          </nav>
           {others.length > 0 && (
             <span className="presence" title={`Also here: ${others.map((o) => o.username).join(', ')}`}>
               {others.slice(0, 4).map((o) => <span key={o.id} className="avatar" style={{ background: colorFor(o.username) }}>{o.username.slice(0, 1).toUpperCase()}</span>)}
               {others.length > 4 && <span className="avatar more">+{others.length - 4}</span>}
             </span>
           )}
-          <span className="save-state">{readOnly ? (conn === 'offline' ? 'Offline' : 'Read-only') : conn === 'offline' ? 'Offline, changes sync later' : !live ? 'Connecting…' : save === 'saved' ? 'Saved' : save === 'saving' ? 'Saving…' : save === 'error' ? 'Offline, retrying…' : 'Unsaved'}</span>
+          <span className="save-state" data-state={state}>{readOnly ? (conn === 'offline' ? 'Offline' : 'Read-only') : conn === 'offline' ? 'Offline, changes sync later' : !live ? 'Connecting…' : save === 'saved' ? 'Saved' : save === 'saving' ? 'Saving…' : save === 'error' ? 'Offline, retrying…' : 'Unsaved'}</span>
           <button className="icon-btn" aria-label="Page width" title={`Page width: ${PAGE_WIDTHS.find((w) => w.id === width)?.label}. Click for ${nextWidth.label.toLowerCase()}.`} onClick={() => setPageWidth(nextWidth.id)}><MoveHorizontal size={16} /></button>
           <button className="icon-btn" title="Zen mode (Alt+Z)" onClick={() => useStore.getState().setUi({ zen: true })}><Maximize2 size={16} /></button>
           <button className="icon-btn" title="Open in split view" onClick={() => nav({ type: 'page', id: page.id }, { split: true })}><PanelRightOpen size={16} /></button>
@@ -467,29 +489,40 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
           <button className="btn sm" onClick={() => useStore.getState().setUi({ zen: false })}>Exit (Esc)</button>
         </div>
       )}
-      <div className={zen ? 'page' : `page width-${width}${hasSide ? ' has-side' : ''}`}>
-        <input
-          ref={titleRef}
-          className="page-title"
-          aria-label="Page title"
-          value={title}
-          placeholder="Untitled"
-          readOnly={readOnly}
-          onChange={(e) => { setTitle(e.target.value); schedule({ title: e.target.value }, 600) }}
-          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); editor?.commands.focus('start') } }}
-        />
+      {showCover && <PageCover url={coverUrl as string} label={cover!.label} readOnly={readOnly} set={(v) => setTypeValue(cover!.key, v)} pick={pickImage} />}
+      <div className={zen ? 'page' : `page width-${width}${hasSide ? ' has-side' : ''}${showCover ? ' has-cover' : ''}`}>
+        {!zen && size !== 's' && size !== 'm' && size !== 'l' && <div className="page-rail page-rail-left"><PageOutline editor={editor} /></div>}
+        <div className="page-main">
+        <header className="page-head">
+          <div className="page-eyebrow">
+            {(pageType || !viewer) && (
+              <span className="type-pick" title="Page type">
+                <TypeIcon name={pageType?.icon ?? 'file-text'} size={14} />
+                {viewer ? <span>{pageType?.name}</span> : (
+                  <Select value={pageType?.id ?? ''} onChange={changeType}>
+                    <option value="">Plain page</option>
+                    {types.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </Select>
+                )}
+              </span>
+            )}
+            {addCover && (
+              <button className="btn ghost sm page-add-cover" onClick={async () => { const u = await pickImage(); if (u) setTypeValue(cover!.key, u) }}>
+                <ImagePlus size={14} /> Add {cover!.label}
+              </button>
+            )}
+          </div>
+          <input
+            ref={titleRef}
+            className="page-title"
+            aria-label="Page title"
+            value={title}
+            placeholder="Untitled"
+            readOnly={readOnly}
+            onChange={(e) => { setTitle(e.target.value); schedule({ title: e.target.value }, 600) }}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); editor?.commands.focus('start') } }}
+          />
         <div className="meta-row">
-          {(pageType || !viewer) && (
-            <span className="type-pick" title="Page type">
-              <TypeIcon name={pageType?.icon ?? 'file-text'} size={14} />
-              {viewer ? <span>{pageType?.name}</span> : (
-                <Select value={pageType?.id ?? ''} onChange={changeType}>
-                  <option value="">Plain page</option>
-                  {types.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                </Select>
-              )}
-            </span>
-          )}
           {tags.map((t) => (
             <span key={t} className="chip">
               <a style={{ color: 'inherit', textDecoration: 'none', cursor: 'pointer' }} onClick={() => nav({ type: 'tag', tag: t })}>#{t}</a>
@@ -507,8 +540,8 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
               onBlur={() => tagDraft && addTag(tagDraft)}
             />
           )}
-          {meta && <span style={{ marginLeft: 'auto' }}>{words} words · edited {ago(meta.updatedAt)}</span>}
         </div>
+        </header>
         {(pageType?.id === 'pc' || sheetOf(props)?.kind === 'character' || players.length > 0) && !zen && <PlayedBy players={players} readOnly={viewer} onChange={setPlayers} />}
         {pageType?.id === 'person' && sheetOf(props)?.kind === 'character' && !viewer && !zen && (
           <p className="cs-convert muted">This person has a character sheet. Player characters now have their own special page, without the details box.
@@ -542,37 +575,45 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
           : <div className="cs-start"><div><b>Not in the character builder yet</b><span className="muted">Give this {pageType.name.toLowerCase()} the numbers the builder needs, and it can be chosen there.</span></div><button className="btn sm" onClick={() => setRules(emptyRules(pageType.id as 'class'))}>Add rules for the builder</button></div>)}
         {pageType ? (
           <TypeLayout layout={pageType.layout} {...blockProps} inText={boxZones} onMoveToText={editor?.isEditable ? moveToText : undefined}
-            body={surface} />
+            coverTop={!!typeCover} body={surface} />
         ) : (
           <div className="editor">{surface}</div>
         )}
+        </div>
 
         {!zen && (
-          <>
+          <section className="page-rail page-rail-right" aria-label="About this page">
+            <div className="section page-facts">
+              <h3>About this page</h3>
+              <dl>
+                <dt>Words</dt><dd>{words.toLocaleString()}</dd>
+                {meta && <><dt>Edited</dt><dd title={new Date(meta.updatedAt).toLocaleString()}>{ago(meta.updatedAt)}</dd></>}
+                <dt>Folder</dt><dd className="ellipsis">{folderPath.length ? folderPath.join(' / ') : <span className="muted">None</span>}</dd>
+                {pageType && <><dt>Type</dt><dd>{pageType.name}</dd></>}
+              </dl>
+            </div>
             <PageWorldSection pageId={page.id} readOnly={viewer} version={worldVersion} />
             <PageRelationsSection pageId={page.id} readOnly={viewer} version={worldVersion} />
-            {backlinks.length > 0 && (
-              <div className="section">
-                <h3>Linked from ({backlinks.length})</h3>
-                {backlinks.map((b) => {
-                  const src = allPages.find((p) => p.id === b.sourceId)
-                  return src && (
-                    <a key={b.sourceId} className="backlink" data-page-id={src.id} onClick={() => nav({ type: 'page', id: src.id })}>
-                      {src.icon} {src.title || 'Untitled'}
-                    </a>
-                  )
-                })}
-              </div>
-            )}
+            <div className="section">
+              <h3>Linked from{backlinks.length > 0 && <span className="count">{backlinks.length}</span>}</h3>
+              {backlinks.length ? backlinks.map((b) => {
+                const src = allPages.find((p) => p.id === b.sourceId)
+                return src && (
+                  <a key={b.sourceId} className="backlink" data-page-id={src.id} onClick={() => nav({ type: 'page', id: src.id })}>
+                    {src.icon && <span className="backlink-icon">{src.icon}</span>}<span className="ellipsis">{src.title || 'Untitled'}</span>
+                  </a>
+                )
+              }) : <p className="rail-empty">No page links here yet. Type {'{{'}{title || 'its name'}{'}}'} in another page to link it.</p>}
+            </div>
             {unlinked.length > 0 && (
               <div className="section">
-                <h3>Unlinked mentions ({unlinked.length})</h3>
+                <h3>Unlinked mentions<span className="count">{unlinked.length}</span></h3>
                 {unlinked.slice(0, 8).map((p) => (
-                  <a key={p.id} className="backlink" data-page-id={p.id} onClick={() => nav({ type: 'page', id: p.id })}>{p.title || 'Untitled'}</a>
+                  <a key={p.id} className="backlink" data-page-id={p.id} onClick={() => nav({ type: 'page', id: p.id })}><span className="ellipsis">{p.title || 'Untitled'}</span></a>
                 ))}
               </div>
             )}
-          </>
+          </section>
         )}
       </div>
       {zen && <div className="zen-count">{words} words</div>}

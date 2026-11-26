@@ -1,4 +1,4 @@
-import { BUILTIN_TYPES, SAMPLE_SOURCE, duplicateKeys, freshKey, infoboxNode, layoutKeys, layoutToSource, normalizeLayout, parseSource, startingDoc, zonesInText, type Layout } from '../web/src/lib/pageTypes'
+import { BUILTIN_TYPES, SAMPLE_SOURCE, coverBlock, duplicateKeys, freshKey, infoboxNode, layoutKeys, layoutToSource, normalizeLayout, parseSource, startingDoc, zonesInText, type Layout } from '../web/src/lib/pageTypes'
 
 let failed = 0
 const check = (name: string, ok: boolean, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name} ${extra}`); if (!ok) failed++ }
@@ -40,7 +40,10 @@ check('a new person starts with its side as a box, then the starter text', fresh
 check('the box floats where the side column was', infoboxNode(normalizeLayout({ columns: 'side-left' }), 'side').attrs!.side === 'left' && infoboxNode(person.layout, 'side').attrs!.side === 'right')
 check('the box is about as wide as the side column was', (infoboxNode(normalizeLayout({ sideWidth: 380 }), 'side').attrs!.size as number) > (infoboxNode(normalizeLayout({ sideWidth: 240 }), 'side').attrs!.size as number))
 const location = startingDoc(BUILTIN_TYPES.find((t) => t.id === 'location')!)
-check('a location gets a full-width top box and a side box', location.content[0].attrs.zone === 'top' && location.content[0].attrs.side === 'full' && location.content[1].attrs.zone === 'side')
+check('a location keeps its banner as the cover and gets a side box', location.content[0].attrs.zone === 'side' && !location.content.some((n: any) => n.attrs?.zone === 'top'))
+check('a top zone of one picture is the cover', coverBlock(BUILTIN_TYPES.find((t) => t.id === 'location')!.layout)?.key === 'portrait' && coverBlock(person.layout) === null)
+const fieldsTop = normalizeLayout({ inText: true, top: [{ type: 'fields', fields: [{ key: 'a', label: 'A' }] }], main: [{ type: 'body' }] })
+check('a top zone of fields still starts as a full-width box', startingDoc({ ...person, layout: fieldsTop }).content[0].attrs.zone === 'top')
 const imported = startingDoc(person, { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Imported' }] }] })
 check('given text is kept, with the box before it', imported.content.length === 2 && imported.content[0].type === 'infobox' && imported.content[1].content[0].text === 'Imported')
 check('a text that already has the box gets no second one', startingDoc(person, fresh).content.filter((n: any) => n.type === 'infobox').length === 1)

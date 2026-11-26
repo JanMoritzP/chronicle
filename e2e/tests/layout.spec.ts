@@ -195,3 +195,34 @@ test('a picture can be resized by dragging its side edge', { tag: '@feature:edit
   await expect(figure).toHaveAttribute('style', /width: \d+%/)
   await expect(app.locator('.save-state')).toHaveText('Saved')
 })
+
+test('on a wide screen a page shows its contents and connections beside the text, and any page can have a cover', { tag: '@feature:pages.article' }, async ({ app, makePage }) => {
+  await app.setViewportSize({ width: 2560, height: 1300 })
+  const doc = { type: 'doc', content: [
+    { type: 'paragraph', content: [{ type: 'text', text: 'Fog over the harbour.' }] },
+    { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'History' }] },
+    { type: 'paragraph', content: [{ type: 'text', text: 'Old stones.' }] },
+  ] }
+  await makePage('Lantern Coast', { content: doc })
+  await app.reload()
+  await openPage(app, 'Lantern Coast')
+  await expect(app.locator('.article')).toHaveAttribute('data-size', /xx?l/)
+  await expect(app.getByRole('navigation', { name: 'Contents of this page' })).toContainText('History')
+  await expect(app.getByRole('region', { name: 'About this page' })).toContainText('No page links here yet')
+  const chooser = app.waitForEvent('filechooser')
+  await app.locator('.page-head').hover()
+  await app.getByRole('button', { name: 'Add cover' }).click()
+  await (await chooser).setFiles({ name: 'coast.png', mimeType: 'image/png', buffer: makePng(600, 200) })
+  await expect(app.locator('.page-cover img')).toBeVisible()
+  await expect(app.locator('.save-state')).toHaveText('Saved')
+  await app.reload()
+  await openPage(app, 'Lantern Coast')
+  await expect(app.locator('.page-cover img')).toBeVisible()
+  await app.locator('.page-cover').hover()
+  await app.getByRole('button', { name: 'Remove the cover' }).click()
+  await expect(app.locator('.page-cover')).toHaveCount(0)
+  // a narrow window keeps the text alone and puts the connections under it
+  await app.setViewportSize({ width: 1100, height: 900 })
+  await expect(app.locator('.article')).toHaveAttribute('data-size', /^[sm]$/)
+  await expect(app.getByRole('navigation', { name: 'Contents of this page' })).toHaveCount(0)
+})

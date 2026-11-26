@@ -24,6 +24,8 @@ interface Props {
   inText?: Set<BoxZone>
   /** puts a zone into the text as a box */
   onMoveToText?: (zone: BoxZone) => void
+  /** the page draws the top zone as its cover */
+  coverTop?: boolean
 }
 
 function ImageBlock({ b, value, readOnly, set, pick }: { b: Extract<Block, { type: 'image' }>; value?: string; readOnly: boolean; set: (v: string | null) => void; pick: () => Promise<string | null> }) {
@@ -125,8 +127,8 @@ export function ZoneBlocks({ blocks, zone, data, readOnly, setValue, pickImage, 
   )
 }
 
-export function TypeLayout({ layout, data, readOnly, setValue, pickImage, body, sheet, inText, onMoveToText }: Props) {
-  const shown = (z: BoxZone) => !inText?.has(z)
+export function TypeLayout({ layout, data, readOnly, setValue, pickImage, body, sheet, inText, onMoveToText, coverTop }: Props) {
+  const shown = (z: BoxZone) => !inText?.has(z) && !(z === 'top' && coverTop)
   const render = (blocks: Block[], zone: string) => <ZoneBlocks blocks={blocks} zone={zone} data={data} readOnly={readOnly} setValue={setValue} pickImage={pickImage} sheet={sheet} body={body} />
   const move = (z: BoxZone) => !readOnly && onMoveToText && (
     <button className="btn ghost sm tl-move" title="Show these blocks as a box inside the text, where you can move it, put it left or right and change its width" onClick={() => onMoveToText(z)}>

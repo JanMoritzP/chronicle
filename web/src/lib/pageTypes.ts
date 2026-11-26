@@ -282,12 +282,18 @@ export function zonesInText(doc: any): Set<BoxZone> {
   return out
 }
 
-/** A new page of a type whose layout puts its zones in the text: a box for each zone that has blocks, then the given text or the type's starter. */
+/** A top zone that is a single picture is drawn as the page's cover, across the whole page above the title. */
+export function coverBlock(layout: Layout): Extract<Block, { type: 'image' }> | null {
+  const b = layout.top.length === 1 ? layout.top[0] : null
+  return b?.type === 'image' ? b : null
+}
+
+/** A new page of a type whose layout puts its zones in the text: a box for each zone that has blocks (a cover stays the cover), then the given text or the type's starter. */
 export function startingDoc(type: ResolvedType, content?: any): any {
   if (!type.layout.inText) return content
   const has = zonesInText(content)
   const l = type.layout
-  const boxes = (['top', 'side'] as const).filter((z) => l[z].length > 0 && !has.has(z)).map((z) => infoboxNode(l, z))
+  const boxes = (['top', 'side'] as const).filter((z) => l[z].length > 0 && !has.has(z) && !(z === 'top' && coverBlock(l))).map((z) => infoboxNode(l, z))
   const bottom = l.bottom.length > 0 && !has.has('bottom') ? [infoboxNode(l, 'bottom')] : []
   const starter = STARTERS[type.id]
   const chain = starter ? runChain(starter) : null
