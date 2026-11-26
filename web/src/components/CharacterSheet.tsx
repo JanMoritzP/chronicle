@@ -17,6 +17,8 @@ import { HomebrewDialog } from './Homebrew'
 import { exportCharacter } from '../lib/importers'
 import { FeatureEditor, type SheetPatch } from './SheetView'
 import { Select } from './Select'
+import { EntryLink, SheetLinksHost, SpellLinks } from './SheetLinks'
+import { makeLinker, useAutoLinks } from './useAutoLinks'
 
 // A player character: the same sheet as a creature, with what a player tracks through a game. Editable by people who can edit the page;
 // everything derived (modifiers, saves, skills, spell save DC) is worked out from the level and the proficiencies.
@@ -108,7 +110,17 @@ export function CharacterSheet({ sheet, set, roll, pictures }: { sheet: Sheet; s
     else act(kind === 'species' ? speciesPatch(sheet, e.data, e.name) : backgroundPatch(sheet, e.data, e.name))
   }
 
+  // in the text of a feature, the names of spells, conditions and other entries link to them
+  const autoLinks = useAutoLinks()
+  const featureText = (text: string) => { const lk = makeLinker(autoLinks); return lk ? lk(text, false) : text }
+  const who = [
+    sheet.species && <EntryLink key="s" name={sheet.species} categories={['species']} />,
+    sheet.background && <EntryLink key="b" name={sheet.background} categories={['background']} />,
+    sheet.alignment, sheet.player && `played by ${sheet.player}`,
+  ].filter(Boolean)
+
   return (
+    <SheetLinksHost ruleset={sheet.ruleset}>
     <div className={`cs${pictures?.banner ? ' has-banner' : ''}`} aria-label="Character sheet">
       {pictures?.banner && <div className="cs-banner" aria-hidden style={{ backgroundImage: `url("${pictures.banner}")` }} />}
       <header className="cs-head">
@@ -124,7 +136,7 @@ export function CharacterSheet({ sheet, set, roll, pictures }: { sheet: Sheet; s
               <Txt value={sheet.background ?? ''} label="Background" placeholder="Background" onChange={(v) => act({ background: v })} />
               <Txt value={sheet.alignment} label="Alignment" placeholder="Alignment" onChange={(v) => act({ alignment: v })} />
             </>
-          ) : <span className="muted">{[sheet.species, sheet.background, sheet.alignment, sheet.player && `played by ${sheet.player}`].filter(Boolean).join(' · ')}</span>}
+          ) : <span className="muted">{who.map((w, i) => <span key={i}>{i > 0 && ' · '}{w}</span>)}</span>}
         </div>
           </div>
         </div>
@@ -150,7 +162,7 @@ export function CharacterSheet({ sheet, set, roll, pictures }: { sheet: Sheet; s
                   <Txt value={c.subclass ?? ''} label={`Subclass ${i + 1}`} placeholder="Subclass" onChange={(v) => act({ classes: classes.map((x, j) => (j === i ? { ...x, subclass: v } : x)) })} />
                   {classes.length > 1 && <button className="icon-btn" aria-label={`Remove class ${i + 1}`} onClick={() => act({ classes: classes.filter((_, j) => j !== i) })}><Trash2 size={12} /></button>}
                 </>
-              ) : <span>{c.name} {c.level}{c.subclass ? ` (${c.subclass})` : ''}</span>}
+              ) : <span><EntryLink name={c.name} categories={['class']} /> {c.level}{c.subclass ? <> (<EntryLink name={c.subclass} categories={['class']} />)</> : ''}</span>}
             </span>
           ))}
           {edit && classes.length < 6 && <button className="btn sm" onClick={() => act({ classes: [...classes, { name: '', level: 1 }] })}><Plus size={12} /> Class</button>}
@@ -258,16 +270,16 @@ export function CharacterSheet({ sheet, set, roll, pictures }: { sheet: Sheet; s
         {edit && <LibraryAdd label="Add a spell from the library" categories={['spell']} onPick={(e) => { const lv = Number(e.data?.level ?? e.data?.level_int ?? 0); act({ spells: `${sheet.spells ? `${sheet.spells}
 ` : ''}${lv > 0 ? `Level ${lv}` : 'Cantrip'}: ${e.name}` }) }} />}
         {edit ? <textarea className="sv-area" aria-label="Spells" rows={3} placeholder="Cantrips and spells known or prepared" value={sheet.spells ?? ''} onChange={(e) => act({ spells: e.target.value })} />
-          : sheet.spells ? <p className="cs-notes">{sheet.spells}</p> : null}
+          : sheet.spells ? <p className="cs-notes"><SpellLinks text={sheet.spells} /></p> : null}
       </section>}
 
       <section className="cs-features" aria-label="Features and attacks" {...place('features')}>
         <h4>Attacks and spells</h4>
         {edit ? <FeatureEditor group="actions" list={features('actions')} set={(list) => act({ 'features.actions': list })} />
-          : features('actions').map((f, i) => <p key={i}><b><i>{f.name}.</i></b> {f.text}</p>)}
+          : features('actions').map((f, i) => <p key={i}><b><i><EntryLink name={f.name} categories={['spell', 'item', 'magicitem']} />.</i></b> {featureText(f.text)}</p>)}
         <h4>Features and traits</h4>
         {edit ? <FeatureEditor group="traits" list={features('traits')} set={(list) => act({ 'features.traits': list })} />
-          : features('traits').map((f, i) => <p key={i}><b><i>{f.name}.</i></b> {f.text}</p>)}
+          : features('traits').map((f, i) => <p key={i}><b><i><EntryLink name={f.name} categories={['feat', 'rule', 'condition', 'spell']} />.</i></b> {featureText(f.text)}</p>)}
       </section>
 
       {rules.sheetFields.length > 0 && (
@@ -309,7 +321,7 @@ export function CharacterSheet({ sheet, set, roll, pictures }: { sheet: Sheet; s
                   <label className="sv-mini" title="Attuned"><input type="checkbox" aria-label={`${it.name || 'Item'} attuned`} checked={!!it.attuned} onChange={(e) => setItems(items.map((x, j) => (j === i ? { ...x, attuned: e.target.checked } : x)))} />Attuned</label>
                   <button className="icon-btn" aria-label={`Remove ${it.name || 'item'}`} onClick={() => setItems(items.filter((_, j) => j !== i))}><Trash2 size={12} /></button>
                 </>
-              )   : <span>{it.qty > 1 ? `${it.qty} × ` : ''}{it.name}{it.in ? ` (in ${it.in})` : ''}{it.equipped ? ' (equipped)' : ''}{it.attuned ? ' (attuned)' : ''}{it.charges ? <small className="muted"> {it.charges.max - it.charges.used}/{it.charges.max} charges</small> : null}{it.weight ? <small className="muted"> {it.weight} lb</small> : null}{it.note ? <small className="muted"> {it.note}</small> : null}</span>}
+              )   : <span>{it.qty > 1 ? `${it.qty} × ` : ''}<EntryLink name={it.name} categories={['magicitem', 'item']} />{it.in ? ` (in ${it.in})` : ''}{it.equipped ? ' (equipped)' : ''}{it.attuned ? ' (attuned)' : ''}{it.charges ? <small className="muted"> {it.charges.max - it.charges.used}/{it.charges.max} charges</small> : null}{it.weight ? <small className="muted"> {it.weight} lb</small> : null}{it.note ? <small className="muted"> {it.note}</small> : null}</span>}
             </li>
           ))}
         </ul>
@@ -346,5 +358,6 @@ export function CharacterSheet({ sheet, set, roll, pictures }: { sheet: Sheet; s
         </div>
       </section>
     </div>
+    </SheetLinksHost>
   )
 }

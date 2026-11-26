@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { get as idbGet, set as idbSet, del as idbDel } from 'idb-keyval'
 import { api, ApiError } from './api'
-import { resolveTypes } from './lib/pageTypes'
+import { resolveTypes, startingDoc } from './lib/pageTypes'
 import { askText } from './lib/dialog'
 import type { Bootstrap, WorldSettings, Folder, LinkRow, PageMeta, PageType, StatTemplateRow, Template, User, Workspace, Zettel } from './types'
 import { findPageByName } from './lib/data'
@@ -282,7 +282,7 @@ export const useStore = create<State>((set, get) => ({
     const type = opts.type ? resolveTypes(get().data.pageTypes).find((t) => t.id === opts.type) : undefined
     const tags = [...new Set([...(opts.tags ?? []), ...(type?.tag ? [type.tag] : [])])]
     const created = await api.createPage(ws, {
-      title: opts.title ?? '', folderId: opts.folderId ?? null, content: opts.content,
+      title: opts.title ?? '', folderId: opts.folderId ?? null, content: type ? startingDoc(type, opts.content) : opts.content,
       props: type ? { ...opts.props, type: type.id } : opts.props,
       tags: tags.length ? tags : undefined, sourceZettelId: opts.sourceZettelId,
     })

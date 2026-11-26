@@ -25,18 +25,26 @@ export const CHAIN_TAGS: { name: string; label: string }[] = [
   { name: 'table', label: 'Table, e.g. table3x4' }, { name: 'todo', label: 'Todo' },
   { name: 'callout', label: 'Note box' }, { name: 'warning', label: 'Warning box' }, { name: 'aloud', label: 'Read-aloud box' }, { name: 'secret', label: 'Secret box (closed in shared pages)' },
   { name: 'fold', label: 'Collapsible section, e.g. fold{Title}' }, { name: 'cols', label: 'Columns, e.g. cols3' }, { name: 'col', label: 'Column' },
+  { name: 'side', label: 'Side box, the text flows around it' }, { name: 'sidel', label: 'Side box on the left' },
   { name: 'toc', label: 'Table of contents' }, { name: 'date', label: 'The date today' }, { name: 'roll', label: 'Roll table, e.g. roll20' },
 ]
 
-/** Ready-made structures. They sit below the world's own templates, so a template with the same name wins. */
+/**
+ * Ready-made structures. They sit below the world's own templates, so a template with the same name wins.
+ * Each starts with a side box of quick facts that the text flows around: it can be moved, widened or deleted like any block.
+ */
 export const PRESETS: Record<string, { label: string; sub: string; chain: string }> = {
-  npc: { label: 'NPC sheet', sub: 'Name, look, voice, goal and a secret', chain: 'h2{Name}+(ul>li{Race and class}+li{Look}+li{Voice and manner}+li{Wants})+h3{Secrets}+secret>p' },
-  place: { label: 'Place', sub: 'Name, sights, people and a secret', chain: 'h2{Name}+h3{Sights and sounds}+p+h3{Who is here}+(ul>li*3)+h3{Secrets}+secret>p' },
-  encounter: { label: 'Encounter', sub: 'Setting, foes, terrain, loot and outcome', chain: 'h2{Encounter}+p{Where and why}+(ul>li{Foes}+li{Terrain and hazards}+li{Treasure})+h3{Outcome}+p' },
+  npc: { label: 'NPC sheet', sub: 'Quick facts in a side box, look, voice, what they know and a secret', chain: '(side>p{Race and class: }+p{Age: }+p{Home: }+p{Wants: })+p{Who they are, in two sentences.}+h3{Look and voice}+p+h3{What they know}+(ul>li*2)+secret{What they hide}' },
+  place: { label: 'Place', sub: 'Quick facts in a side box, a read-aloud start, people and a secret', chain: '(side>p{Kind: }+p{Region: }+p{Ruler: }+p{Danger: })+aloud{What the players see, hear and smell.}+h3{Who is here}+(ul>li*3)+h3{Places inside}+(ul>li*2)+secret{What is hidden here}' },
+  encounter: { label: 'Encounter', sub: 'Foes and loot in a side box, terrain, tactics and outcome', chain: '(side>p{Foes: }+p{Difficulty: }+p{Treasure: })+aloud{What the players see first.}+h3{Terrain and hazards}+(ul>li*2)+h3{Tactics}+p+h3{Outcome}+p' },
+  shop: { label: 'Shop or inn', sub: 'Owner and prices in a side box, wares and rumours', chain: '(side>p{Owner: }+p{Prices: }+p{Open: })+aloud{What the players see as they come in.}+h3{For sale}+table4x3+h3{Rumours}+(ul>li*2)+secret{What the owner hides}' },
+  quest: { label: 'Quest', sub: 'Who gives it and the reward in a side box, steps and complications', chain: '(side>p{Given by: }+p{Reward: }+p{Deadline: })+p{What has to be done, in one sentence.}+h3{Steps}+(task>li*3)+h3{Complications}+(ul>li*2)+secret{The truth behind it}' },
+  session: { label: 'Session notes', sub: 'Date and players in a side box, recap, plan and notes', chain: '(side>p{Date: }+p{Players: }+p{Where: })+h3{Recap}+p+h3{Plan}+(task>li*3)+h3{Notes}+p' },
+  faction: { label: 'Faction', sub: 'Leader and base in a side box, members, allies and a secret plan', chain: '(side>p{Leader: }+p{Base: }+p{Symbol: })+p{What they want, in one sentence.}+h3{Members}+(ul>li*3)+h3{Allies and enemies}+(ul>li*2)+secret{Their real plan}' },
 }
 CHAIN_TAGS.push(...Object.entries(PRESETS).map(([name, p]) => ({ name, label: p.label })))
 
-const ALIASES: Record<string, string> = { text: 'p', bullet: 'ul', number: 'ol', checklist: 'task', divider: 'hr', img: 'image', blockquote: 'quote', warn: 'warning', note: 'callout', info: 'callout', columns: 'cols' }
+const ALIASES: Record<string, string> = { text: 'p', bullet: 'ul', number: 'ol', checklist: 'task', divider: 'hr', img: 'image', blockquote: 'quote', warn: 'warning', note: 'callout', info: 'callout', columns: 'cols', sidebox: 'side', aside: 'side' }
 const CALLOUTS: Record<string, string> = { callout: 'info', warning: 'warning', aloud: 'aloud', secret: 'secret' }
 const DICE = [4, 6, 8, 10, 12, 20]
 const LISTS = { ul: ['bulletList', 'listItem'], ol: ['orderedList', 'listItem'], task: ['taskList', 'taskItem'] } as const
@@ -221,6 +229,10 @@ function expandEl(el: El, parent: Parent, n: number, ctx: Ctx, mayAct: boolean):
       const blocks = kids()
       return [{ type: 'fold', attrs: { title: text ?? '' }, content: blocks.length ? blocks : [para(null)] }]
     }
+    case 'side': case 'sidel': {
+      const blocks = [...(text !== null ? [para(text)] : []), ...kids()]
+      return [{ type: 'aside', attrs: { side: name === 'sidel' ? 'left' : 'right', size: 'm' }, content: blocks.length ? blocks : [para(null)] }]
+    }
     case 'toc': noText(); return [{ type: 'toc' }, ...kids()]
     case 'date': noText(); return [para(new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })), ...kids()]
     case 'li':
@@ -264,6 +276,7 @@ function label(n: Json): string {
     case 'callout': return ({ info: 'Note box', warning: 'Warning box', aloud: 'Read-aloud box', secret: 'Secret box' } as Record<string, string>)[String(n.attrs?.kind)] ?? 'Note box'
     case 'fold': return 'Collapsible section'
     case 'columns': return `Columns (${items})`
+    case 'aside': return 'Side box'
     case 'toc': return 'Table of contents'
     case 'codeBlock': return 'Code block'
     case 'horizontalRule': return 'Divider'

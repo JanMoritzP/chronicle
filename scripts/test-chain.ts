@@ -90,10 +90,14 @@ check('a die that does not exist is refused', err('roll7')?.error.includes('d20'
 check('date inserts text', nodes('date')[0].type === 'paragraph' && textOf(nodes('date')[0]).length > 5)
 const preset = (src: string) => { const r = runChain(src, {}); if (!r.ok) throw new Error(r.error); return r.nodes }
 n = preset('npc')
-check('presets expand', n[0].type === 'heading' && n.some((x) => x.type === 'callout' && x.attrs?.kind === 'secret') && n.some((x) => x.type === 'bulletList'))
-check('every preset is valid', ['npc', 'place', 'encounter'].every((x) => runChain(x, {}).ok))
-check('a template with the same name wins over a preset', nodes('npc').length === 2 && preset('npc').length === 4)
-check('presets repeat and chain', preset('place*2').length === preset('place').length * 2 && types(preset('h2+place')).startsWith('heading,heading'))
+check('presets expand', n[0].type === 'aside' && n.some((x) => x.type === 'callout' && x.attrs?.kind === 'secret') && n.some((x) => x.type === 'bulletList'))
+check('every preset is valid and starts with a side box', ['npc', 'place', 'encounter', 'shop', 'quest', 'session', 'faction'].every((x) => { const r = runChain(x, {}); return r.ok && r.nodes[0].type === 'aside' }))
+check('a template with the same name wins over a preset', nodes('npc').length === 2 && preset('npc').length > 2)
+n = nodes('(side>p{A}+p{B})+sidel{C}')
+check('side holds blocks and floats right, sidel left', n[0].type === 'aside' && n[0].attrs?.side === 'right' && n[0].content!.length === 2 && n[1].attrs?.side === 'left' && textOf(n[1]) === 'C')
+check('sidebox and aside are names for side', nodes('sidebox')[0].type === 'aside' && nodes('aside')[0].content![0].type === 'paragraph')
+check('summary names the side box', ok('side').summary === 'Side box', ok('side').summary)
+check('presets repeat and chain', preset('place*2').length === preset('place').length * 2 && types(preset('h2+place')).startsWith('heading,aside,callout'))
 check('summary names the new blocks', ok('secret+fold+cols+toc').summary === 'Secret box, Collapsible section, Columns (2), Table of contents', ok('secret+fold+cols+toc').summary)
 
 // summary

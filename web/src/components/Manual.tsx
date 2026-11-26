@@ -167,7 +167,8 @@ const SECTIONS: Section[] = [
     body: () => (
       <>
         <p>Save a page you reuse as a template from its <b>…</b> menu, or write one under <b>Templates</b>. Then type <Code>/</Code> and its name to insert it at the cursor. Give it a short description: the slash menu shows it.</p>
-        <p>The presets <Code>/npc</Code>, <Code>/place</Code> and <Code>/encounter</Code> are ready-made starting points. A template with the same name replaces a preset.</p>
+        <p>The built-in templates <Code>/npc</Code>, <Code>/place</Code>, <Code>/encounter</Code>, <Code>/shop</Code>, <Code>/quest</Code>, <Code>/session</Code> and <Code>/faction</Code> are ready-made starting points, listed under <b>Templates</b> with a button for a new page. Each starts with a side box of quick facts that the text flows around: drag it, put it on the other side, widen it or delete it like any block. <b>Customise</b> copies one into a template of your own, which then replaces it.</p>
+        <p>A new special page (person, monster, location…) shows its portrait, fields and stat block as a box in its text in the same way. The box keeps its values in the page's fields, so links and the character builder still see them. Its last button puts it back in the fixed side column; <b>Move into the text</b> there brings it back. Pages made before this keep the fixed column until you move it.</p>
       </>
     ),
   },

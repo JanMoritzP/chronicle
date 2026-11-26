@@ -1,6 +1,7 @@
 import { parse as parseYaml, stringify as toYaml } from 'yaml'
 import type { LibraryCategory, PageMeta, PageType } from '../types'
 import { LIBRARY_CATEGORIES } from './library'
+import { runChain, type Json } from '../editor/chain'
 
 /** A field is plain text, long text, or a link to library entries (class, species, spells...) that can also point at imported pages. */
 export interface FieldDef { key: string; label: string; placeholder?: string; multiline?: boolean; library?: LibraryCategory; multi?: boolean }
@@ -18,6 +19,8 @@ export interface Layout {
   flow: 'columns' | 'wrap'
   /** columns flow only: the side stays in view while a long text scrolls past */
   sticky: boolean
+  /** new pages get the top and side zones as boxes in their text, which can be moved, floated and resized; pages without the box keep the fixed zones */
+  inText: boolean
   top: Block[]
   side: Block[]
   main: Block[]
@@ -75,6 +78,7 @@ export function normalizeLayout(raw: any): Layout {
     sideWidth: Math.min(520, Math.max(160, Number(raw.sideWidth) || 280)),
     flow: raw.flow === 'wrap' ? 'wrap' : 'columns',
     sticky: raw.sticky === true,
+    inText: raw.inText === true,
     top: zone(raw.top, 'top'), side: zone(raw.side, 'side'), main: zone(raw.main, 'main'), bottom: zone(raw.bottom, 'bottom'),
   }
   const has = (b: Block[]) => b.some((x) => x.type === 'body')
@@ -130,11 +134,11 @@ export function freshKey(layout: Layout, base: string): string {
 
 const f = (key: string, label: string, extra: Partial<FieldDef> = {}): FieldDef => ({ key, label, ...extra })
 
-const BUILTIN_LAYOUTS: Record<string, { name: string; icon: string; tag: string; layout: any }> = {
+const BUILTIN_LAYOUTS: Record<string, { name: string; icon: string; tag: string; layout: any; /** a chain (see editor/chain.ts) for the text of a new page */ starter?: string }> = {
   person: {
     name: 'Person', icon: 'user', tag: 'person',
-    layout: {
-      columns: 'side-right', flow: 'wrap',
+    starter: 'p+h2{Appearance}+p+h2{Personality}+p+h2{History}+p+secret',
+    layout: { inText: true, columns: 'side-right', flow: 'wrap',
       side: [
         { type: 'image', key: 'portrait', shape: 'square' },
         { type: 'fields', title: 'Details', fields: [f('race', 'Race', { library: 'species' }), f('class', 'Class / Role', { library: 'class' }), f('age', 'Age'), f('alignment', 'Alignment'), f('affiliation', 'Affiliation'), f('home', 'Home')] },
@@ -144,8 +148,8 @@ const BUILTIN_LAYOUTS: Record<string, { name: string; icon: string; tag: string;
   },
   monster: {
     name: 'Monster', icon: 'skull', tag: 'monster',
-    layout: {
-      columns: 'side-right', sideWidth: 380, flow: 'wrap',
+    starter: 'p+h2{Tactics}+p+h2{Lair}+p+h2{Lore}+p',
+    layout: { inText: true, columns: 'side-right', sideWidth: 380, flow: 'wrap',
       side: [
         { type: 'statblock', key: 'main', template: '5e-monster' },
         { type: 'fields', title: 'Classification', fields: [f('size', 'Size', { library: 'size' }), f('creature_type', 'Type', { library: 'creaturetype' }), f('alignment', 'Alignment', { library: 'alignment' })] },
@@ -156,48 +160,56 @@ const BUILTIN_LAYOUTS: Record<string, { name: string; icon: string; tag: string;
   },
   spell: {
     name: 'Spell', icon: 'wand-sparkles', tag: 'spell',
-    layout: { columns: 'side-right', sideWidth: 380, flow: 'wrap', side: [{ type: 'statblock', key: 'main', template: '5e-spell' }], main: [{ type: 'body' }] },
+    starter: 'p',
+    layout: { inText: true, columns: 'side-right', sideWidth: 380, flow: 'wrap', side: [{ type: 'statblock', key: 'main', template: '5e-spell' }], main: [{ type: 'body' }] },
   },
   item: {
     name: 'Item', icon: 'gem', tag: 'item',
-    layout: { columns: 'side-right', sideWidth: 380, flow: 'wrap', side: [{ type: 'statblock', key: 'main', template: '5e-item' }, { type: 'image', key: 'portrait', shape: 'square' }], main: [{ type: 'body' }] },
+    starter: 'p+h2{History}+p',
+    layout: { inText: true, columns: 'side-right', sideWidth: 380, flow: 'wrap', side: [{ type: 'statblock', key: 'main', template: '5e-item' }, { type: 'image', key: 'portrait', shape: 'square' }], main: [{ type: 'body' }] },
   },
   class: {
     name: 'Class', icon: 'shield', tag: 'class',
-    layout: {
-      columns: 'side-right', flow: 'wrap',
+    starter: 'p+h2{Features}+p',
+    layout: { inText: true, columns: 'side-right', flow: 'wrap',
       side: [{ type: 'fields', title: 'Class', fields: [f('hit_die', 'Hit die'), f('saves', 'Saving throws', { library: 'ability', multi: true }), f('primary', 'Primary ability', { library: 'ability', multi: true }), f('subclass_of', 'Subclass of', { library: 'class' })] }],
       main: [{ type: 'body' }],
     },
   },
   species: {
     name: 'Species', icon: 'users', tag: 'species',
-    layout: { columns: 'side-right', flow: 'wrap', side: [{ type: 'fields', title: 'Species', fields: [f('subspecies_of', 'Subspecies of', { library: 'species' })] }], main: [{ type: 'body' }] },
+    starter: 'p+h2{Traits}+p',
+    layout: { inText: true, columns: 'side-right', flow: 'wrap', side: [{ type: 'fields', title: 'Species', fields: [f('subspecies_of', 'Subspecies of', { library: 'species' })] }], main: [{ type: 'body' }] },
   },
-  background: { name: 'Background', icon: 'book', tag: 'background', layout: { columns: 'single', main: [{ type: 'body' }] } },
+  background: { name: 'Background', icon: 'book', tag: 'background', starter: 'p+h2{Benefits}+(ul>li*3)',
+    layout: { inText: true, columns: 'single', main: [{ type: 'body' }] } },
   feat: {
     name: 'Feat', icon: 'star', tag: 'feat',
-    layout: { columns: 'side-right', flow: 'wrap', side: [{ type: 'fields', title: 'Feat', fields: [f('kind', 'Kind'), f('prerequisite', 'Prerequisite')] }], main: [{ type: 'body' }] },
+    starter: 'p',
+    layout: { inText: true, columns: 'side-right', flow: 'wrap', side: [{ type: 'fields', title: 'Feat', fields: [f('kind', 'Kind'), f('prerequisite', 'Prerequisite')] }], main: [{ type: 'body' }] },
   },
   rule: {
     name: 'Rule', icon: 'scroll', tag: 'rule',
-    layout: {
-      columns: 'side-right', flow: 'wrap',
+    starter: 'p',
+    layout: { inText: true, columns: 'side-right', flow: 'wrap',
       side: [{ type: 'fields', title: 'Details', fields: [f('kind', 'Kind'), f('section', 'Section'), f('ability', 'Ability', { library: 'ability' }), f('script', 'Script'), f('space', 'Space'), f('hit_die', 'Hit die')] }],
       main: [{ type: 'body' }],
     },
   },
-  condition: { name: 'Condition', icon: 'flame', tag: 'condition', layout: { columns: 'single', main: [{ type: 'body' }] } },
+  condition: { name: 'Condition', icon: 'flame', tag: 'condition', starter: 'p+(ul>li*2)',
+    layout: { inText: true, columns: 'single', main: [{ type: 'body' }] } },
   location: {
     name: 'Location', icon: 'map-pin', tag: 'location',
-    layout: {
-      columns: 'side-right', flow: 'wrap',
+    starter: 'aloud+h2{Notable places}+(ul>li*3)+h2{People}+(ul>li*2)+h2{History}+p+secret',
+    layout: { inText: true, columns: 'side-right', flow: 'wrap',
       top: [{ type: 'image', key: 'portrait', shape: 'wide', label: 'Banner' }],
       side: [{ type: 'fields', title: 'Overview', fields: [f('kind', 'Kind'), f('region', 'Region'), f('population', 'Population'), f('ruler', 'Ruler'), f('danger', 'Danger')] }],
       main: [{ type: 'body' }],
     },
   },
 }
+
+const STARTERS: Record<string, string | undefined> = Object.fromEntries(Object.entries(BUILTIN_LAYOUTS).map(([id, t]) => [id, t.starter]))
 
 export const BUILTIN_TYPES: ResolvedType[] = Object.entries(BUILTIN_LAYOUTS).map(([id, t]) => ({
   id, name: t.name, icon: t.icon, tag: t.tag, builtin: true, source: toYaml(t.layout, { indent: 2 }), layout: normalizeLayout(t.layout),
@@ -210,6 +222,7 @@ columns: side-left        # side-left | side-right | single
 sideWidth: 300            # px
 flow: wrap                # columns (text stays beside the side) | wrap (text runs on underneath it)
 sticky: false             # columns flow only: keep the side in view while scrolling
+inText: true              # new pages show top and side as boxes in the text (move, float, resize them there)
 top: []
 side:
   - type: image
@@ -239,4 +252,39 @@ export function resolveTypes(custom: PageType[] | undefined): ResolvedType[] {
 
 export function typeOf(types: ResolvedType[], page: Pick<PageMeta, 'type'> | null | undefined): ResolvedType | null {
   return page?.type ? types.find((t) => t.id === page.type) ?? null : null
+}
+
+/** The zones that can sit in the text as a box. */
+export const BOX_ZONES = ['top', 'side', 'bottom'] as const
+export type BoxZone = typeof BOX_ZONES[number]
+
+/** The box that holds a zone in the text: the side floats where the side column was, as wide as it was; top and bottom take the whole width. */
+export function infoboxNode(layout: Layout, zone: BoxZone): Json {
+  const float = layout.columns === 'side-left' ? 'left' : 'right'
+  const size = Math.round(Math.min(60, Math.max(28, layout.sideWidth / 8.2)))
+  return { type: 'infobox', attrs: zone === 'side' ? { zone, side: float, size } : { zone, side: 'full', size: 100 } }
+}
+
+/** The zones a document already shows as boxes in its text. */
+export function zonesInText(doc: any): Set<BoxZone> {
+  const out = new Set<BoxZone>()
+  const walk = (n: any) => {
+    if (n?.type === 'infobox') out.add((BOX_ZONES as readonly string[]).includes(n.attrs?.zone) ? n.attrs.zone : 'side')
+    else for (const c of n?.content ?? []) walk(c)
+  }
+  walk(doc)
+  return out
+}
+
+/** A new page of a type whose layout puts its zones in the text: a box for each zone that has blocks, then the given text or the type's starter. */
+export function startingDoc(type: ResolvedType, content?: any): any {
+  if (!type.layout.inText) return content
+  const has = zonesInText(content)
+  const l = type.layout
+  const boxes = (['top', 'side'] as const).filter((z) => l[z].length > 0 && !has.has(z)).map((z) => infoboxNode(l, z))
+  const bottom = l.bottom.length > 0 && !has.has('bottom') ? [infoboxNode(l, 'bottom')] : []
+  const starter = STARTERS[type.id]
+  const chain = starter ? runChain(starter) : null
+  const body: Json[] = content?.content?.length ? content.content : chain?.ok ? chain.nodes : [{ type: 'paragraph' }]
+  return { type: 'doc', content: [...boxes, ...body, ...bottom] }
 }

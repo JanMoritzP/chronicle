@@ -276,8 +276,35 @@ a.btn { display: inline-block; color: inherit; text-decoration: none; }
 .block-handle .icon-btn { width: 22px; height: 24px; }
 .block-handle .grip { cursor: grab; }
 @media (hover: none), (max-width: 900px) { .block-handle-layer { display: none; } }
+/* the fields, picture and stat block of a special page as a box in the text */
+.ProseMirror .infobox { position: relative; margin: .35em 0 .8em; padding: 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); line-height: 1.5; }
+.ProseMirror .infobox-right { float: right; clear: right; margin-left: 1.4em; }
+.ProseMirror .infobox-left { float: left; clear: left; margin-right: 1.4em; }
+.ProseMirror .infobox-full { display: flow-root; }
+.infobox-body { display: flex; flex-direction: column; gap: 10px; }
+.infobox-body .tl-fields { background: none; border: 0; padding: 2px 4px; }
+.infobox-body .tl-image { border-radius: 8px; }
+.infobox-full .infobox-body .tl-image.wide { aspect-ratio: 16 / 5; }
+.ProseMirror .infobox-placeholder { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; border-style: dashed; background: transparent; font-size: 13px; }
+.ProseMirror-selectednode.infobox, .ProseMirror .infobox.ProseMirror-selectednode { outline: 2px solid var(--accent); outline-offset: 2px; }
+.infobox:hover > .infobox-tools, .infobox:focus-within > .infobox-tools, .ProseMirror-selectednode > .infobox-tools { opacity: 1; }
+.infobox-tools { right: 10px; }
+.infobox-left > .infobox-tools { right: auto; left: 10px; }
+.infobox-tools .grip { cursor: grab; display: inline-flex; align-items: center; justify-content: center; }
+.infobox-resize { position: absolute; top: 50%; width: 8px; height: 44px; margin-top: -22px; border-radius: 4px; background: var(--accent); cursor: ew-resize; opacity: 0; transition: opacity .12s; touch-action: none; }
+.infobox-resize.right { left: -5px; }
+.infobox-resize.left { right: -5px; }
+.infobox:hover > .infobox-resize { opacity: .85; }
+.infobox-empty { display: none; }
+.tl-move { align-self: flex-start; color: var(--muted); }
+.tl-move:hover { color: var(--text); }
+/* pictures: a bar on each side edge to drag, besides the corner */
+.img-edge { position: absolute; top: 50%; width: 8px; height: 44px; margin-top: -22px; border-radius: 4px; background: var(--accent); border: 2px solid var(--bg); cursor: ew-resize; opacity: 0; transition: opacity .12s; touch-action: none; }
+.img-edge.left { left: -5px; }
+.img-edge.right { right: -5px; }
+.img-frame:hover > .img-edge, .ProseMirror-selectednode .img-edge { opacity: .9; }
 @media (max-width: 600px) {
-  .ProseMirror .aside { float: none; width: auto; margin: .6em 0; }
+  .ProseMirror .aside, .ProseMirror .infobox { float: none; width: auto !important; margin: .6em 0; }
   .ProseMirror .img-node.align-left, .ProseMirror .img-node.align-right { max-width: 50%; }
 }
 .wikilink { display: inline; color: var(--link); background: var(--accent-soft); padding: 0 6px; border-radius: 6px; cursor: pointer; text-decoration: none; white-space: normal; }
@@ -1352,3 +1379,16 @@ button.cs-roll:disabled { cursor: default; }
 /* messages and questions stay above every other dialog, homebrew ones included */
 .dialog-host { z-index: 350; }
 .cb-filter { margin-bottom: 10px; width: 100%; max-width: 360px; }
+
+/* names on a character sheet that lead to their library entry or page */
+.sheet-link { background: none; border: 0; padding: 0; font: inherit; color: var(--link); cursor: pointer; border-bottom: 1px dotted var(--link); text-align: inherit; }
+.sheet-link:hover { border-bottom-style: solid; }
+.cs-spell-line { display: block; }
+.peek-overlay { z-index: 320; }
+.peek { width: 720px; max-height: 86vh; }
+.peek-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px 10px 20px; border-bottom: 1px solid var(--border); }
+.peek-head h3 { margin: 0; flex: 1; min-width: 0; font-size: 18px; }
+.peek-body { padding: 12px 20px 18px; overflow-y: auto; }
+.peek-zone:empty { display: none; }
+.peek-zone { margin-bottom: 12px; display: flex; flex-direction: column; gap: 10px; }
+.peek-portrait { max-width: 260px; border-radius: 10px; float: right; margin: 0 0 10px 16px; }

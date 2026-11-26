@@ -9,6 +9,7 @@ import UniqueID from '@tiptap/extension-unique-id'
 import { Placeholder } from '@tiptap/extensions'
 import type { CollabProvider } from '../lib/collab'
 import { Aside, Callout, Column, Columns, Fold, Toc } from './blocks'
+import { Infobox } from './Infobox'
 import { BlockMove } from './blockMove'
 import { FlowImage } from './ImageNode'
 import { Comment } from './Comment'
@@ -40,6 +41,7 @@ export function buildExtensions(opts: { readOnly?: boolean; collab?: CollabOptio
     Column,
     Toc,
     Aside,
+    Infobox,
     Wikilink,
     Embed,
     StatBlock,

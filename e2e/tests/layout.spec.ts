@@ -1,6 +1,6 @@
 import { expect, test } from '../fixtures'
 import { makePng } from '../lib/png'
-import { editorOf, focusEnd, openPage, slash } from '../lib/ui'
+import { editorOf, focusEnd, openPage, openView, slash } from '../lib/ui'
 
 test('a picture can float beside the text, with a size and a caption', { tag: '@feature:editor.image-flow' }, async ({ app, makePage }) => {
   await makePage('Harbour')
@@ -88,4 +88,61 @@ test('the page width can be switched', { tag: '@feature:pages.width' }, async ({
   await app.reload()
   await openPage(app, 'Wide page')
   await expect(app.locator('.page')).toHaveClass(/width-full/)
+})
+
+test('a new person page shows its details as a box in the text that can move, widen and go back', { tag: '@feature:special-pages.infobox' }, async ({ app }) => {
+  await app.getByTitle('New special page (person, monster, location…)').click()
+  await app.locator('.menu').getByRole('button', { name: /Person/ }).click()
+  const box = editorOf(app).locator('.infobox')
+  await expect(box).toContainText('Race')
+  await expect(box).toHaveCSS('float', 'right')
+  await expect(editorOf(app).getByRole('heading', { name: 'Appearance' })).toBeVisible()
+  await expect(app.locator('.tl-side')).toHaveCount(0)
+  await box.hover()
+  await box.getByTitle('Box on the left, text on the right').click()
+  await box.getByTitle('50 percent of the line').click()
+  await expect(box).toHaveCSS('float', 'left')
+  await expect(box).toHaveAttribute('style', /width: 50%/)
+  await box.getByRole('textbox').first().fill('42 winters')
+  await expect(app.locator('.save-state')).toHaveText('Saved')
+  await app.reload()
+  const again = editorOf(app).locator('.infobox')
+  await expect(again).toHaveCSS('float', 'left')
+  await expect(again.getByRole('textbox').first()).toHaveValue('42 winters')
+  await again.hover()
+  await again.getByTitle('Back to the fixed side column').click()
+  await expect(app.locator('.tl-side')).toContainText('Race')
+  await expect(editorOf(app).locator('.infobox')).toHaveCount(0)
+  await app.locator('.tl-side').getByRole('button', { name: 'Move into the text' }).click()
+  await expect(editorOf(app).locator('.infobox')).toContainText('Race')
+  await expect(app.locator('.tl-side')).toHaveCount(0)
+})
+
+test('the built-in templates are listed and start a page with a side box', { tag: '@feature:templates.builtin' }, async ({ app }) => {
+  await openView(app, 'Templates')
+  const row = app.locator('.todo-row', { hasText: 'Shop or inn' })
+  await expect(row).toContainText('/shop')
+  await row.getByTitle('Create a new page from this template').click()
+  await expect(editorOf(app).locator('.aside')).toContainText('Owner:')
+  await expect(editorOf(app).getByRole('heading', { name: 'For sale' })).toBeVisible()
+  await expect(editorOf(app).locator('table')).toBeVisible()
+})
+
+test('a picture can be resized by dragging its side edge', { tag: '@feature:editor.image-flow' }, async ({ app, makePage }) => {
+  await makePage('Ruins')
+  await app.reload()
+  await openPage(app, 'Ruins')
+  const chooser = app.waitForEvent('filechooser')
+  await slash(app, 'Image', 'Image')
+  await (await chooser).setFiles({ name: 'ruins.png', mimeType: 'image/png', buffer: makePng(600, 300) })
+  const figure = editorOf(app).locator('figure.img-node')
+  await figure.locator('img').hover()
+  const edge = figure.locator('.img-edge.right')
+  const b = (await edge.boundingBox())!
+  await app.mouse.move(b.x + b.width / 2, b.y + b.height / 2)
+  await app.mouse.down()
+  await app.mouse.move(b.x - 150, b.y + b.height / 2, { steps: 5 })
+  await app.mouse.up()
+  await expect(figure).toHaveAttribute('style', /width: \d+%/)
+  await expect(app.locator('.save-state')).toHaveText('Saved')
 })

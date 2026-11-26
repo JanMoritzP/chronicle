@@ -16,9 +16,11 @@ import { searchPages } from '../lib/linkSearch'
 import { useStore } from '../store'
 import { alertDialog, askText, confirmDialog } from '../lib/dialog'
 import { importCharacter } from '../lib/importers'
-import { typeOf } from '../lib/pageTypes'
+import { infoboxNode, typeOf, zonesInText, type BoxZone } from '../lib/pageTypes'
+import type { Node as PMNode } from '@tiptap/pm/model'
 import { TypeIcon, useTypes } from './TypeIcon'
-import { TypeLayout } from './TypeLayout'
+import { TypeLayout, ZoneBlocks } from './TypeLayout'
+import { InfoboxContext, type InfoboxHost } from '../editor/Infobox'
 import type { SheetPatch } from './SheetView'
 import { emptyCharacter, emptyPf2eCharacter, emptyPf2eCreature, pfDerived, patchSheetLocal, sheetOf, wholeSheetPatch, type Sheet } from '../lib/sheet'
 import { CharacterBuilder } from './CharacterBuilder'
@@ -35,6 +37,16 @@ import { FormatBubble } from '../editor/FormatBubble'
 import { PAGE_WIDTHS, setPageWidth, usePageWidth } from '../lib/pageWidth'
 
 type SaveState = 'saved' | 'saving' | 'dirty' | 'error'
+
+/** "side" or "side,top": the zones the editor's document shows as boxes. */
+function boxesOf(doc: PMNode): string {
+  const out = new Set<string>()
+  doc.descendants((n) => {
+    if (n.type.name === 'infobox') out.add(String(n.attrs.zone || 'side'))
+    return !n.isTextblock
+  })
+  return [...out].sort().join(',')
+}
 
 export function PageView({ id, anchor }: { id: string; anchor?: string }) {
   const [page, setPage] = useState<FullPage | null>(null)
@@ -88,6 +100,9 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
   const [embedFor, setEmbedFor] = useState<{ range: { from: number; to: number } } | null>(null)
   const [worldDialog, setWorldDialog] = useState<'pin' | 'event' | 'relation' | null>(null)
   const [worldVersion, setWorldVersion] = useState(0)
+  // which zones of a special page sit in the text as boxes; kept as a string so unrelated edits do not redraw the layout
+  const [boxKey, setBoxKey] = useState(() => [...zonesInText(page.content)].sort().join(','))
+  const boxZones = useMemo(() => new Set(boxKey ? boxKey.split(',') as BoxZone[] : []), [boxKey])
 
   const flush = useCallback(async () => {
     clearTimeout(timer.current)
@@ -163,8 +178,8 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
     extensions,
     content: collab ? undefined : page.content,
     editable: !readOnly && !!collab,
-    onCreate: ({ editor }) => setWords(countWords(editor.getText())),
-    onUpdate: ({ editor }) => setWords(countWords(editor.getText())),
+    onCreate: ({ editor }) => { setWords(countWords(editor.getText())); setBoxKey(boxesOf(editor.state.doc)) },
+    onUpdate: ({ editor }) => { setWords(countWords(editor.getText())); setBoxKey(boxesOf(editor.state.doc)) },
   }, [page.id, collab?.provider])
 
   // images
@@ -357,12 +372,25 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
   const width = usePageWidth()
   const nextWidth = PAGE_WIDTHS[(PAGE_WIDTHS.findIndex((w) => w.id === width) + 1) % PAGE_WIDTHS.length]
   const hasSide = !!pageType && pageType.layout.columns !== 'single' && pageType.layout.side.length > 0
+  const blockProps = { data: typeData, readOnly, setValue: setTypeValue, pickImage, sheet: { value: sheetOf(props), set: setSheetFields, createPf2e: system === 'pf2e' ? addPf2eSheet : undefined } }
+  const host: InfoboxHost | null = pageType ? {
+    render: (zone) => {
+      const blocks = pageType.layout[zone].filter((b) => b.type !== 'body')
+      return blocks.length ? <ZoneBlocks blocks={blocks} zone={`box-${zone}`} {...blockProps} /> : null
+    },
+  } : null
+  const moveToText = (zone: BoxZone) => {
+    if (!editor || !pageType) return
+    editor.chain().focus().insertContentAt(0, infoboxNode(pageType.layout, zone)).run()
+  }
   const surface = (
-    <div className="editor-surface">
-      <BlockHandle editor={editor} />
-      <EditorContent editor={editor} />
-      {!readOnly && <FormatBubble editor={editor} />}
-    </div>
+    <InfoboxContext.Provider value={host}>
+      <div className="editor-surface">
+        <BlockHandle editor={editor} />
+        <EditorContent editor={editor} />
+        {!readOnly && <FormatBubble editor={editor} />}
+      </div>
+    </InfoboxContext.Provider>
   )
   const folderName = folders.find((f) => f.id === meta?.folderId)?.name
 
@@ -496,7 +524,7 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
           ? <RulesPanel category={pageType.id} rules={props.rules} readOnly={readOnly} ruleset={system === '5e-2024' ? '5e-2024' : '5e'} onSave={setRules} />
           : <div className="cs-start"><div><b>Not in the character builder yet</b><span className="muted">Give this {pageType.name.toLowerCase()} the numbers the builder needs, and it can be chosen there.</span></div><button className="btn sm" onClick={() => setRules(emptyRules(pageType.id as 'class'))}>Add rules for the builder</button></div>)}
         {pageType ? (
-          <TypeLayout layout={pageType.layout} data={typeData} readOnly={readOnly} setValue={setTypeValue} pickImage={pickImage} sheet={{ value: sheetOf(props), set: setSheetFields, createPf2e: system === 'pf2e' ? addPf2eSheet : undefined }}
+          <TypeLayout layout={pageType.layout} {...blockProps} inText={boxZones} onMoveToText={editor?.isEditable ? moveToText : undefined}
             body={surface} />
         ) : (
           <div className="editor">{surface}</div>

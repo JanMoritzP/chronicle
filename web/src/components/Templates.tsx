@@ -2,6 +2,7 @@ import { EditorContent, useEditor } from '@tiptap/react'
 import { FilePlus2, LayoutTemplate, Plus, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../api'
+import { PRESETS, runChain } from '../editor/chain'
 import { buildExtensions } from '../editor/extensions'
 import { askText, confirmDialog } from '../lib/dialog'
 import { useStore } from '../store'
@@ -26,6 +27,16 @@ export function TemplatesView() {
     } catch (e: any) { setError(e.message) }
   }
 
+  /** A copy of a built-in template under the same /name, so the copy replaces it in the slash menu. */
+  const copyPreset = async (slug: string) => {
+    const r = runChain(slug)
+    if (!r.ok) return
+    const name = slug === 'npc' ? 'NPC' : slug[0].toUpperCase() + slug.slice(1)
+    const t = await api.createTemplate(wsId, { name, description: PRESETS[slug].sub, content: { type: 'doc', content: r.nodes } })
+    useStore.getState().upsertTemplate(t)
+    navigate({ type: 'template', id: t.id })
+  }
+
   return (
     <div className="view">
       <h1 style={{ marginTop: 0 }}><LayoutTemplate size={26} style={{ verticalAlign: -3 }} /> Templates</h1>
@@ -35,7 +46,7 @@ export function TemplatesView() {
       </p>
       {!readOnly && <p><button className="btn primary" onClick={create}><Plus size={14} style={{ verticalAlign: -2 }} /> New template</button></p>}
       {error && <div className="error">{error}</div>}
-      {!templates.length && <div className="muted">No templates yet.</div>}
+      {!templates.length && <div className="muted">No templates of your own yet.</div>}
       {templates.map((t) => (
         <div key={t.id} className="todo-row" style={{ cursor: 'pointer' }} onClick={() => navigate({ type: 'template', id: t.id })}>
           <div className="grow" style={{ minWidth: 0 }}>
@@ -47,6 +58,25 @@ export function TemplatesView() {
               e.stopPropagation()
               await useStore.getState().createPage({ content: t.content })
             }}><FilePlus2 size={13} style={{ verticalAlign: -2 }} /> New page</button>
+          )}
+        </div>
+      ))}
+      <h3>Built in</h3>
+      <p className="muted">Starting points that come with Chronicle. Each starts with a side box of quick facts that the text flows around; move, widen or delete it like any block. A template of your own with the same name replaces one.</p>
+      {Object.entries(PRESETS).map(([slug, p]) => (
+        <div key={slug} className="todo-row">
+          <div className="grow" style={{ minWidth: 0 }}>
+            <div><b>{p.label}</b> <code>/{slug}</code></div>
+            <div className="muted todo-context">{p.sub}</div>
+          </div>
+          {!readOnly && (
+            <span style={{ display: 'flex', gap: 6 }}>
+              <button className="btn sm" title="Copy it into a template of your own to change it" onClick={() => copyPreset(slug).catch((e) => setError(e.message))}>Customise</button>
+              <button className="btn sm" title="Create a new page from this template" onClick={() => {
+                const r = runChain(slug)
+                if (r.ok) useStore.getState().createPage({ title: p.label === 'Session notes' ? `Session, ${new Date().toLocaleDateString()}` : '', content: { type: 'doc', content: r.nodes } }).catch((e) => setError(e.message))
+              }}><FilePlus2 size={13} style={{ verticalAlign: -2 }} /> New page</button>
+            </span>
           )}
         </div>
       ))}

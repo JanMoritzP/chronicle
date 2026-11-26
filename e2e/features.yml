@@ -187,7 +187,7 @@ areas:
         name: "Every slash command"
         files: [web/src/editor/slash.ts]
       - id: editor.presets
-        name: "NPC, place and encounter starters"
+        name: "NPC, place, encounter, shop, quest, session and faction starters, each with a side box"
         files: [web/src/editor/chain.ts]
       - id: editor.chain
         name: "Chains such as h2{Hooks}+ul>li*3"
@@ -211,7 +211,7 @@ areas:
         name: "Upload an image"
         files: [web/src/components/PageView.tsx]
       - id: editor.image-flow
-        name: "Pictures that the text flows around, with a size and a caption"
+        name: "Pictures that the text flows around, with a size, a caption and handles to drag the width"
         files: [web/src/editor/ImageNode.tsx]
       - id: editor.sidebox
         name: "Side box beside the text"
@@ -252,6 +252,9 @@ areas:
       - id: special-pages
         name: "Person, monster and location pages"
         files: [web/src/components/TypeLayout.tsx, web/src/lib/pageTypes.ts]
+      - id: special-pages.infobox
+        name: "A special page's details as a box in the text: move it, put it left or right, widen it, or put it back in its column"
+        files: [web/src/editor/Infobox.tsx, web/src/components/TypeLayout.tsx, web/src/lib/pageTypes.ts]
       - id: page-types
         name: "Design a custom page type"
         files: [web/src/components/PageTypes.tsx]
@@ -268,6 +271,9 @@ areas:
       - id: templates
         name: "Templates"
         files: [web/src/components/Templates.tsx]
+      - id: templates.builtin
+        name: "The built-in templates are listed with a button for a new page"
+        files: [web/src/components/Templates.tsx, web/src/editor/chain.ts]
       - id: templates-from-page
         name: "Save a page as a template"
         files: [web/src/components/Templates.tsx]
@@ -490,6 +496,9 @@ areas:
       - id: library.origin
         name: "A species or background from the library put on a character sheet"
         files: [web/src/lib/origin.ts, web/src/components/CharacterSheet.tsx]
+      - id: library.sheet-links
+        name: "The class, species, background, spells, features and items on a character sheet open their library entry"
+        files: [web/src/components/SheetLinks.tsx, web/src/components/CharacterSheet.tsx]
       - id: sheet.import-pathbuilder
         name: "A Pathfinder 2e character imported from Pathbuilder"
         files: [web/src/lib/importers.ts, web/src/components/PageView.tsx]

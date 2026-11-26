@@ -229,6 +229,13 @@ function PageTypeBody({ type }: { type: ResolvedType }) {
                       <span>Side width (px)</span>
                       <input className="input" type="number" min={160} max={520} disabled={layout.columns === 'single'} value={layout.sideWidth} onChange={(e) => editLayout({ ...layout, sideWidth: Math.min(520, Math.max(160, Math.round(Number(e.target.value) || 280))) })} />
                     </label>
+                    <label className="field" style={{ width: 260 }}>
+                      <span>New pages</span>
+                      <Select className="input" value={layout.inText ? 'text' : 'fixed'} onChange={(v) => editLayout({ ...layout, inText: v === 'text' })}>
+                        <option value="text">Side and top as boxes in the text</option>
+                        <option value="fixed">Side and top in fixed places</option>
+                      </Select>
+                    </label>
                   </div>
                 </fieldset>
                 {ZONES.map((z) => (

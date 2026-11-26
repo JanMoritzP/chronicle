@@ -1,4 +1,4 @@
-import { BUILTIN_TYPES, SAMPLE_SOURCE, duplicateKeys, freshKey, layoutKeys, layoutToSource, normalizeLayout, parseSource, type Layout } from '../web/src/lib/pageTypes'
+import { BUILTIN_TYPES, SAMPLE_SOURCE, duplicateKeys, freshKey, infoboxNode, layoutKeys, layoutToSource, normalizeLayout, parseSource, startingDoc, zonesInText, type Layout } from '../web/src/lib/pageTypes'
 
 let failed = 0
 const check = (name: string, ok: boolean, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name} ${extra}`); if (!ok) failed++ }
@@ -31,6 +31,22 @@ check('multiline flag survives the round trip', a.side[1].type === 'fields' && a
 // normalization
 check('a layout without body gets one in main', normalizeLayout({}).main.length === 1 && normalizeLayout({}).main[0].type === 'body')
 check('single column merges side into main', JSON.stringify(normalizeLayout({ columns: 'single', side: [{ type: 'image', key: 'p' }], main: [{ type: 'body' }] })) === JSON.stringify(normalizeLayout({ columns: 'single', main: [{ type: 'image', key: 'p' }, { type: 'body' }] })))
+// zones as boxes in the text
+check('inText is off unless set', normalizeLayout({}).inText === false && normalizeLayout({ inText: true }).inText === true)
+check('every built-in type puts its zones in the text', BUILTIN_TYPES.every((t) => t.layout.inText))
+const person = BUILTIN_TYPES.find((t) => t.id === 'person')!
+const fresh = startingDoc(person)
+check('a new person starts with its side as a box, then the starter text', fresh.content[0].type === 'infobox' && fresh.content[0].attrs.zone === 'side' && fresh.content.some((n: any) => n.type === 'heading'))
+check('the box floats where the side column was', infoboxNode(normalizeLayout({ columns: 'side-left' }), 'side').attrs!.side === 'left' && infoboxNode(person.layout, 'side').attrs!.side === 'right')
+check('the box is about as wide as the side column was', (infoboxNode(normalizeLayout({ sideWidth: 380 }), 'side').attrs!.size as number) > (infoboxNode(normalizeLayout({ sideWidth: 240 }), 'side').attrs!.size as number))
+const location = startingDoc(BUILTIN_TYPES.find((t) => t.id === 'location')!)
+check('a location gets a full-width top box and a side box', location.content[0].attrs.zone === 'top' && location.content[0].attrs.side === 'full' && location.content[1].attrs.zone === 'side')
+const imported = startingDoc(person, { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Imported' }] }] })
+check('given text is kept, with the box before it', imported.content.length === 2 && imported.content[0].type === 'infobox' && imported.content[1].content[0].text === 'Imported')
+check('a text that already has the box gets no second one', startingDoc(person, fresh).content.filter((n: any) => n.type === 'infobox').length === 1)
+check('zonesInText finds boxes inside other blocks', zonesInText({ type: 'doc', content: [{ type: 'columns', content: [{ type: 'column', content: [{ type: 'infobox', attrs: { zone: 'top' } }] }] }] }).has('top'))
+const fixed = { ...person, layout: { ...person.layout, inText: false } }
+check('a type with fixed zones keeps the text as given', startingDoc(fixed, undefined) === undefined)
 check('side width is clamped to 160..520', normalizeLayout({ sideWidth: 5 }).sideWidth === 160 && normalizeLayout({ sideWidth: 9999 }).sideWidth === 520)
 const throws = (src: string) => { try { parseSource(src); return false } catch { return true } }
 check('unknown block type is rejected', throws('main:\n  - type: table\n'))

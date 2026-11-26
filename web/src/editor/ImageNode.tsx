@@ -28,8 +28,8 @@ function ImageView({ node, updateAttributes, deleteNode, editor, selected }: Nod
     updateAttributes({ align: next, ...(floats && (saved == null || saved > 70) ? { size: FLOAT_SIZE } : {}) })
   }
 
-  // drag the corner: the width is kept as a share of the text column, so it stays right on every screen
-  const startResize = (e: ReactPointerEvent) => {
+  // drag the corner or a side edge: the width is kept as a share of the text column, so it stays right on every screen
+  const startResize = (e: ReactPointerEvent, edge: 'left' | 'right' = align === 'right' ? 'left' : 'right') => {
     e.preventDefault()
     e.stopPropagation()
     const el = frame.current?.parentElement
@@ -38,8 +38,8 @@ function ImageView({ node, updateAttributes, deleteNode, editor, selected }: Nod
     const start = e.clientX
     const startWidth = el.getBoundingClientRect().width
     const total = column.clientWidth || 1
-    // a picture floating right grows to the left
-    const dir = align === 'right' ? -1 : 1
+    // dragging the left edge outwards means moving left
+    const dir = edge === 'left' ? -1 : 1
     let last = clampSize((startWidth / total) * 100)
     const move = (ev: PointerEvent) => {
       // centred pictures grow on both sides
@@ -68,7 +68,9 @@ function ImageView({ node, updateAttributes, deleteNode, editor, selected }: Nod
       style={size != null && align !== 'full' ? { width: `${size}%` } : undefined}>
       <div className="img-frame" ref={frame} data-drag-handle="">
         <img src={node.attrs.src} alt={node.attrs.alt ?? ''} title={node.attrs.title ?? undefined} draggable={false} />
-        {editable && <span className="img-resize" title="Drag to resize" onPointerDown={startResize} />}
+        {editable && <span className="img-resize" title="Drag to resize" onPointerDown={(e) => startResize(e)} />}
+        {editable && align !== 'left' && <span className="img-edge left" title="Drag to resize" onPointerDown={(e) => startResize(e, 'left')} />}
+        {editable && align !== 'right' && <span className="img-edge right" title="Drag to resize" onPointerDown={(e) => startResize(e, 'right')} />}
         {editable && drag != null && <span className="img-size-badge">{drag}%</span>}
         {editable && selected && (
           <div className="img-toolbar" contentEditable={false}>

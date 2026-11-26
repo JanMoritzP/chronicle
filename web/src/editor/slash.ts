@@ -3,7 +3,7 @@ import Suggestion from '@tiptap/suggestion'
 import { PluginKey } from '@tiptap/pm/state'
 import {
   AlignLeft, CalendarDays, CheckSquare, Code, FileInput, Heading1, Heading2, Heading3, Image as ImageIcon, LayoutTemplate, List, ListOrdered, ListTodo,
-  BookOpen, CalendarClock, CircleHelp, ChevronsRight, ChevronsUpDown, Columns2, Dices, Info, Landmark, ListTree, Lock, MapPin, PanelRight, Swords, TriangleAlert, User, Minus, Quote, Shield, Sparkles, Users, Table as TableIcon,
+  BookOpen, CalendarClock, CircleHelp, ChevronsRight, ChevronsUpDown, Columns2, Dices, Flag, Info, Landmark, ListTree, Lock, MapPin, NotebookPen, PanelRight, ScrollText, Store, Swords, TriangleAlert, User, Minus, Quote, Shield, Sparkles, Users, Table as TableIcon,
 } from 'lucide-react'
 import { createElement } from 'react'
 import { fuzzy } from '../lib/fuzzy'
@@ -34,7 +34,7 @@ const viaChain = (src: string) => (e: Editor, r: { from: number; to: number }) =
   const res = runChain(src)
   if (res.ok) e.chain().focus().deleteRange(r).insertContent(res.nodes).run()
 }
-const PRESET_ICONS: Record<string, any> = { npc: User, place: Landmark, encounter: Swords }
+const PRESET_ICONS: Record<string, any> = { npc: User, place: Landmark, encounter: Swords, shop: Store, quest: ScrollText, session: NotebookPen, faction: Flag }
 
 const COMMANDS: Cmd[] = [
   { id: 'h1', label: 'Heading 1', sub: 'Large section heading', keywords: 'title', icon: Heading1, run: (e, r) => e.chain().focus().deleteRange(r).setNode('heading', { level: 1 }).run() },
