@@ -9,6 +9,7 @@ import {
 import { attunedCount, capacityOf, carriedWeight, loadOf, MAX_ATTUNED } from '../lib/levelup'
 import { LevelUpPanel } from './LevelUpPanel'
 import { LibraryInput, type Picked } from './LibraryInput'
+import { PersonInput } from './PersonInput'
 import { backgroundPatch, speciesPatch } from '../lib/origin'
 import { homebrewBackgroundPatch, homebrewSpeciesPatch } from '../lib/homebrew'
 import { useStore } from '../store'
@@ -150,7 +151,7 @@ export function CharacterSheet({ sheet, set, roll, pictures }: { sheet: Sheet; s
         <div className="cs-line">
           {edit ? (
             <>
-              <Txt value={sheet.player ?? ''} label="Player" placeholder="Player" onChange={(v) => act({ player: v })} />
+              <PersonInput value={sheet.player ?? ''} label="Player" placeholder="Player" onChange={(v) => act({ player: v })} />
               <LibraryInput value={sheet.species ?? ''} label="Species" placeholder="Species" categories={['species']} onChange={(v) => act({ species: v })}
                 onPick={(p) => void pickOrigin('species', p)} onMake={canMake ? (n) => setMaking({ kind: 'species', name: n }) : undefined} />
               <LibraryInput value={sheet.background ?? ''} label="Background" placeholder="Background" categories={['background']} onChange={(v) => act({ background: v })}

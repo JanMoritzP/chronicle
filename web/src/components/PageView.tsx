@@ -97,6 +97,8 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
   const pageType = typeOf(types, { type: props.type ?? null })
   const timer = useRef<number | undefined>(undefined)
   const fileInput = useRef<HTMLInputElement>(null)
+  /** the placeholder the next uploaded picture fills, or null to put it in at the cursor */
+  const fillAt = useRef<number | null>(null)
   const [embedFor, setEmbedFor] = useState<{ range: { from: number; to: number } } | null>(null)
   const [worldDialog, setWorldDialog] = useState<'pin' | 'event' | 'relation' | null>(null)
   const [worldVersion, setWorldVersion] = useState(0)
@@ -193,8 +195,9 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
     return data.url as string
   }, [])
   useEffect(() => {
-    imagePicker.pick = (ed) => {
+    imagePicker.pick = (ed, at) => {
       if (ed !== editor) return
+      fillAt.current = at ?? null
       fileInput.current?.click()
     }
     embedPicker.pick = (ed, range) => { if (ed === editor) setEmbedFor({ range }) }
@@ -579,8 +582,14 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
           const f = e.target.files?.[0]
           e.target.value = ''
           if (!f || !editor) return
+          const at = fillAt.current
+          fillAt.current = null
           const url = await upload(f)
-          if (url) editor.chain().focus().insertContent({ type: 'image', attrs: { src: url, alt: f.name } }).run()
+          if (!url || editor.isDestroyed) return
+          // someone may have moved the placeholder while the picture uploaded: fill it only if it is still there and empty
+          const slot = at != null ? editor.state.doc.nodeAt(at) : null
+          if (at != null && slot?.type.name === 'image' && !slot.attrs.src) editor.chain().command(({ tr }) => { tr.setNodeMarkup(at, undefined, { ...slot.attrs, src: url, alt: slot.attrs.alt || f.name }); return true }).run()
+          else editor.chain().focus().insertContent({ type: 'image', attrs: { src: url, alt: f.name } }).run()
         }} />
 
       {worldDialog === 'pin' && <PinDialog pageId={page.id} onClose={() => setWorldDialog(null)} />}

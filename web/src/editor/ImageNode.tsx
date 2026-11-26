@@ -1,7 +1,9 @@
 import Image from '@tiptap/extension-image'
+import { mergeAttributes } from '@tiptap/core'
 import { NodeViewWrapper, ReactNodeViewRenderer, type NodeViewProps } from '@tiptap/react'
-import { AlignCenter, Captions, PanelLeft, PanelRight, RectangleHorizontal, Trash2 } from 'lucide-react'
+import { AlignCenter, Captions, ImagePlus, PanelLeft, PanelRight, RectangleHorizontal, Trash2 } from 'lucide-react'
 import { useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { imagePicker } from './slash'
 
 export const IMAGE_ALIGNS = ['center', 'left', 'right', 'full'] as const
 export type ImageAlign = typeof IMAGE_ALIGNS[number]
@@ -12,7 +14,7 @@ const FLOAT_SIZE = 40
 const alignOf = (v: unknown): ImageAlign => (IMAGE_ALIGNS.includes(v as ImageAlign) ? v as ImageAlign : 'center')
 const clampSize = (n: number) => Math.round(Math.min(100, Math.max(10, n)))
 
-function ImageView({ node, updateAttributes, deleteNode, editor, selected }: NodeViewProps) {
+function ImageView({ node, updateAttributes, deleteNode, editor, selected, getPos }: NodeViewProps) {
   const editable = editor.isEditable
   const align = alignOf(node.attrs.align)
   const saved: number | null = typeof node.attrs.size === 'number' ? node.attrs.size : null
@@ -21,6 +23,7 @@ function ImageView({ node, updateAttributes, deleteNode, editor, selected }: Nod
   const [captioning, setCaptioning] = useState(false)
   const frame = useRef<HTMLDivElement>(null)
   const size = drag ?? (align === 'full' ? 100 : saved)
+  const empty = !node.attrs.src
 
   const setAlign = (next: ImageAlign) => {
     // a picture the text flows around needs room for the text: give it a sensible width when it had none
@@ -67,7 +70,20 @@ function ImageView({ node, updateAttributes, deleteNode, editor, selected }: Nod
     <NodeViewWrapper as="figure" className={`img-node align-${align}`} data-align={align}
       style={size != null && align !== 'full' ? { width: `${size}%` } : undefined}>
       <div className="img-frame" ref={frame} data-drag-handle="">
-        <img src={node.attrs.src} alt={node.attrs.alt ?? ''} title={node.attrs.title ?? undefined} draggable={false} />
+        {empty ? (
+          <div className="img-slot" contentEditable={false}>
+            <ImagePlus size={22} aria-hidden />
+            {editable ? (
+              <>
+                <input className="img-slot-text" value={node.attrs.alt ?? ''} placeholder="What it shows: the ruined watchtower at dusk" aria-label="What the picture shows"
+                  onChange={(e) => updateAttributes({ alt: e.target.value })}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); editor.commands.focus() } }} />
+                <button type="button" className="btn sm" title="Upload a picture for this place"
+                  onMouseDown={(e) => e.preventDefault()} onClick={() => { const at = getPos(); if (typeof at === 'number') imagePicker.pick?.(editor, at) }}>Upload</button>
+              </>
+            ) : <span className="muted">{node.attrs.alt ? `Picture to come: ${node.attrs.alt}` : 'Picture to come'}</span>}
+          </div>
+        ) : <img src={node.attrs.src} alt={node.attrs.alt ?? ''} title={node.attrs.title ?? undefined} draggable={false} />}
         {editable && <span className="img-resize" title="Drag to resize" onPointerDown={(e) => startResize(e)} />}
         {editable && align !== 'left' && <span className="img-edge left" title="Drag to resize" onPointerDown={(e) => startResize(e, 'left')} />}
         {editable && align !== 'right' && <span className="img-edge right" title="Drag to resize" onPointerDown={(e) => startResize(e, 'right')} />}
@@ -114,7 +130,12 @@ export const FlowImage = Image.extend({
         renderHTML: (a) => (a.size ? { 'data-size': a.size } : {}),
       },
       caption: { default: '', parseHTML: (el) => el.getAttribute('data-caption') ?? '', renderHTML: (a) => (a.caption ? { 'data-caption': a.caption } : {}) },
+      // tells placeholders apart, so each one gets its own picture from the image administration
+      slot: { default: null, parseHTML: (el) => el.getAttribute('data-slot'), renderHTML: (a) => (a.slot ? { 'data-slot': a.slot } : {}) },
     }
   },
+  // a placeholder has no src, so it needs its own rule to survive copy and paste
+  parseHTML() { return [{ tag: 'img[src]:not([src^="data:"])' }, { tag: 'img[data-placeholder]' }] },
+  renderHTML({ HTMLAttributes }) { return ['img', mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, HTMLAttributes.src ? {} : { 'data-placeholder': '' })] },
   addNodeView() { return ReactNodeViewRenderer(ImageView) },
 }).configure({ allowBase64: false })

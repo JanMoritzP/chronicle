@@ -2,7 +2,7 @@
 // Every world (adventure) of Chronicle gets its own project there, created by the first request for it.
 //  1. Scrape: every empty picture slot becomes one requested image (POST /api/requests) with an exact size, so the
 //     admin's fit editor can scale and crop a person's upload to it. Slots: every image block of a page's special page
-//     type (portrait and others), "[image: ...]" lines in page text, pins without a detail map, tokens without a
+//     type (portrait and others), "[image: ...]" lines and empty image blocks in page text, pins without a detail map, tokens without a
 //     picture (one request per name), handouts without a picture, scenes without a background.
 //     Inside a project the folders follow the adventure: pages/<folders>/<page>/<picture>, tabletop/...
 //  2. Push: the admin POSTs every valid upload to this plugin's webhook, with the bytes, project, format and a hash.

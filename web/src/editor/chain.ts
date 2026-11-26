@@ -18,6 +18,9 @@ export type ChainResult =
   | { ok: true; nodes: Json[]; action: string | null; summary: string }
   | { ok: false; error: string; partial: boolean }
 
+/** An image block without a picture yet: a frame that says what it will show. The image administration plugin requests a picture for it. */
+export const imagePlaceholder = (description = ''): Json => ({ type: 'image', attrs: { src: null, alt: description, slot: Math.random().toString(36).slice(2, 10) } })
+
 export const CHAIN_TAGS: { name: string; label: string }[] = [
   { name: 'h1', label: 'Heading 1' }, { name: 'h2', label: 'Heading 2' }, { name: 'h3', label: 'Heading 3' }, { name: 'h4', label: 'Heading 4' },
   { name: 'p', label: 'Text' }, { name: 'ul', label: 'Bullet list' }, { name: 'ol', label: 'Numbered list' }, { name: 'task', label: 'Checklist' },
@@ -26,6 +29,7 @@ export const CHAIN_TAGS: { name: string; label: string }[] = [
   { name: 'callout', label: 'Note box' }, { name: 'warning', label: 'Warning box' }, { name: 'aloud', label: 'Read-aloud box' }, { name: 'secret', label: 'Secret box (closed in shared pages)' },
   { name: 'fold', label: 'Collapsible section, e.g. fold{Title}' }, { name: 'cols', label: 'Columns, e.g. cols3' }, { name: 'col', label: 'Column' },
   { name: 'side', label: 'Side box, the text flows around it' }, { name: 'sidel', label: 'Side box on the left' },
+  { name: 'image', label: 'Picture, e.g. image{The old mill}: last and bare it asks for a file, otherwise an empty frame to fill later' },
   { name: 'toc', label: 'Table of contents' }, { name: 'date', label: 'The date today' }, { name: 'roll', label: 'Roll table, e.g. roll20' },
 ]
 
@@ -234,6 +238,10 @@ function expandEl(el: El, parent: Parent, n: number, ctx: Ctx, mayAct: boolean):
       return [{ type: 'aside', attrs: { side: name === 'sidel' ? 'left' : 'right', size: 'm' }, content: blocks.length ? blocks : [para(null)] }]
     }
     case 'toc': noText(); return [{ type: 'toc' }, ...kids()]
+    case 'image':
+      // a bare image at the end opens the upload dialog; with a description or anywhere else it is a frame to fill later
+      if (text !== null || !mayAct || el.children.length || !ctx.extras.image?.action) return [imagePlaceholder(text ?? ''), ...kids()]
+      break
     case 'date': noText(); return [para(new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })), ...kids()]
     case 'li':
       if (!parent || parent === 'cols') fail('li goes inside a list: ul>li*3')
@@ -282,6 +290,7 @@ function label(n: Json): string {
     case 'horizontalRule': return 'Divider'
     case 'table': return `Table (${items} × ${n.content?.[0]?.content?.length ?? 0})`
     case 'statblock': return 'Stat block'
+    case 'image': return n.attrs?.src ? 'Picture' : 'Picture placeholder'
     default: return 'Content'
   }
 }

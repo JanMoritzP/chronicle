@@ -2,13 +2,13 @@ import { Extension, type Editor } from '@tiptap/core'
 import Suggestion from '@tiptap/suggestion'
 import { PluginKey } from '@tiptap/pm/state'
 import {
-  AlignLeft, CalendarDays, CheckSquare, Code, FileInput, Heading1, Heading2, Heading3, Image as ImageIcon, LayoutTemplate, List, ListOrdered, ListTodo,
+  AlignLeft, CalendarDays, CheckSquare, Code, FileInput, Heading1, Heading2, Heading3, Image as ImageIcon, ImagePlus, LayoutTemplate, List, ListOrdered, ListTodo,
   BookOpen, CalendarClock, CircleHelp, ChevronsRight, ChevronsUpDown, Columns2, Dices, Flag, Info, Landmark, ListTree, Lock, MapPin, NotebookPen, PanelRight, ScrollText, Store, Swords, TriangleAlert, User, Minus, Quote, Shield, Sparkles, Users, Table as TableIcon,
 } from 'lucide-react'
 import { createElement } from 'react'
 import { fuzzy } from '../lib/fuzzy'
 import { currentTemplates } from './useTemplates'
-import { CHAIN_TAGS, PRESETS, isChainSource, runChain, trailingToken, type ChainExtras } from './chain'
+import { CHAIN_TAGS, PRESETS, imagePlaceholder, isChainSource, runChain, trailingToken, type ChainExtras } from './chain'
 import { suggestRender, type SuggestItem } from './suggest'
 import { useStore } from '../store'
 
@@ -22,7 +22,7 @@ interface Cmd {
 }
 
 /** Opens a file picker and uploads the chosen image; wired up by the page component. */
-export const imagePicker: { pick: ((editor: Editor) => void) | null } = { pick: null }
+export const imagePicker: { pick: ((editor: Editor, fillAt?: number) => void) | null } = { pick: null }
 /** Opens the page picker for /embed; wired up by the page component. */
 export const embedPicker: { pick: ((editor: Editor, range: { from: number; to: number }) => void) | null } = { pick: null }
 
@@ -58,6 +58,7 @@ const COMMANDS: Cmd[] = [
   { id: 'warning', label: 'Warning box', sub: 'Highlighted box for a danger or a rule to remember', keywords: 'callout caution danger', icon: TriangleAlert, run: viaChain('warning') },
   { id: 'aloud', label: 'Read-aloud box', sub: 'Text to read to the players', keywords: 'callout boxed text describe narration', icon: BookOpen, run: viaChain('aloud') },
   { id: 'secret', label: 'Secret', sub: 'Only you see it: shared pages keep it closed', keywords: 'callout gm hidden private spoiler', icon: Lock, run: viaChain('secret') },
+  { id: 'imgframe', label: 'Image placeholder', sub: 'An empty frame for a picture to add later', keywords: 'picture empty slot frame later', icon: ImagePlus, run: (e, r) => { e.chain().focus().deleteRange(r).insertContent(imagePlaceholder()).run() } },
   { id: 'fold', label: 'Collapsible section', sub: 'A titled section that can be closed', keywords: 'toggle accordion details spoiler', icon: ChevronsUpDown, run: viaChain('fold') },
   { id: 'columns', label: 'Columns', sub: 'Two columns side by side (cols3 for three)', keywords: 'layout side', icon: Columns2, run: viaChain('cols') },
   { id: 'sidebox', label: 'Side box', sub: 'A box beside the text, like an infobox. The text flows around it.', keywords: 'aside infobox float sidebar facts wrap', icon: PanelRight, run: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'aside', attrs: { side: 'right', size: 'm' }, content: [{ type: 'paragraph' }] }).run() },

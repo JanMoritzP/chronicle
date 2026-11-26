@@ -58,7 +58,7 @@ export function deactivate() {}
 | `worldName(ws)`, `worldRole(user, ws)` | Look up a world. |
 | `pages.list()`, `pages.setPortrait(pageId, url)` | Every page (`id, ws, title, type, portrait`), and set a page's portrait to an upload url. |
 | `pages.imageSlots()`, `pages.setImage(pageId, key, url)` | Every image block of every page's special page type (built in or custom) with its value; fill one (`portrait` is the thumbnail, other keys live in the page data). |
-| `pages.textImages()`, `pages.fillTextImage(pageId, hash, url, [oldUrl])` | Paragraphs that are only `[image: description]`, and replace one by the picture (or swap `oldUrl`). Open editors reload. |
+| `pages.textImages()`, `pages.fillTextImage(pageId, hash, url, [oldUrl])` | Paragraphs that are only `[image: description]` and image blocks without a picture, and fill one with the picture (or swap `oldUrl`). Open editors reload. |
 | `maps.pins()`, `maps.create(ws, pageId, name, bytes)`, `maps.replace(mapId, bytes)`, `maps.exists(mapId)` | Pins that point at a page and open no map; make a tiled map from a picture and open it from those pins; re-tile a map from a new picture. |
 | `table.scenes()`, `table.tokens()`, `table.handouts()`, `table.setSceneBackground`, `table.setTokenImages`, `table.setHandoutImage` | Tabletop picture slots and their setters; changes reach everyone at the table. |
 | `uploads.add(ws, filename, bytes, [user])` | Store a picture like an upload from the app (quota, hooks); throws when it is not a picture or is refused. |
@@ -92,7 +92,7 @@ Works with the image administration program over HTTP only (see its `PLUGIN_INTE
 
 1. **Request.** The plugin scrapes Chronicle for empty picture slots; each becomes one sprite in `POST <address>/api/requests`. Each kind can be switched off in Settings:
    - **Page type pictures** (square 512 x 512, tall 3:4, wide 1024 x 448): every empty image block of a page's special page type, built in (person, monster, item, location: the portrait or banner) or custom (all its image blocks). A player character (a sheet of kind `character`) also has a banner (wide), a portrait and a token picture (square at the token size), whatever its page type. Can be limited to some page types.
-   - **Pictures in text**: a paragraph that is only `[image: what it shows]` (800 x 450). When the picture arrives the line is replaced by it; a later replacement swaps that picture.
+   - **Pictures in text**: a paragraph that is only `[image: what it shows]`, or an image block without a picture (800 x 450). When the picture arrives the line is replaced by it, or the empty frame gets it and keeps its place, size and caption; a later replacement swaps that picture. Each empty frame is its own request (by its `slot` id), even when several have no description.
    - **Detail maps** (4096 x 3072): a map pin that points at a page (default type `location`) but opens no map. The pushed picture becomes a tiled map, a child of the map holding the pin, and the pin opens it. A replacement re-tiles that map. The map keeps its own copy, so it is not in the asset library.
    - **Tokens** (square, 256): tokens without a picture, one request per token name; the picture goes to every token of that name in the world that has none.
    - **Handouts** (1024 x 768): handouts without a picture.

@@ -1,5 +1,5 @@
 import { Link2 } from 'lucide-react'
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { fuzzy, highlight } from '../lib/fuzzy'
 import { typeOfCategory } from '../lib/homebrew'
@@ -41,7 +41,6 @@ export function LibraryInput({ value, onChange, categories, label, placeholder, 
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(-1)
   const [busy, setBusy] = useState(false)
-  const [pos, setPos] = useState<{ left: number; top?: number; bottom?: number; width: number; maxHeight: number } | null>(null)
   const input = useRef<HTMLInputElement>(null)
   const list = useRef<HTMLDivElement>(null)
   const listId = useId()
@@ -81,28 +80,7 @@ export function LibraryInput({ value, onChange, categories, label, placeholder, 
     setActive(onAdd ? (options.length ? 0 : -1) : options.findIndex((o) => o.key !== 'new' && o.label.toLowerCase() === q.toLowerCase()))
   }, [options, onAdd, q])
 
-  // the list hangs under the box (over it near the bottom of the window) and follows it when the page scrolls
-  const place = () => {
-    if (!input.current) return
-    const r = input.current.getBoundingClientRect()
-    const below = window.innerHeight - r.bottom - 8
-    const above = r.top - 8
-    const flip = below < 200 && above > below
-    const width = Math.min(window.innerWidth - 16, Math.max(r.width, 260))
-    setPos({
-      left: Math.max(8, Math.min(r.left, window.innerWidth - width - 8)), width, maxHeight: Math.min(320, flip ? above : below),
-      ...(flip ? { bottom: window.innerHeight - r.top + 4 } : { top: r.bottom + 4 }),
-    })
-  }
-  useLayoutEffect(() => { if (open) place(); else setPos(null) }, [open, options.length])
-
-  useEffect(() => {
-    if (!open) return
-    const follow = (e: Event) => { if (!list.current?.contains(e.target as Node)) place() }
-    window.addEventListener('resize', follow)
-    window.addEventListener('scroll', follow, true)
-    return () => { window.removeEventListener('resize', follow); window.removeEventListener('scroll', follow, true) }
-  }, [open])
+  const pos = usePopPosition(input, list, open, options.length)
 
   useEffect(() => { if (open) list.current?.querySelector<HTMLElement>('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' }) }, [open, active])
 
@@ -158,4 +136,30 @@ export function LibraryInput({ value, onChange, categories, label, placeholder, 
       )}
     </span>
   )
+}
+
+/** Where a suggestion list hangs: under its box (over it near the bottom of the window), following the box when the page scrolls. */
+export function usePopPosition(input: RefObject<HTMLInputElement | null>, list: RefObject<HTMLDivElement | null>, open: boolean, count: number) {
+  const [pos, setPos] = useState<{ left: number; top?: number; bottom?: number; width: number; maxHeight: number } | null>(null)
+  const place = () => {
+    if (!input.current) return
+    const r = input.current.getBoundingClientRect()
+    const below = window.innerHeight - r.bottom - 8
+    const above = r.top - 8
+    const flip = below < 200 && above > below
+    const width = Math.min(window.innerWidth - 16, Math.max(r.width, 260))
+    setPos({
+      left: Math.max(8, Math.min(r.left, window.innerWidth - width - 8)), width, maxHeight: Math.min(320, flip ? above : below),
+      ...(flip ? { bottom: window.innerHeight - r.top + 4 } : { top: r.bottom + 4 }),
+    })
+  }
+  useLayoutEffect(() => { if (open) place(); else setPos(null) }, [open, count])
+  useEffect(() => {
+    if (!open) return
+    const follow = (e: Event) => { if (!list.current?.contains(e.target as Node)) place() }
+    window.addEventListener('resize', follow)
+    window.addEventListener('scroll', follow, true)
+    return () => { window.removeEventListener('resize', follow); window.removeEventListener('scroll', follow, true) }
+  }, [open])
+  return pos
 }

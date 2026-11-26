@@ -29,6 +29,7 @@ const friend = await mk('Friend', doc(p(t('a friendly face'))))
 const hero = await mk('Hero', doc(
   p(t('Knows '), link(friend), t(' and '), link(secret), t(' and '), link(secret, { alias: 'someone' })),
   { type: 'image', attrs: { src: imgShared.url, alt: 'ok' } },
+  { type: 'image', attrs: { src: null, alt: 'the vault, still to draw', slot: 'x1' } },
   { type: 'embed', attrs: { pageId: secret.id, name: secret.title, anchor: null } },
   { type: 'embed', attrs: { pageId: friend.id, name: friend.title, anchor: null } },
 ), { props: { portrait: imgShared.url } })
@@ -54,6 +55,7 @@ check('own page ids are not exposed in links', !flat.includes('pageId'))
 check('wikilinks are gone from the public doc', !flat.includes('wikilink'))
 check('embed of unshared page is dropped', !flat.includes('embed') && !flat.includes('mayor'))
 check('image rewritten to the public route', flat.includes(`/api/public/img/${imgShared.id}`) && !flat.includes('/api/uploads/'))
+check('an image block still waiting for its picture is left out', !flat.includes('still to draw'))
 check('portrait rewritten', pub.data.portrait === `/api/public/img/${imgShared.id}`)
 
 // ---- share the friend: link + embed appear ----

@@ -7,6 +7,7 @@ const extras: ChainExtras = {
   'stat-5e-monster': { label: 'Stat block: Monster', nodes: () => [{ type: 'statblock', attrs: { template: '5e-monster', data: {} } }] },
   'npc': { label: 'NPC', nodes: () => [{ type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Name' }] }, { type: 'paragraph' }] },
   'pin': { label: 'Pin on map', action: 'pin' },
+  'image': { label: 'Image', action: 'image' },
 }
 const ok = (src: string) => { const r = runChain(src, extras); if (!r.ok) throw new Error(`${src}: ${r.error}`); return r }
 const nodes = (src: string) => ok(src).nodes
@@ -62,6 +63,18 @@ check('a dialog at the end is reported as the action', r.action === 'pin' && typ
 check('a dialog in the middle is refused', err('pin+p')?.error.includes('last') === true)
 check('a dialog cannot be repeated', err('pin*2') !== null)
 check('a dialog cannot have children', err('pin>p') !== null)
+
+// images: a bare image at the end asks for a file, any other is an empty frame to fill later
+r = ok('h2{Tower}+image')
+check('a bare image at the end opens the upload', r.action === 'image' && types(r.nodes) === 'heading')
+r = ok('image{The old mill}')
+check('an image with text is a placeholder that says what it shows', r.action === null && r.nodes[0].type === 'image' && r.nodes[0].attrs?.src === null && r.nodes[0].attrs?.alt === 'The old mill' && r.summary === 'Picture placeholder', r.summary)
+n = nodes('image+p')
+check('an image in the middle is an empty placeholder', n[0].type === 'image' && n[0].attrs?.alt === '' && n[1].type === 'paragraph')
+n = nodes('side>img{Portrait}+p')
+check('a placeholder fits in a side box', n[0].type === 'aside' && n[0].content![0].type === 'image')
+n = nodes('image*2')
+check('every placeholder has its own slot', n.length === 2 && !!n[0].attrs?.slot && n[0].attrs?.slot !== n[1].attrs?.slot)
 
 // boxes, sections, columns and the rest
 n = nodes('secret>p{Hidden}')

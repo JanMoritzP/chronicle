@@ -78,14 +78,24 @@ function imageBlocksOf(definition: any): ImageBlock[] {
 const PLACEHOLDER = /^\[image:\s*(.+?)\s*\]$/i
 const placeholderHash = (description: string) => crypto.createHash('sha1').update(description.toLowerCase()).digest('hex').slice(0, 6)
 const plainText = (n: DocNode): string => (n.type === 'text' ? n.text ?? '' : (n.content ?? []).map(plainText).join(''))
-/** Calls fn for every paragraph that is only `[image: description]`; fn may replace it and returns whether it did. */
-function walkPlaceholders(node: DocNode, fn: (description: string, replace: (n: DocNode) => void) => boolean) {
+/**
+ * Calls fn for every place that waits for a picture: a paragraph that is only `[image: description]`, or an image block without a picture.
+ * `hash` names the place: the description's, or the image block's own slot id so two empty frames on one page get a picture each.
+ * fn may fill it with `fill(url)` and returns whether it did.
+ */
+function walkPlaceholders(node: DocNode, fn: (description: string, hash: string, fill: (url: string) => void) => boolean) {
   const kids = node.content
   if (!kids) return
   for (let i = 0; i < kids.length; i++) {
     const k = kids[i]
+    if (k.type === 'image' && !k.attrs?.src) {
+      const description = String(k.attrs?.alt || k.attrs?.caption || '').trim()
+      const slot = typeof k.attrs?.slot === 'string' && k.attrs.slot ? k.attrs.slot : ''
+      fn(description || 'Picture', slot ? `s-${slot}` : placeholderHash(description || 'Picture'), (url) => { kids[i] = { ...k, attrs: { ...k.attrs, src: url, alt: description } } })
+      continue
+    }
     const m = k.type === 'paragraph' ? PLACEHOLDER.exec(plainText(k).trim()) : null
-    if (m) fn(m[1], (n) => { kids[i] = n })
+    if (m) fn(m[1], placeholderHash(m[1]), (url) => { kids[i] = { type: 'image', attrs: { src: url, alt: m[1] } } })
     else walkPlaceholders(k, fn)
   }
 }
@@ -280,24 +290,24 @@ function contextFor(p: Loaded) {
         if (key === 'token') tableSlots.setPageTokenImages(row.ws, pageId, url, typeof before === 'string' ? before : '')
         return true
       },
-      /** Paragraphs in page text that consist of just `[image: what it shows]`: a picture the writer wants here. */
+      /** Paragraphs in page text that consist of just `[image: what it shows]`, and image blocks without a picture: a picture the writer wants here. */
       textImages: () => {
         const folders = folderPaths()
         const out: { page: string; ws: string; title: string; folder: string; description: string; hash: string }[] = []
-        for (const r of db.prepare("SELECT p.id, p.workspace_id AS ws, p.title, p.folder_id AS folderId, p.content FROM pages p JOIN workspaces w ON w.id = p.workspace_id WHERE p.deleted_at IS NULL AND w.deleted_at IS NULL AND p.text LIKE '%[image:%'").all() as { id: string; ws: string; title: string; folderId: string | null; content: string }[]) {
-          try { walkPlaceholders(JSON.parse(r.content), (d) => { out.push({ page: r.id, ws: r.ws, title: r.title, folder: (r.folderId && folders.get(r.folderId)) || '', description: d, hash: placeholderHash(d) }); return false }) } catch { /* damaged content */ }
+        for (const r of db.prepare("SELECT p.id, p.workspace_id AS ws, p.title, p.folder_id AS folderId, p.content FROM pages p JOIN workspaces w ON w.id = p.workspace_id WHERE p.deleted_at IS NULL AND w.deleted_at IS NULL AND (p.text LIKE '%[image:%' OR p.content LIKE '%\"type\":\"image\"%')").all() as { id: string; ws: string; title: string; folderId: string | null; content: string }[]) {
+          try { walkPlaceholders(JSON.parse(r.content), (d, hash) => { out.push({ page: r.id, ws: r.ws, title: r.title, folder: (r.folderId && folders.get(r.folderId)) || '', description: d, hash }); return false }) } catch { /* damaged content */ }
         }
         return out
       },
-      /** Replaces the `[image: ...]` paragraph with that hash by the picture. Open editors reload. Returns false when it is gone. */
+      /** Fills the `[image: ...]` paragraph or empty image block with that hash with the picture. Open editors reload. Returns false when it is gone. */
       fillTextImage: (pageId: string, hash: string, url: string, oldUrl = '') => {
         const page = db.prepare('SELECT * FROM pages WHERE id = ? AND deleted_at IS NULL').get(pageId) as PageRow | undefined
         if (!page) return false
         const doc = JSON.parse(page.content) as DocNode
         let done = false
-        walkPlaceholders(doc, (d, replace) => {
-          if (done || placeholderHash(d) !== hash) return false
-          replace({ type: 'image', attrs: { src: url, alt: d } })
+        walkPlaceholders(doc, (_d, h, fill) => {
+          if (done || h !== hash) return false
+          fill(url)
           done = true
           return true
         })

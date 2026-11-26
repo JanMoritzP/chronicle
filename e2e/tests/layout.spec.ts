@@ -28,6 +28,28 @@ test('a picture can float beside the text, with a size and a caption', { tag: '@
   await expect(editorOf(app).locator('figure.img-node')).toHaveCSS('float', 'left')
 })
 
+test('an image block can wait for its picture and be filled later', { tag: '@feature:editor.image-placeholder' }, async ({ app, makePage }) => {
+  await makePage('Watchtower')
+  await app.reload()
+  await openPage(app, 'Watchtower')
+  await slash(app, 'placeholder', 'Image placeholder')
+  const ed = editorOf(app)
+  const box = ed.getByRole('textbox', { name: 'What the picture shows' })
+  await box.fill('The tower at dusk')
+  await expect(app.locator('.save-state')).toHaveText('Saved')
+  await app.reload()
+  await openPage(app, 'Watchtower')
+  await expect(editorOf(app).getByRole('textbox', { name: 'What the picture shows' })).toHaveValue('The tower at dusk')
+  const chooser = app.waitForEvent('filechooser')
+  await editorOf(app).getByRole('button', { name: 'Upload' }).click()
+  await (await chooser).setFiles({ name: 'tower.png', mimeType: 'image/png', buffer: makePng(320, 200) })
+  // the picture takes the frame's place and keeps what it shows
+  const img = editorOf(app).locator('figure.img-node img')
+  await expect(img).toHaveAttribute('src', /\/api\/uploads\//)
+  await expect(img).toHaveAttribute('alt', 'The tower at dusk')
+  await expect(editorOf(app).locator('figure.img-node')).toHaveCount(1)
+})
+
 test('a side box sits beside the text and can switch sides', { tag: '@feature:editor.sidebox' }, async ({ app, makePage }) => {
   await makePage('Mira Vale')
   await app.reload()

@@ -63,6 +63,8 @@ function inline(nodes: DocNode[] | undefined, ctx: MdContext): string {
 
 function image(n: DocNode, ctx: MdContext) {
   const src = String(n.attrs?.src ?? '')
+  // a frame still waiting for its picture is written the way the image administration asks for one in text
+  if (!src) return `[image: ${String(n.attrs?.alt || 'picture')}]`
   const m = UPLOAD_URL.exec(src)
   const file = m ? ctx.images.get(m[1]) : undefined
   return `![${esc(String(n.attrs?.alt ?? ''))}](${file ? ctx.root + 'images/' + file : src})`

@@ -63,9 +63,10 @@ function publicDoc(page: PageRow, doc: DocNode, depth = 0): DocNode {
       const data = Object.fromEntries(Object.entries(n.attrs.data as Record<string, unknown>).filter(([k]) => !k.endsWith(':refs')))
       return [{ ...n, attrs: { ...n.attrs, data } }]
     }
-    if (n.type === 'image' && typeof n.attrs?.src === 'string') {
-      const m = UPLOAD_URL.exec(n.attrs.src)
-      return [{ ...n, attrs: { ...n.attrs, src: m ? `/api/public/img/${m[1]}` : '' } }]
+    if (n.type === 'image') {
+      // only uploads of the world are served to readers; a frame still waiting for its picture says nothing to them
+      const m = typeof n.attrs?.src === 'string' ? UPLOAD_URL.exec(n.attrs.src) : null
+      return m ? [{ ...n, attrs: { ...n.attrs, src: `/api/public/img/${m[1]}` } }] : []
     }
     if (!n.content) return [n]
     const content = n.content.flatMap(walk)

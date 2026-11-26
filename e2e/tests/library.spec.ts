@@ -163,6 +163,21 @@ test('a species and a background from the library are put on a character sheet',
   await expect(background).toHaveValue('Sage')
 })
 
+test('the player box of a character sheet suggests the people of the world', { tag: '@feature:sheet.player-suggest' }, async ({ app, makePage }) => {
+  await makePage('Tamsin', { props: { type: 'pc' } })
+  await app.reload()
+  await openPage(app, 'Tamsin')
+  await app.getByRole('button', { name: 'Add a character sheet' }).click()
+  const player = app.getByRole('combobox', { name: 'Player', exact: true })
+  await player.fill('g')
+  await app.getByRole('listbox').getByRole('option', { name: /^gm/ }).dispatchEvent('mousedown')
+  await expect(player).toHaveValue('gm')
+  // someone without an account can still be written in
+  await player.fill('Alex from the club')
+  await player.press('Enter')
+  await expect(player).toHaveValue('Alex from the club')
+})
+
 test('the class, subclass, alignment and features of a character sheet suggest library entries', { tag: '@feature:library.sheet-suggest' }, async ({ app, makePage }) => {
   await makePage('Corwin', { props: { type: 'pc' } })
   await app.reload()

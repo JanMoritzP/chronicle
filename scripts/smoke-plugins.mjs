@@ -273,6 +273,23 @@ const detail = maps.find((m) => m.parentMapId === world.id)
 check('a pushed picture becomes a detail map under the map with the pin', r.status === 204 && detail?.name === 'Harbour Town', JSON.stringify(maps.map((m) => m.name)))
 const pins = (await call('GET', `/api/maps/${world.id}`)).data.items
 check('and the pin opens it', pins.find((i) => i.pageId === town.id)?.targetMapId === detail?.id)
+
+// 5b. image blocks without a picture: each frame gets its own request, even two without a description, and keeps how it sits
+const frame = (alt, slot, align = 'center') => ({ type: 'image', attrs: { src: null, alt, slot, align, size: 40 } })
+const frames = (await call('POST', `/api/workspaces/${ws}/pages`, { title: 'Lighthouse', content: { type: 'doc', content: [frame('the lighthouse in a storm', 'fr1', 'right'), frame('', 'fr2'), frame('', 'fr3')] } })).data
+const before5b = requests.size
+r = await call('POST', '/api/plugins/image-administration/request', {})
+const fresh5b = [...requests.values()].slice(before5b)
+check('every empty image block is requested once', r.status === 200 && fresh5b.length === 3 && new Set(fresh5b.map((x) => x.id)).size === 3, fresh5b.map((x) => x.id).join(' '))
+const stormReq = fresh5b.find((x) => x.description.includes('lighthouse in a storm'))
+check('a frame asks for what it shows', !!stormReq && stormReq.spec.width === 800, JSON.stringify(fresh5b.map((x) => x.description)))
+r = await upload(stormReq.id, png(6, 4))
+const r2 = await upload(fresh5b.find((x) => x !== stormReq).id, png(5, 4))
+let imgs = (await call('GET', `/api/pages/${frames.id}`)).data.content.content.filter((x) => x.type === 'image')
+check('the picture fills its own frame and keeps its place and size', r.status === 204 && imgs[0].attrs.src?.startsWith('/api/uploads/') && imgs[0].attrs.align === 'right' && imgs[0].attrs.size === 40, JSON.stringify(imgs[0].attrs))
+check('a frame without a description gets its own picture', r2.status === 204 && imgs.filter((x) => x.attrs.src).length === 2 && imgs[1].attrs.src !== imgs[0].attrs.src && imgs.length === 3, JSON.stringify(imgs.map((x) => x.attrs.src)))
+r = await call('POST', '/api/plugins/image-administration/request', {})
+check('a filled frame is not asked for again', [...requests.values()].length === before5b + 3)
 let ready = null
 for (let i = 0; i < 100 && ready?.status !== 'ready'; i++) { await sleep(100); ready = (await call('GET', `/api/maps/${detail.id}`)).data }
 check('the new map is tiled', ready?.status === 'ready' && ready.width === 600 && ready.height === 400, JSON.stringify(ready?.status) + ready?.error)

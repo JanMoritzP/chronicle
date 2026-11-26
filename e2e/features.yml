@@ -213,6 +213,9 @@ areas:
       - id: editor.image-flow
         name: "Pictures that the text flows around, with a size, a caption and handles to drag the width"
         files: [web/src/editor/ImageNode.tsx]
+      - id: editor.image-placeholder
+        name: "An image block without a picture: a frame that says what it will show, filled by an upload later or by the image administration"
+        files: [web/src/editor/ImageNode.tsx, web/src/editor/chain.ts, web/src/components/PageView.tsx]
       - id: editor.sidebox
         name: "Side box beside the text"
         files: [web/src/editor/blocks.tsx]
@@ -496,6 +499,9 @@ areas:
       - id: library.sheet-suggest
         name: "Species, background, class, subclass, alignment, items and features on a character sheet suggest library entries while you type"
         files: [web/src/components/LibraryInput.tsx, web/src/components/CharacterSheet.tsx, web/src/components/SheetView.tsx]
+      - id: sheet.player-suggest
+        name: "The player box of a character sheet suggests the people of the world"
+        files: [web/src/components/PersonInput.tsx, web/src/components/CharacterSheet.tsx]
       - id: packs.sheet
         name: "A system pack adds its own fields to a character sheet"
         files: [web/src/components/CharacterSheet.tsx, server/src/pack.ts, web/src/lib/systems.ts]
