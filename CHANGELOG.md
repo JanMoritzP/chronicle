@@ -2,6 +2,11 @@
 
 Newest first. The version in `electron/package.json` is the app version; the release notes on GitHub are what the in-app update dialog shows, so keep each entry short and in plain words. Sections after 0.2.0 are written by `scripts/release.mjs` from the commit subjects, so the commit messages carry the release notes.
 
+## 0.86.3 (2026-11-26)
+
+### Bug Fixes
+- skill names on a character sheet open the skill, and class features and species traits open the class or species that gives them
+
 ## 0.86.2 (2026-11-26)
 
 ### Bug Fixes
