@@ -2,6 +2,11 @@
 
 Newest first. The version in `electron/package.json` is the app version; the release notes on GitHub are what the in-app update dialog shows, so keep each entry short and in plain words. Sections after 0.2.0 are written by `scripts/release.mjs` from the commit subjects, so the commit messages carry the release notes.
 
+## 0.89.0 (2026-11-26)
+
+### Features
+- GMs decide who sees each page and folder, secret boxes stay hidden from players in the app, and pages can be imported from Obsidian, Notion, Logseq, LegendKeeper, World Anvil, Roam, Markdown and HTML
+
 ## 0.88.0 (2026-11-26)
 
 ### Features
