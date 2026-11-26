@@ -2,6 +2,11 @@
 
 Newest first. The version in `electron/package.json` is the app version; the release notes on GitHub are what the in-app update dialog shows, so keep each entry short and in plain words. Sections after 0.2.0 are written by `scripts/release.mjs` from the commit subjects, so the commit messages carry the release notes.
 
+## 0.85.0 (2026-11-26)
+
+### Features
+- player characters get their own special page with the character sheet, person pages keep only their details, and the boxes on a character sheet suggest species, classes, subclasses, items, spells and more from the library while you type
+
 ## 0.84.0 (2026-11-26)
 
 ### Features
