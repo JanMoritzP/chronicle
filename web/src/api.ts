@@ -1,7 +1,7 @@
 import { get, set } from 'idb-keyval'
 import type { Calendar } from './lib/calendar'
 import type { PackData } from './lib/systems'
-import type { BuilderEntry, HomebrewEntry, LibraryCollection, LibraryCollectionEntry, CommentItem, Macro, Encounter, EncounterBody, Invite, Person, LibraryEntry, LibraryIndex, LibraryStatus, BackupInfo, PluginInfo, Bootstrap, EventRow, FullPage, MapFull, MapItem, MapLayer, CopyPreview, CopyResult, GameSession, MapMeta, PageType, PageVersion, Relation, StatsResult, StatTemplateRow, Template, TodoItem, User, Workspace, WorldSettings } from './types'
+import type { AccessRule, Member, WorldRole, BuilderEntry, HomebrewEntry, LibraryCollection, LibraryCollectionEntry, CommentItem, Macro, Encounter, EncounterBody, Invite, Person, LibraryEntry, LibraryIndex, LibraryStatus, BackupInfo, PluginInfo, Bootstrap, EventRow, FullPage, MapFull, MapItem, MapLayer, CopyPreview, CopyResult, GameSession, MapMeta, PageType, PageVersion, Relation, StatsResult, StatTemplateRow, Template, TodoItem, User, Workspace, WorldSettings } from './types'
 
 export interface StatTemplateBody { name: string; sections: any[]; look?: Record<string, any> }
 export interface PageTypeBody { name: string; icon: string; tag: string; source: string; definition: Record<string, any> }
@@ -97,6 +97,10 @@ export const api = {
     return r
   },
   people: (ws: string) => req<Person[]>('GET', `/api/workspaces/${ws}/people`),
+  members: (ws: string) => req<Member[]>('GET', `/api/workspaces/${ws}/members`),
+  setMemberRole: (ws: string, userId: string, role: WorldRole) => req('PUT', `/api/workspaces/${ws}/members/${userId}`, { role }),
+  setPageAccess: (id: string, rule: AccessRule | null) => req('PUT', `/api/pages/${id}/access`, { rule }),
+  setFolderAccess: (id: string, rule: AccessRule | null) => req('PUT', `/api/folders/${id}/access`, { rule }),
   comments: (ws: string) => req<CommentItem[]>('GET', `/api/workspaces/${ws}/comments`),
   patchComment: async (pageId: string, commentId: string, b: { done?: boolean; message?: string }) => {
     const r = await req('PATCH', `/api/pages/${pageId}/comments/${commentId}`, b)

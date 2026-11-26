@@ -6,11 +6,11 @@ import * as syncProtocol from 'y-protocols/sync'
 import { WebSocketServer, WebSocket, type RawData } from 'ws'
 import * as Y from 'yjs'
 import { worldRole } from './access.js'
-import { playsPage } from './players.js'
+import { derivedFor, hidesSecretFrom, levelOnPage } from './pageAccess.js'
 import { userFromCookieHeader, type AuthUser } from './auth.js'
 import { db, now } from './db.js'
 import { ensureHeadingIds } from './doc.js'
-import { publishWorld } from './live.js'
+import { publishWorldTo } from './live.js'
 import { applyContent, contentHooks, pageDerived, type Author, type PageRow } from './pages.js'
 import { presenceChanged } from './presence.js'
 import { editTodoIn, fragmentToDoc, seedFragment } from './ydoc.js'
@@ -29,7 +29,7 @@ const SAVE_EVERY_MS = 1500
 const CLOSE_RELOAD = 4001
 const CLOSE_DENIED = 4003
 
-interface Conn { socket: WebSocket; user: AuthUser; canWrite: boolean; clientIds: Set<number>; alive: boolean }
+interface Conn { socket: WebSocket; user: AuthUser; canWrite: boolean; /** reads every secret of the page */ gm: boolean; clientIds: Set<number>; alive: boolean }
 interface Room {
   pageId: string; wsId: string; doc: Y.Doc; awareness: awarenessProtocol.Awareness
   conns: Set<Conn>; timer?: NodeJS.Timeout
@@ -63,6 +63,17 @@ function openRoom(pageId: string): Room | null {
   }
 
   doc.on('update', (update: Uint8Array, origin: unknown) => {
+    // a secret box that appears (or stops naming someone) sends away the people it is kept from before they receive it;
+    // their page reloads without the secret, read-only
+    if ([...room.conns].some((c) => !c.gm) && mentionsSecret(update)) {
+      const current = fragmentToDoc(doc)
+      for (const c of [...room.conns]) {
+        if (c.gm || !hidesSecretFrom(current, c.user.id, false)) continue
+        room.conns.delete(c)
+        send(c, JSON.stringify({ t: 'reload' }))
+        c.socket.close(CLOSE_RELOAD, 'secret')
+      }
+    }
     const enc = encoding.createEncoder()
     encoding.writeVarUint(enc, MSG_SYNC)
     syncProtocol.writeUpdate(enc, update)
@@ -86,6 +97,14 @@ function openRoom(pageId: string): Room | null {
   return room
 }
 
+const SECRET_BYTES = Buffer.from('secret')
+const REVEAL_BYTES = Buffer.from('reveal')
+/** Cheap test on an update: only one that carries these words can make a secret box or change who reads it. */
+function mentionsSecret(update: Uint8Array) {
+  const b = Buffer.from(update.buffer, update.byteOffset, update.byteLength)
+  return b.includes(SECRET_BYTES) || b.includes(REVEAL_BYTES)
+}
+
 function send(c: Conn, msg: Uint8Array | string) {
   if (c.socket.readyState !== WebSocket.OPEN) return
   c.socket.send(msg, (err) => { if (err) c.socket.terminate() })
@@ -103,7 +122,11 @@ function persist(room: Room) {
   applyContent(page, doc, room.writer)
   room.writer = null
   const derived = pageDerived(room.pageId)
-  publishWorld(room.wsId, { k: 'page-saved', id: room.pageId, ...derived })
+  publishWorldTo(room.wsId, (user, role) => {
+    if (role === 'gm') return { k: 'page-saved', id: room.pageId, ...derived }
+    const mine = derivedFor(room.pageId, user, role)
+    return mine && { k: 'page-saved', id: room.pageId, ...mine }
+  })
 }
 
 function disposeRoom(room: Room) {
@@ -140,8 +163,8 @@ function onMessage(room: Room, c: Conn, data: Uint8Array) {
   }
 }
 
-function connect(socket: WebSocket, room: Room, user: AuthUser, canWrite: boolean) {
-  const c: Conn = { socket, user, canWrite, clientIds: new Set(), alive: true }
+function connect(socket: WebSocket, room: Room, user: AuthUser, canWrite: boolean, gm: boolean) {
+  const c: Conn = { socket, user, canWrite, gm, clientIds: new Set(), alive: true }
   room.conns.add(c)
   presenceChanged()
   socket.on('message', (raw: RawData, isBinary: boolean) => {
@@ -187,10 +210,18 @@ export function attachCollab(server: HttpServer) {
     const owner = db.prepare('SELECT workspace_id AS w FROM pages WHERE id = ? AND deleted_at IS NULL').get(m[1]) as { w: string } | undefined
     const role = owner ? worldRole(user, owner.w) : null
     if (!owner || !role) return refuse(socket, '404 Not Found')
+    const level = levelOnPage(user, m[1], role)
+    if (level === 'none') return refuse(socket, '404 Not Found')
     wss.handleUpgrade(req, socket, head, (ws) => {
       const room = openRoom(m[1])
       if (!room) return ws.close(CLOSE_DENIED)
-      connect(ws, room, user, role === 'editor' || playsPage(user.id, m[1]))
+      const gm = role === 'gm'
+      // the shared document is the whole page: someone a secret is kept from reads the page without it, outside the room
+      if (!gm && hidesSecretFrom(fragmentToDoc(room.doc), user.id, false)) {
+        if (!room.conns.size) disposeRoom(room)
+        return ws.close(CLOSE_RELOAD, 'secret')
+      }
+      connect(ws, room, user, level === 'edit', gm)
     })
   })
 
@@ -239,7 +270,7 @@ export function editTodoLive(pageId: string, todoId: string, change: Record<stri
   return hit ? 'ok' : 'missing'
 }
 
-/** After access changed: drop editing sessions of people who lost the world, and make people who became viewers read-only. */
+/** After access changed: drop editing sessions of people who lost the world or the page, and make people who may only read it read-only. */
 export function revalidateCollab(changedUsers?: string[]) {
   for (const room of rooms.values()) {
     for (const c of [...room.conns]) {
@@ -247,8 +278,12 @@ export function revalidateCollab(changedUsers?: string[]) {
       const user = db.prepare('SELECT id, username, role FROM users WHERE id = ?').get(c.user.id) as AuthUser | undefined
       const role = user ? worldRole(user, room.wsId) : null
       if (!user || !role) { c.socket.close(CLOSE_DENIED, 'no access'); continue }
+      const level = levelOnPage(user, room.pageId, role)
+      if (level === 'none') { room.conns.delete(c); c.socket.close(CLOSE_DENIED, 'no access'); continue }
       c.user = user
-      c.canWrite = role === 'editor' || playsPage(user.id, room.pageId)
+      c.gm = role === 'gm'
+      c.canWrite = level === 'edit'
+      if (!c.gm && hidesSecretFrom(fragmentToDoc(room.doc), user.id, false)) { room.conns.delete(c); send(c, JSON.stringify({ t: 'reload' })); c.socket.close(CLOSE_RELOAD, 'secret') }
     }
   }
   presenceChanged()

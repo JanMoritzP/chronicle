@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import type { FastifyInstance } from 'fastify'
 import { requireEditor, requireUser } from '../auth.js'
+import { accessOf } from '../access.js'
 import { config } from '../config.js'
 import { db, now } from '../db.js'
 import { sliceSection, type DocNode } from '../doc.js'
@@ -103,10 +104,11 @@ export async function shareRoutes(app: FastifyInstance) {
 
   app.get('/api/workspaces/:ws/shares', { preHandler: requireUser }, async (req) => {
     const { ws } = req.params as { ws: string }
-    return db.prepare(
+    const a = accessOf(req, ws)
+    return (db.prepare(
       `SELECT s.token, s.page_id AS pageId, s.created_at AS createdAt, p.title FROM shares s JOIN pages p ON p.id = s.page_id
        WHERE s.workspace_id = ? AND p.deleted_at IS NULL ORDER BY p.title COLLATE NOCASE`,
-    ).all(ws)
+    ).all(ws) as { pageId: string }[]).filter((s) => a.sees(s.pageId))
   })
 
   const limit = { config: { rateLimit: { max: 120, timeWindow: '1 minute' } } }

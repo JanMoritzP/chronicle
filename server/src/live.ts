@@ -2,7 +2,7 @@ import type { ServerResponse } from 'node:http'
 import type { FastifyInstance } from 'fastify'
 import { requireUser, type AuthUser } from './auth.js'
 import { db } from './db.js'
-import { visibleWorldIds, worldRole } from './access.js'
+import { visibleWorldIds, worldRole, type WorldRole } from './access.js'
 import { presenceChanged } from './presence.js'
 
 /**
@@ -22,6 +22,16 @@ function write(c: LiveConn, text: string) {
 export function publishWorld(ws: string, event: unknown, exceptClient = '') {
   const text = frame(event)
   for (const c of conns) if (c.ws === ws && (!exceptClient || c.clientId !== exceptClient)) write(c, text)
+}
+
+/** Sends each person in the world their own version of an event, or nothing when the function says null. */
+export function publishWorldTo(ws: string, eventFor: (user: AuthUser, role: WorldRole) => unknown) {
+  for (const c of conns) {
+    if (c.ws !== ws) continue
+    const role = worldRole(c.user, ws)
+    const event = role ? eventFor(c.user, role) : null
+    if (event) write(c, frame(event))
+  }
 }
 
 export function publishUser(userId: string, event: unknown) {

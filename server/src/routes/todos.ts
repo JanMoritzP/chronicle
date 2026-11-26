@@ -2,8 +2,10 @@ import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { requireEditor, requireUser } from '../auth.js'
 import { editTodoLive } from '../collab.js'
+import { accessOf } from '../access.js'
 import { db } from '../db.js'
 import type { DocNode } from '../doc.js'
+import { itemFilter } from '../pageAccess.js'
 import { replaceContent, type PageRow } from '../pages.js'
 
 /** Finds the todo marker with this id and either changes its attributes or removes it. Returns false if it is not in the document. */
@@ -27,13 +29,14 @@ function editTodo(doc: DocNode, todoId: string, change: Record<string, any> | nu
 export async function todoRoutes(app: FastifyInstance) {
   app.get('/api/workspaces/:ws/todos', { preHandler: requireUser }, async (req) => {
     const { ws } = req.params as { ws: string }
+    const keep = itemFilter(accessOf(req, ws))
     return (db.prepare(
       `SELECT t.page_id AS pageId, t.todo_id AS id, t.message, t.done, t.context, t.created_at AS createdAt, t.done_at AS doneAt,
               p.title AS pageTitle, p.icon AS pageIcon
        FROM todos t JOIN pages p ON p.id = t.page_id
        WHERE t.workspace_id = ? AND p.deleted_at IS NULL
        ORDER BY t.done, p.title COLLATE NOCASE, t.pos`,
-    ).all(ws) as any[]).map((r) => ({ ...r, done: !!r.done }))
+    ).all(ws) as any[]).filter((r) => keep(r.pageId, r.id, 'todos')).map((r) => ({ ...r, done: !!r.done }))
   })
 
   app.patch('/api/pages/:id/todos/:todoId', { preHandler: requireEditor }, async (req, reply) => {

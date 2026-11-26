@@ -2,8 +2,10 @@ import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { requireEditor, requireUser } from '../auth.js'
 import { editTodoLive } from '../collab.js'
+import { accessOf } from '../access.js'
 import { db } from '../db.js'
 import type { DocNode } from '../doc.js'
+import { itemFilter } from '../pageAccess.js'
 import { replaceContent, type PageRow } from '../pages.js'
 
 /** Finds the comment marker with this id and either changes its attributes or removes it. Returns false if it is not in the document. */
@@ -31,7 +33,7 @@ export async function commentRoutes(app: FastifyInstance) {
   app.get('/api/workspaces/:ws/people', { preHandler: requireUser }, async (req) => {
     const { ws } = req.params as { ws: string }
     return db.prepare(
-      `SELECT u.id, u.username, CASE WHEN u.role = 'owner' THEN 'owner' WHEN u.role = 'viewer' THEN 'viewer' ELSE COALESCE(m.role, 'editor') END AS role
+      `SELECT u.id, u.username, CASE WHEN u.role = 'owner' THEN 'owner' WHEN u.role = 'viewer' THEN 'viewer' WHEN m.gm = 1 AND m.role = 'editor' THEN 'gm' ELSE COALESCE(m.role, 'editor') END AS role
        FROM users u LEFT JOIN workspace_members m ON m.user_id = u.id AND m.workspace_id = ?
        WHERE u.role = 'owner' OR m.user_id IS NOT NULL
        ORDER BY u.username COLLATE NOCASE`,
@@ -40,13 +42,14 @@ export async function commentRoutes(app: FastifyInstance) {
 
   app.get('/api/workspaces/:ws/comments', { preHandler: requireUser }, async (req) => {
     const { ws } = req.params as { ws: string }
+    const keep = itemFilter(accessOf(req, ws))
     return (db.prepare(
       `SELECT c.page_id AS pageId, c.comment_id AS id, c.from_name AS "from", c.to_name AS "to", c.message, c.done, c.context,
               c.created_at AS createdAt, c.done_at AS doneAt, p.title AS pageTitle, p.icon AS pageIcon
        FROM comments c JOIN pages p ON p.id = c.page_id
        WHERE c.workspace_id = ? AND p.deleted_at IS NULL
        ORDER BY c.done, c.created_at DESC`,
-    ).all(ws) as any[]).map((r) => ({ ...r, done: !!r.done }))
+    ).all(ws) as any[]).filter((r) => keep(r.pageId, r.id, 'comments')).map((r) => ({ ...r, done: !!r.done }))
   })
 
   app.patch('/api/pages/:id/comments/:commentId', { preHandler: requireEditor }, async (req, reply) => {

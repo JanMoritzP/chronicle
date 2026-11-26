@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { requireEditor, requireUser } from '../auth.js'
+import { accessOf } from '../access.js'
 import { db, now } from '../db.js'
 import { uid } from '../pages.js'
 
@@ -33,10 +34,11 @@ function isAncestor(ws: string, ancestor: string, of: string): boolean {
 export async function relationRoutes(app: FastifyInstance) {
   app.get('/api/workspaces/:ws/relations', { preHandler: requireUser }, async (req) => {
     const { ws } = req.params as { ws: string }
+    const access = accessOf(req, ws)
     return (db.prepare(
       `SELECT r.* FROM relations r JOIN pages a ON a.id = r.source_id JOIN pages b ON b.id = r.target_id
        WHERE r.workspace_id = ? AND a.deleted_at IS NULL AND b.deleted_at IS NULL ORDER BY r.created_at`,
-    ).all(ws) as any[]).map(out)
+    ).all(ws) as any[]).filter((r) => access.sees(r.source_id) && access.sees(r.target_id)).map(out)
   })
 
   app.post('/api/workspaces/:ws/relations', { preHandler: requireEditor }, async (req, reply) => {

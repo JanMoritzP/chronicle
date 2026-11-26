@@ -2,7 +2,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
-import { worldRole } from '../access.js'
+import { worldRole, writes } from '../access.js'
+import { levelOnPage, readerView } from '../pageAccess.js'
 import { requireEditor, type AuthUser } from '../auth.js'
 import { config } from '../config.js'
 import { db, now } from '../db.js'
@@ -62,8 +63,12 @@ function titlesIn(ws: string): Set<string> {
 
 /** Copying needs to read every source world and write the target world. */
 function mayCopy(user: AuthUser, pages: PageRow[], target: string) {
-  if (worldRole(user, target) !== 'editor') return false
-  return [...new Set(pages.map((p) => p.workspace_id))].every((w) => worldRole(user, w))
+  if (!writes(worldRole(user, target))) return false
+  // only pages this person reaches, and none with a secret kept from them, since a copy carries the whole text
+  return pages.every((p) => {
+    const role = worldRole(user, p.workspace_id)
+    return !!role && levelOnPage(user, p.id, role) !== 'none' && !readerView(p, user.id, role === 'gm')
+  })
 }
 
 export async function copyRoutes(app: FastifyInstance) {

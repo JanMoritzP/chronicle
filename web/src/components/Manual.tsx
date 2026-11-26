@@ -132,7 +132,7 @@ const SECTIONS: Section[] = [
       <>
         <ul>
           <li><b>Note, warning, read-aloud</b> boxes highlight a block of text. Click the label of a box to switch its kind.</li>
-          <li><b>Secret</b> is for you. When you share a page, its secrets are never sent: readers see a closed box.</li>
+          <li><b>Secret</b> is for the GMs. Players never see it, in the app or on shared pages. Click “GMs only” on the box to let chosen players read it too.</li>
           <li><b>Collapsible section</b> has a title and can be closed. Readers of a shared page see it closed.</li>
           <li><b>Columns</b> sit side by side, two to four of them, and stack on a narrow screen.</li>
           <li><b>Table of contents</b> links to the headings of the page and keeps itself current.</li>
@@ -226,13 +226,16 @@ const SECTIONS: Section[] = [
     ),
   },
   {
-    id: 'share', title: 'Sharing and working together', text: 'share public link viewer editor live collaborate export backup',
+    id: 'share', title: 'Sharing and working together', text: 'share public link viewer editor gm player hidden access who can see import obsidian notion logseq live collaborate export backup',
     body: () => (
       <>
         <ul>
           <li><b>Share a page.</b> Choose “Share publicly…” in the <b>…</b> menu of a page to get a public, read-only link. Links and embeds only reach other pages that are shared as well, and secrets stay closed.</li>
           <li><b>Work together.</b> Several people can edit the same page at the same time and see each other’s cursors. An editor can change a world, a viewer can only read it. Whoever runs the server decides who may open which world.</li>
-          <li><b>Export and backup.</b> Settings can export a whole world as a zip. The server keeps daily backups.</li>
+          <li><b>GMs and players.</b> Settings, People shows who is in the world. A GM sees and changes everything; a player writes or only reads.</li>
+          <li><b>Hide a page.</b> A GM clicks the people icon at the top of a page, or right-clicks a folder, and chooses “Who can see this”: everyone, only some players, or GMs only. Pages in a folder follow the folder unless they have a setting of their own.</li>
+          <li><b>Import.</b> “Import pages…” in the world menu brings in an Obsidian vault, a Notion, Logseq, LegendKeeper, World Anvil or Roam export, or Markdown, HTML and text files, with their links, folders, tags and pictures.</li>
+          <li><b>Export and backup.</b> A GM can export a whole world as a zip in Settings. The server keeps daily backups.</li>
         </ul>
       </>
     ),

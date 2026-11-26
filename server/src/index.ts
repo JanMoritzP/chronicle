@@ -36,6 +36,7 @@ import { macroRoutes } from './routes/macros.js'
 import { recapRoutes } from './routes/recap.js'
 import { packRoutes } from './routes/packs.js'
 import { mapDocRoutes } from './routes/mapdocs.js'
+import { accessRuleRoutes } from './routes/access.js'
 import { closeLibrary } from './library.js'
 import { pluginRoutes, startPlugins, stopPlugins } from './plugins.js'
 
@@ -96,6 +97,7 @@ await app.register(macroRoutes)
 await app.register(recapRoutes)
 await app.register(packRoutes)
 await app.register(mapDocRoutes)
+await app.register(accessRuleRoutes)
 await app.register(backupRoutes)
 await app.register(pluginRoutes)
 await startPlugins(app)

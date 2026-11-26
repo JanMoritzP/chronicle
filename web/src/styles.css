@@ -1478,3 +1478,22 @@ button.cs-roll:disabled { cursor: default; }
 .peek-zone:empty { display: none; }
 .peek-zone { margin-bottom: 12px; display: flex; flex-direction: column; gap: 10px; }
 .peek-portrait { max-width: 260px; border-radius: 10px; float: right; margin: 0 0 10px 16px; }
+
+/* who can see a page or folder */
+.access-dialog { width: min(520px, 94vw); }
+.access-people { display: flex; flex-direction: column; gap: 6px; max-height: 40vh; overflow: auto; }
+.access-person { gap: 8px; }
+.access-inherited { font-size: 13px; padding: 8px 10px; border-radius: 8px; background: var(--bg-side); color: var(--muted); }
+.ProseMirror .reveal-picker { position: relative; }
+.ProseMirror .callout-reveal { display: inline-flex; align-items: center; gap: 4px; font-size: .72rem; color: var(--muted); background: none; border: 0; padding: 0 4px; cursor: pointer; }
+.ProseMirror .callout-reveal:hover { color: var(--text); }
+.ProseMirror .reveal-menu { position: absolute; left: 0; top: 20px; z-index: 30; display: flex; flex-direction: column; min-width: 180px; font-size: 13px; }
+
+/* importing pages from other apps */
+.import-dialog { width: min(600px, 94vw); }
+.import-drop { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 22px 12px; border: 2px dashed var(--border); border-radius: 12px; text-align: center; }
+.import-drop.over { border-color: var(--accent); background: var(--accent-soft); }
+.import-found { padding: 10px 12px; border-radius: 8px; background: var(--bg-side); }
+.import-skipped { margin: 6px 0 0; padding-left: 18px; max-height: 24vh; overflow: auto; font-size: 13px; }
+.import-bar { height: 8px; border-radius: 4px; background: var(--bg-side); overflow: hidden; }
+.import-bar > div { height: 100%; background: var(--accent); transition: width .2s; }

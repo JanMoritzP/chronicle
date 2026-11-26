@@ -1,4 +1,4 @@
-import { Check, Download, FilePlus2, RotateCcw, Search, Trash2, X, Zap } from 'lucide-react'
+import { Check, Download, FilePlus2, RotateCcw, Search, Trash2, Upload, X, Zap } from 'lucide-react'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { api } from '../api'
 import { BackupsSection } from './Backups'
@@ -10,6 +10,8 @@ import { useStore } from '../store'
 import { THEMES, applyTheme } from '../themes'
 import { PageIcon } from './TypeIcon'
 import { InviteLinks } from './InviteLinks'
+import { WorldPeople } from './WorldPeople'
+import { useIsGm } from '../lib/access'
 import { PluginsSection } from './Plugins'
 import { SystemPacks } from './SystemPacks'
 import { Select } from './Select'
@@ -402,6 +404,7 @@ function AppearanceSection() {
 
 function WorldsSection() {
   const { user, workspaces, wsId } = useStore()
+  const gm = useIsGm()
   return (
     <>
       <h3 className="muted">Your worlds</h3>
@@ -410,7 +413,13 @@ function WorldsSection() {
         {user?.role !== 'viewer' && <button className="btn ghost" onClick={async () => { const n = await askText('New world', { label: 'World name', okLabel: 'Create' }); if (n?.trim()) useStore.getState().createWorkspace(n.trim()) }}>+ New world</button>}
       </div>
       {wsId && <WorldOptions id={wsId} />}
-      {wsId && (
+      {wsId && user?.role !== 'viewer' && (
+        <p style={{ marginTop: 10 }}>
+          <button className="btn sm" onClick={() => useStore.getState().setUi({ importOpen: true })}><Upload size={13} style={{ verticalAlign: -2 }} /> Import pages…</button>
+          <span className="muted" style={{ fontSize: 13, marginLeft: 8 }}>From Obsidian, Notion, Logseq, LegendKeeper, World Anvil, Roam, or Markdown, HTML and text files.</span>
+        </p>
+      )}
+      {wsId && gm && (
         <p style={{ marginTop: 10 }}>
           <a className="btn sm" href={`/api/workspaces/${wsId}/export`} download><Download size={13} style={{ verticalAlign: -2 }} /> Export this world (.zip)</a>
           <span className="muted" style={{ fontSize: 13, marginLeft: 8 }}>Markdown pages in their folders, images, and world.json with everything else.</span>
@@ -448,6 +457,7 @@ export function SettingsView() {
     { id: 'appearance', label: 'Appearance', show: true, body: <AppearanceSection /> },
     { id: 'shortcuts', label: 'Keyboard shortcuts', show: true, body: <ShortcutsSection /> },
     { id: 'worlds', label: 'Worlds', show: true, body: <WorldsSection /> },
+    { id: 'people', label: 'People', show: true, body: <WorldPeople /> },
     { id: 'sharing', label: 'Sharing', show: true, body: <SharedPages /> },
     { id: 'accounts', label: 'Accounts', show: owner, body: <AccountsSection /> },
     { id: 'backups', label: 'Backups', show: owner, body: <BackupsSection /> },

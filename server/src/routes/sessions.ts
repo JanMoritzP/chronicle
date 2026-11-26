@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { requireEditor, requireUser } from '../auth.js'
+import { accessOf } from '../access.js'
 import { db, now } from '../db.js'
 import { emptyDoc, ensureHeadingIds, extract } from '../doc.js'
 import { recordActivity, reindexLinks, setTags, today, uid } from '../pages.js'
@@ -62,7 +63,9 @@ function ensureSessionFolder(ws: string): string {
 export async function sessionRoutes(app: FastifyInstance) {
   app.get('/api/workspaces/:ws/sessions', { preHandler: requireUser }, async (req) => {
     const { ws } = req.params as { ws: string }
-    return list(ws)
+    const a = accessOf(req, ws)
+    // the write-up of a session may be kept from someone; the session itself stays in the list
+    return list(ws).map((s) => (a.sees(s.pageId) ? s : { ...s, pageId: null, pageTitle: null }))
   })
 
   app.post('/api/workspaces/:ws/sessions', { preHandler: requireEditor }, async (req, reply) => {

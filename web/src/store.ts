@@ -62,6 +62,8 @@ interface State {
   captureOpen: boolean
   libraryOpen: boolean
   copyPages: string[] | null
+  /** the import dialog is open */
+  importOpen: boolean
   bindings: Record<Action, string[]>
 
   init: () => Promise<void>
@@ -99,7 +101,7 @@ interface State {
   upsertStatTemplate: (t: StatTemplateRow) => void
   removeStatTemplateLocal: (id: string) => void
 
-  setUi: (p: Partial<Pick<State, 'sidebarOpen' | 'zen' | 'searchOpen' | 'searchInitial' | 'captureOpen' | 'libraryOpen' | 'copyPages'>>) => void
+  setUi: (p: Partial<Pick<State, 'sidebarOpen' | 'zen' | 'searchOpen' | 'searchInitial' | 'captureOpen' | 'libraryOpen' | 'copyPages' | 'importOpen'>>) => void
   setBindings: (b: Record<Action, string[]>) => void
 }
 
@@ -114,7 +116,7 @@ const resolveActive = (s: Pick<State, 'tabs' | 'activeTab'>) => s.tabs.find((t) 
 export const useStore = create<State>((set, get) => ({
   account: null, user: null, online: [], authChecked: false, workspaces: [], wsId: null, data: emptyData, loaded: false, offline: false,
   tabs: [firstTab], activeTab: firstTab.id, splitTab: null,
-  sidebarOpen: window.innerWidth > 900, zen: false, searchOpen: false, searchInitial: '', captureOpen: false, libraryOpen: false, copyPages: null,
+  sidebarOpen: window.innerWidth > 900, zen: false, searchOpen: false, searchInitial: '', captureOpen: false, libraryOpen: false, copyPages: null, importOpen: false,
   bindings: loadBindings(),
 
   async init() {

@@ -627,6 +627,17 @@ const migrations: (string | ((d: Database.Database) => void))[] = [
       try { for (const id of (JSON.parse(r.settings).daylight ?? []) as string[]) on.run(id) } catch { /* a damaged settings row has no daylight list */ }
     }
   },
+  // GMs of a world (a flag on the membership, since the role column only allows editor and viewer) and access rules on pages and folders;
+  // the people named as GMs in the table settings become GMs of the world, so they keep seeing every secret
+  (d) => {
+    d.exec('ALTER TABLE workspace_members ADD COLUMN gm INTEGER NOT NULL DEFAULT 0')
+    d.exec('ALTER TABLE pages ADD COLUMN access TEXT')
+    d.exec('ALTER TABLE folders ADD COLUMN access TEXT')
+    const promote = d.prepare("UPDATE workspace_members SET gm = 1 WHERE workspace_id = ? AND user_id = ? AND role = 'editor'")
+    for (const r of d.prepare('SELECT workspace_id, settings FROM table_state').all() as { workspace_id: string; settings: string }[]) {
+      try { for (const id of (JSON.parse(r.settings).gms ?? []) as string[]) promote.run(r.workspace_id, id) } catch { /* a damaged settings row names no GMs */ }
+    }
+  },
 ]
 
 export const SCHEMA_VERSION = migrations.length

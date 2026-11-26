@@ -1,43 +1,111 @@
 import { Node, mergeAttributes } from '@tiptap/core'
+import { Plugin, type Transaction } from '@tiptap/pm/state'
 import { NodeViewContent, NodeViewWrapper, ReactNodeViewRenderer, type NodeViewProps } from '@tiptap/react'
-import { ChevronDown, ChevronRight, Lock, PanelLeft, PanelRight } from 'lucide-react'
+import { ChevronDown, ChevronRight, Eye, Lock, PanelLeft, PanelRight } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { api } from '../api'
+import { useIsGm, worldRoleNow } from '../lib/access'
+import { useStore } from '../store'
+import type { Person } from '../types'
 
 export const CALLOUT_KINDS = ['info', 'warning', 'aloud', 'secret'] as const
 export type CalloutKind = typeof CALLOUT_KINDS[number]
 export const CALLOUT_LABEL: Record<CalloutKind, string> = { info: 'Note', warning: 'Warning', aloud: 'Read aloud', secret: 'Secret' }
 
+/** Who besides the GMs may read a secret box: a list of member ids, picked by a GM. */
+function RevealPicker({ reveal, onChange }: { reveal: string[]; onChange: (ids: string[]) => void }) {
+  const wsId = useStore((s) => s.wsId)
+  const [open, setOpen] = useState(false)
+  const [people, setPeople] = useState<Person[]>([])
+  // the names are needed to show who may read it, and to pick from
+  const need = open || reveal.length > 0
+  useEffect(() => { if (need && wsId) api.people(wsId).then((p) => setPeople(p.filter((x) => x.role !== 'owner' && x.role !== 'gm'))).catch(() => {}) }, [need, wsId])
+  const names = people.filter((p) => reveal.includes(p.id)).map((p) => p.username)
+  return (
+    <span className="reveal-picker">
+      <button type="button" className="callout-reveal" aria-haspopup="menu" title="Who besides the GMs may read this" onClick={() => setOpen(!open)}>
+        <Eye size={12} /> {reveal.length ? (names.length ? `GMs and ${names.join(', ')}` : `GMs and ${reveal.length} more`) : 'GMs only'}
+      </button>
+      {open && (
+        <span className="menu reveal-menu" role="menu" onMouseLeave={() => setOpen(false)}>
+          {!people.length && <span className="muted" style={{ padding: '6px 10px' }}>No players in this world yet.</span>}
+          {people.map((p) => (
+            <label key={p.id} className="row" style={{ padding: '4px 10px', gap: 8 }}>
+              <input type="checkbox" checked={reveal.includes(p.id)} onChange={(e) => onChange(e.target.checked ? [...reveal, p.id] : reveal.filter((x) => x !== p.id))} />
+              {p.username}
+            </label>
+          ))}
+        </span>
+      )}
+    </span>
+  )
+}
+
 function CalloutView({ node, updateAttributes, editor }: NodeViewProps) {
+  const gm = useIsGm()
   const kind: CalloutKind = CALLOUT_KINDS.includes(node.attrs.kind) ? node.attrs.kind : 'info'
-  const next = CALLOUT_KINDS[(CALLOUT_KINDS.indexOf(kind) + 1) % CALLOUT_KINDS.length]
+  // secrets are the GM's: others neither make one nor turn one into an open box
+  const kinds = gm ? CALLOUT_KINDS : CALLOUT_KINDS.filter((k) => k !== 'secret')
+  const next = kinds[(kinds.indexOf(kind as never) + 1) % kinds.length]
+  const canSwitch = editor.isEditable && (gm || kind !== 'secret')
   const label = CALLOUT_LABEL[kind]
+  const reveal: string[] = Array.isArray(node.attrs.reveal) ? node.attrs.reveal : []
   return (
     <NodeViewWrapper className={`callout callout-${kind}`} data-callout="" data-kind={kind}>
       <div className="callout-head" contentEditable={false}>
-        {editor.isEditable ? (
+        {canSwitch ? (
           <button type="button" className="callout-kind" title={`Change to ${CALLOUT_LABEL[next].toLowerCase()}`} onClick={() => updateAttributes({ kind: next })}>
             {kind === 'secret' && <Lock size={12} />}{label}
           </button>
         ) : <span className="callout-kind">{kind === 'secret' && <Lock size={12} />}{label}</span>}
-        {kind === 'secret' && editor.isEditable && <span className="muted">Stays closed in shared pages</span>}
+        {kind === 'secret' && editor.isEditable && gm && <RevealPicker reveal={reveal} onChange={(ids) => updateAttributes({ reveal: ids })} />}
+        {kind === 'secret' && !gm && <span className="muted">A GM shows you this</span>}
       </div>
       <NodeViewContent className="callout-body" />
     </NodeViewWrapper>
   )
 }
 
-/** A highlighted box: a note, a warning, text to read aloud, or a secret that shared pages never show. */
+/** A highlighted box: a note, a warning, text to read aloud, or a secret that only GMs (and the players a GM names) read. */
 export const Callout = Node.create({
   name: 'callout',
   group: 'block',
   content: 'block+',
   defining: true,
   addAttributes() {
-    return { kind: { default: 'info', parseHTML: (el) => el.getAttribute('data-kind') || 'info', renderHTML: (a) => ({ 'data-kind': a.kind }) } }
+    return {
+      kind: { default: 'info', parseHTML: (el) => el.getAttribute('data-kind') || 'info', renderHTML: (a) => ({ 'data-kind': a.kind }) },
+      /** ids of the players who may read a secret besides the GMs */
+      reveal: {
+        default: [],
+        parseHTML: (el) => { try { const v = JSON.parse(el.getAttribute('data-reveal') || '[]'); return Array.isArray(v) ? v : [] } catch { return [] } },
+        renderHTML: (a) => (Array.isArray(a.reveal) && a.reveal.length ? { 'data-reveal': JSON.stringify(a.reveal) } : {}),
+      },
+    }
   },
   parseHTML() { return [{ tag: 'div[data-callout]' }] },
   renderHTML({ HTMLAttributes }) { return ['div', mergeAttributes(HTMLAttributes, { 'data-callout': '' }), 0] },
   addNodeView() { return ReactNodeViewRenderer(CalloutView) },
+  addProseMirrorPlugins() {
+    const editor = this.editor
+    return [new Plugin({
+      // A secret is kept from everyone but GMs. One a player writes (from /secret or a template) names that player,
+      // so it does not lock them out of the page they are writing.
+      appendTransaction: (trs, _old, state) => {
+        if (!editor.isEditable || !trs.some((t) => t.docChanged) || worldRoleNow() === 'gm') return null
+        const me = useStore.getState().user?.id
+        if (!me) return null
+        let tr: Transaction | null = null
+        state.doc.descendants((n, pos) => {
+          if (n.type.name !== 'callout' || n.attrs.kind !== 'secret') return
+          const reveal: string[] = Array.isArray(n.attrs.reveal) ? n.attrs.reveal : []
+          if (reveal.includes(me)) return
+          tr = (tr ?? state.tr).setNodeMarkup(pos, undefined, { ...n.attrs, reveal: [...reveal, me] })
+        })
+        return tr
+      },
+    })]
+  },
 })
 
 function FoldView({ node, updateAttributes, editor }: NodeViewProps) {

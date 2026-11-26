@@ -2,6 +2,7 @@ import { ArrowLeft, ArrowRight, Menu, Plus, SplitSquareHorizontal, X } from 'luc
 import { useEffect, useState } from 'react'
 import { CaptureDialog } from './components/Capture'
 import { CopyDialog } from './components/CopyDialog'
+import { ImportDialog } from './components/ImportDialog'
 import { GraphView } from './components/Graph'
 import { HoverPreview } from './components/HoverPreview'
 import { MapView } from './components/MapView'
@@ -241,6 +242,7 @@ function Shell() {
       <CaptureDialog />
       <LibraryDialog />
       <CopyDialog />
+      <ImportDialog />
       <SuggestPopup />
       <HoverPreview />
     </div>

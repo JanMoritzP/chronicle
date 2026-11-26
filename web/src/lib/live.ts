@@ -4,7 +4,7 @@ import { liveBus, pageSavedBus } from './bus'
 import { useWorld } from './world'
 
 // parts of the app that keep their own copy of world data besides the store
-const WORLD_AREAS = new Set(['maps', 'layers', 'items', 'events', 'relations', 'calendar'])
+const WORLD_AREAS = new Set(['maps', 'layers', 'items', 'events', 'relations', 'calendar', 'access'])
 
 /**
  * Keeps this tab in step with what other people do in the open world: new and renamed pages, saved text, who is online,

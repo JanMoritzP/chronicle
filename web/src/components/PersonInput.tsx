@@ -9,7 +9,7 @@ import { usePopPosition } from './LibraryInput'
 // A text box that suggests the people of the world while you type, such as the player on a character sheet.
 // The box keeps a name: someone who has no account yet can still be written in.
 
-const ROLE: Record<Person['role'], string> = { owner: 'Owns the world', editor: 'Edits the world', viewer: 'Reads the world' }
+const ROLE: Record<Person['role'], string> = { owner: 'Owns the world', gm: 'GM of the world', editor: 'Edits the world', viewer: 'Reads the world' }
 
 export function PersonInput({ value, onChange, label, placeholder, className = 'sv-text' }: { value: string; onChange: (name: string) => void; label: string; placeholder?: string; className?: string }) {
   const wsId = useStore((s) => s.wsId)

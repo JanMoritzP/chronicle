@@ -3,7 +3,7 @@ import path from 'node:path'
 import type { Server as HttpServer } from 'node:http'
 import sharp from 'sharp'
 import { WebSocketServer, WebSocket, type RawData } from 'ws'
-import { worldRole } from './access.js'
+import { worldRole, type WorldRole } from './access.js'
 import { userFromCookieHeader, type AuthUser } from './auth.js'
 import { config } from './config.js'
 import { db, now } from './db.js'
@@ -19,7 +19,7 @@ import { playersOf, playsInWorld } from './players.js'
 import { revalidateCollab } from './collab.js'
 
 /** Only a read-only member needs asking: everyone else is a player anyway. */
-const plays = (ws: string, userId: string, wr: 'editor' | 'viewer') => wr === 'viewer' && playsInWorld(ws, userId)
+const plays = (ws: string, userId: string, wr: WorldRole) => wr === 'viewer' && playsInWorld(ws, userId)
 import { advance, delay as delayTurn, marker as lairMarker, emptyCombat, end as endCombat, start as startCombat, visible as visibleCombat, withList, type Combat } from './combat.js'
 import { cryptoRng, parseRoll } from './dice.js'
 import { DAMAGE_TYPES_PF2E, firstAttack, leftReach, adjustDamage, concentrationDc, deathSave, longRest, modOf, saveBonusOf, shortRest, type Effect } from './rules5e.js'
@@ -42,7 +42,7 @@ import {
 const CLOSE_DENIED = 4003
 
 interface Conn {
-  socket: WebSocket; user: AuthUser; ws: string; wr: 'editor' | 'viewer'; role: TableRole; scene: string | null
+  socket: WebSocket; user: AuthUser; ws: string; wr: WorldRole; role: TableRole; scene: string | null
   alive: boolean; limit: () => boolean; queue: Promise<void>
   /** What this player's tokens see on the scene they are on (null when nothing is hidden from them), and which tokens they were told about. */
   sight: Sight | null; shown: Set<string>

@@ -1,5 +1,5 @@
 import { EditorContent, useEditor } from '@tiptap/react'
-import { BookMarked, BookUp, Clock, Copy, Globe, ImagePlus, LayoutTemplate, Maximize2, MoreHorizontal, MoveHorizontal, PanelRightOpen, Trash2 } from 'lucide-react'
+import { BookMarked, BookUp, Clock, Copy, Globe, ImagePlus, LayoutTemplate, Lock, Maximize2, MoreHorizontal, MoveHorizontal, PanelRightOpen, Trash2, Users } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, ApiError } from '../api'
 import { buildExtensions } from '../editor/extensions'
@@ -7,6 +7,8 @@ import { embedPicker, imagePicker, worldPicker } from '../editor/slash'
 import { EventDialog, PageWorldSection, PinDialog } from './PageWorld'
 import { PageRelationsSection, RelationDialog } from './Relations'
 import { ShareDialog } from './ShareDialog'
+import { AccessDialog } from './AccessDialog'
+import { folderRule, hasRule, ruleSummary, useIsGm } from '../lib/access'
 import { liveBus } from '../lib/bus'
 import { CollabProvider, colorFor, type CollabStatus } from '../lib/collab'
 import { ago, backlinksOf } from '../lib/data'
@@ -73,8 +75,14 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
   const user = useStore((s) => s.user)!
   const online = useStore((s) => s.online)
   const others = online.filter((o) => o.id !== user.id)
-  /** reads the world only; may still change the page of a character they play (its text and sheet, not its place in the world) */
-  const viewer = user.role === 'viewer'
+  /** the account reads only; it may still change a page given to it (the character it plays, or one a GM opened to it): its text and sheet */
+  const accountReads = user.role === 'viewer'
+  /** this page is for reading: a GM made it so, or it holds secrets kept from this person and came without them */
+  const pageReads = page.level === 'view' || !!page.secretsHidden
+  /** no controls for the page's place in the world (tags, type, menus) */
+  const viewer = accountReads || pageReads
+  const gm = useIsGm()
+  const [showAccess, setShowAccess] = useState(false)
   const zen = useStore((s) => s.zen)
   const meta = useStore((s) => s.data.pages.find((p) => p.id === page.id))
   const links = useStore((s) => s.data.links)
@@ -92,7 +100,7 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
   const pending = useRef<Pending>({})
   const [props, setProps] = useState<Record<string, any>>(page.props ?? {})
   const players: string[] = Array.isArray(props.players) ? props.players : []
-  const readOnly = viewer && !players.includes(user.id)
+  const readOnly = pageReads || (accountReads && page.level !== 'edit' && !players.includes(user.id))
   const setPlayers = (next: string[]) => { setProps({ ...props, players: next }); schedule({ propsPatch: { players: next } }, 100) }
   const types = useTypes()
   const pageType = typeOf(types, { type: props.type ?? null })
@@ -165,6 +173,8 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
   const [live, setLive] = useState(false)
   const [conn, setConn] = useState<CollabStatus>('connecting')
   useEffect(() => {
+    // someone a secret is kept from reads the page as it came, without joining the shared document (which holds the secret)
+    if (page.secretsHidden) return
     const p = new CollabProvider(page.id)
     const offs = [
       p.subscribe(() => { setConn(p.status); if (p.synced) setLive(true) }),
@@ -440,6 +450,11 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
               {others.length > 4 && <span className="avatar more">+{others.length - 4}</span>}
             </span>
           )}
+          {gm && (
+            <button className={`icon-btn${hasRule(meta?.access) ? ' on' : ''}`} aria-label="Who can see this page"
+              title={`Who can see this page: ${hasRule(meta?.access) ? ruleSummary(meta?.access) : folderRule(folders, meta?.folderId ?? null).from ? 'follows its folder' : 'everyone by their role'}`}
+              onClick={() => setShowAccess(true)}>{hasRule(meta?.access) ? <Lock size={16} /> : <Users size={16} />}</button>
+          )}
           <span className="save-state" data-state={state}>{readOnly ? (conn === 'offline' ? 'Offline' : 'Read-only') : conn === 'offline' ? 'Offline, changes sync later' : !live ? 'Connecting…' : save === 'saved' ? 'Saved' : save === 'saving' ? 'Saving…' : save === 'error' ? 'Offline, retrying…' : 'Unsaved'}</span>
           <button className="icon-btn" aria-label="Page width" title={`Page width: ${PAGE_WIDTHS.find((w) => w.id === width)?.label}. Click for ${nextWidth.label.toLowerCase()}.`} onClick={() => setPageWidth(nextWidth.id)}><MoveHorizontal size={16} /></button>
           <button className="icon-btn" title="Zen mode (Alt+Z)" onClick={() => useStore.getState().setUi({ zen: true })}><Maximize2 size={16} /></button>
@@ -547,7 +562,8 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
           <p className="cs-convert muted">This person has a character sheet. Player characters now have their own special page, without the details box.
             <button className="btn sm" onClick={makePlayerCharacter}>Make it a player character</button></p>
         )}
-        {viewer && !readOnly && <p className="player-note muted">You play this character: you can change its text and sheet.</p>}
+        {viewer && !readOnly && <p className="player-note muted">{players.includes(user.id) ? 'You play this character: you can change its text and sheet.' : 'A GM opened this page to you: you can change its text and sheet.'}</p>}
+        {page.secretsHidden && <p className="player-note muted">Parts of this page are for the GM. You read it without them, so it can not be changed here.</p>}
         {sheetOf(props)?.kind === 'character' ? (
           sheetOf(props)!.pf2e?.char
             ? <Pf2eCharacterSheet sheet={sheetOf(props)!} set={readOnly ? undefined : setSheetFields} />
@@ -641,6 +657,7 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
         setEmbedFor(null)
       }} />}
       {showShare && <ShareDialog pageId={page.id} title={title} onClose={() => setShowShare(false)} />}
+      {showAccess && <AccessDialog kind="page" id={page.id} onClose={() => setShowAccess(false)} />}
       {pushing && <PushDialog pageId={page.id} onClose={() => setPushing(false)} />}
       {building && <CharacterBuilder ruleset={system === '5e-2024' ? '5e-2024' : '5e'} name={title} onCreate={createBuilt} onClose={() => setBuilding(false)} />}
       {showHistory && <History pageId={page.id} readOnly={viewer} onClose={() => setShowHistory(false)}

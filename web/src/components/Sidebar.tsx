@@ -1,13 +1,15 @@
 import { useUnreadComments } from './Comments'
 import {
-  BookOpen, Swords, CalendarDays, Check, ChevronDown, ChevronRight, ChevronsUpDown, CircleHelp, FilePlus2, FolderPlus, Hash, Home, Inbox, LayoutTemplate, Library, ListTodo, Map as MapIcon, MessageSquare, Network, Plus, ScrollText, Search, Settings, Shapes, Trash2, Users, Zap,
+  BookOpen, Swords, CalendarDays, Check, ChevronDown, ChevronRight, ChevronsUpDown, CircleHelp, FilePlus2, FolderPlus, Hash, Home, Inbox, LayoutTemplate, Library, ListTodo, Lock, Map as MapIcon, MessageSquare, Network, Plus, ScrollText, Search, Settings, Shapes, Trash2, Upload, Users, Zap,
 } from 'lucide-react'
 import { useMemo, useRef, useState } from 'react'
 import { api } from '../api'
+import { hasRule, useIsGm } from '../lib/access'
 import { alertDialog, askText, confirmDialog } from '../lib/dialog'
 import { buildTagTree, type TagNode } from '../lib/data'
 import { currentView, useStore, type View } from '../store'
 import type { PageMeta } from '../types'
+import { AccessDialog } from './AccessDialog'
 import { PageIcon, TypeIcon, useTypes } from './TypeIcon'
 
 function TagItem({ node, depth }: { node: TagNode; depth: number }) {
@@ -55,6 +57,8 @@ export function Sidebar() {
   const [dropFolder, setDropFolder] = useState<string | null | undefined>(undefined)
   const [menu, setMenu] = useState<{ x: number; y: number; folderId: string } | null>(null)
   const [typeMenu, setTypeMenu] = useState<{ x: number; y: number; folderId: string | null } | null>(null)
+  const gm = useIsGm()
+  const [accessFor, setAccessFor] = useState<string | null>(null)
   const tab = tabs.find((t) => t.id === activeTab) ?? tabs[0]
   const view = currentView(tab)
   const activeId = view.type === 'page' ? view.id : null
@@ -146,6 +150,7 @@ export function Sidebar() {
           >
             {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
             <span className="grow ellipsis">{f.name}</span>
+            {gm && hasRule(f.access) && <Lock size={12} className="muted" aria-label="Has its own access setting" />}
             {!readOnly && (
               <span className="actions">
                 <button className="icon-btn" style={{ width: 22, height: 22 }} title="New page here" onClick={(e) => { e.stopPropagation(); setOpen({ ...open, [f.id]: true }); useStore.getState().createPage({ folderId: f.id }) }}><FilePlus2 size={14} /></button>
@@ -179,6 +184,7 @@ export function Sidebar() {
     >
       <PageIcon page={p} />
       <span className="grow ellipsis">{p.title || 'Untitled'}</span>
+      {gm && hasRule(p.access) && <Lock size={12} className="muted" aria-label="Has its own access setting" />}
     </div>
   )
 
@@ -267,6 +273,7 @@ export function Sidebar() {
                 if (n?.trim()) useStore.getState().createWorkspace(n.trim()).catch((e) => alertDialog(e.message))
               }}><Plus size={14} /> New world</button>
             )}
+            {!readOnly && <button role="menuitem" onClick={() => { setWorldMenu(null); useStore.getState().setUi({ importOpen: true }) }}><Upload size={14} /> Import pages…</button>}
           </div>
         </div>
       )}
@@ -307,9 +314,11 @@ export function Sidebar() {
                 if (await confirmDialog('Its pages and subfolders move up one level.', { title: 'Delete folder?', okLabel: 'Delete', danger: true })) { await api.deleteFolder(id); await useStore.getState().refresh() }
               }}>Delete</button>
             </>}
+            {gm && <button onClick={() => { setAccessFor(menu.folderId); setMenu(null) }}><Lock size={14} /> Who can see this…</button>}
           </div>
         </div>
       )}
+      {accessFor && <AccessDialog kind="folder" id={accessFor} onClose={() => setAccessFor(null)} />}
     </>
   )
 }

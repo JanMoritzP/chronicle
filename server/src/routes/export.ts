@@ -125,6 +125,8 @@ function* worldArchive(ws: string): Generator<ZipEntry> {
 export async function exportRoutes(app: FastifyInstance) {
   app.get('/api/workspaces/:ws/export', { preHandler: requireUser }, async (req, reply) => {
     const { ws } = req.params as { ws: string }
+    // the export is the whole world, secrets and hidden pages included
+    if (req.worldRole !== 'gm') return reply.code(403).send({ error: 'Only a GM can export the world.' })
     const w = db.prepare('SELECT name FROM workspaces WHERE id = ? AND deleted_at IS NULL').get(ws) as { name: string } | undefined
     if (!w) return reply.code(404).send({ error: 'not found' })
     const stamp = new Date().toISOString().slice(0, 10)

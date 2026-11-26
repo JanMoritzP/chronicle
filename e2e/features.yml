@@ -411,6 +411,26 @@ areas:
       - id: copy
         name: "Copy a page to another world"
         files: [web/src/components/CopyDialog.tsx]
+      - id: import
+        name: "Import pages from other apps (Markdown files with links)"
+        files: [web/src/components/ImportDialog.tsx, web/src/lib/import/formats.ts, web/src/lib/import/markdown.ts, web/src/lib/import/run.ts]
+
+  - id: access
+    name: Who sees what
+    features:
+      - id: access.secrets
+        name: "Players read pages without the secrets kept from them"
+        files: [web/src/components/PageView.tsx]
+      - id: access.page
+        name: "A GM hides a page from everyone else"
+        files: [web/src/components/AccessDialog.tsx]
+      - id: access.roles
+        name: "A GM changes what a member is in the world"
+        files: [web/src/components/WorldPeople.tsx]
+      - id: access.reveal
+        name: "A GM names players who may read a secret"
+        files: [web/src/editor/blocks.tsx]
+        status: planned
 
   - id: live
     name: Working together and offline

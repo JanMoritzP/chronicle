@@ -24,7 +24,16 @@ export interface PageMeta {
   updatedAt: number
   /** open (not done) todo markers on the page */
   todos?: number
+  /** GMs only: the page's own access rule, null when it follows its folder */
+  access?: AccessRule | null
+  /** everyone else: how far they reach on this page */
+  level?: AccessLevel
 }
+export type AccessLevel = 'none' | 'view' | 'edit'
+/** Who sees a page or a folder: a level for everyone in the world and levels for single people (user ids). */
+export interface AccessRule { everyone?: AccessLevel; people?: Record<string, AccessLevel> }
+export type WorldRole = 'gm' | 'editor' | 'viewer'
+export interface Member { id: string; username: string; role: 'owner' | WorldRole; readOnlyAccount: boolean }
 export interface TodoItem {
   pageId: string; id: string; message: string; done: boolean; context: string
   createdAt: number; doneAt: number | null; pageTitle: string; pageIcon: string | null
@@ -33,16 +42,22 @@ export interface CommentItem {
   pageId: string; id: string; from: string; to: string; message: string; done: boolean; context: string
   createdAt: number; doneAt: number | null; pageTitle: string; pageIcon: string | null
 }
-export interface Person { id: string; username: string; /** what they may do in this world */ role: 'owner' | 'editor' | 'viewer' }
-export interface Folder { id: string; parentId: string | null; name: string; sort: number }
+export interface Person { id: string; username: string; /** what they may do in this world */ role: 'owner' | WorldRole }
+export interface Folder { id: string; parentId: string | null; name: string; sort: number; /** GMs only: the folder's own rule */ access?: AccessRule | null; /** everyone else: how far they reach in it */ level?: AccessLevel }
 export interface LinkRow { sourceId: string; targetId: string | null; targetName: string; anchor: string | null; embed: number; /** set when the link points into the Open5e library */ libKey?: string | null }
 export interface Zettel { id: string; body: string; tags: string[]; createdAt: number; pageId: string | null; processedAt: number | null }
 export type RuleSystem = '5e' | '5e-2024' | 'pf2e'
 export interface WorldSettings { newPageTodo: string; system?: RuleSystem; invites?: boolean; /** id of the installed system pack the world plays by */ pack?: string }
 export interface Invite { id: string; label: string; role: 'editor' | 'viewer'; createdAt: number; expiresAt: number | null; maxUses: number | null; uses: number; lastUsedAt: number | null; status: 'open' | 'revoked' | 'expired' | 'used up' }
-export interface Workspace { id: string; name: string; settings?: WorldSettings; /** what this account may do in the world; viewers get a read-only app */ role?: 'editor' | 'viewer' }
+export interface Workspace { id: string; name: string; settings?: WorldSettings; /** what this account may do in the world; viewers get a read-only app */ role?: WorldRole }
 export interface User { id: string; username: string; role: 'owner' | 'editor' | 'viewer' }
-export interface FullPage extends PageMeta { content: any; props: Record<string, any> }
+export interface FullPage extends PageMeta {
+  content: any; props: Record<string, any>
+  /** the text holds secrets kept from this person: it came without them and is read-only for them */
+  secretsHidden?: boolean
+  /** GMs only: the page's rule and the one it would follow from its folder */
+  accessInfo?: { rule: AccessRule | null; inherited: AccessRule | null; inheritedFrom: string | null }
+}
 export type Pt = [number, number]
 export type Geometry = Pt | Pt[]
 export interface Keyframe { t: number; geometry?: Geometry; hidden?: boolean }
@@ -80,7 +95,7 @@ export interface EncounterBody { name: string; party: number[]; notes: string; m
 export interface Macro { id: string; name: string; text: string; shared: boolean; mine: boolean; updatedAt: number }
 export interface Encounter extends EncounterBody { id: string; updatedAt: number }
 export interface StatTemplateRow { id: string; name: string; sections: any[]; look?: Record<string, any>; updatedAt: number }
-export interface Bootstrap { pages: PageMeta[]; folders: Folder[]; links: LinkRow[]; zettels: Zettel[]; templates?: Template[]; pageTypes?: PageType[]; statTemplates?: StatTemplateRow[] }
+export interface Bootstrap { /** what this person is in the world (older caches lack it) */ role?: WorldRole; pages: PageMeta[]; folders: Folder[]; links: LinkRow[]; zettels: Zettel[]; templates?: Template[]; pageTypes?: PageType[]; statTemplates?: StatTemplateRow[] }
 
 export interface PluginField { key: string; label: string; type: 'text' | 'number' | 'boolean'; help?: string; placeholder?: string; value: string | number | boolean }
 export interface PluginInfo {

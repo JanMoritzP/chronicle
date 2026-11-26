@@ -5,6 +5,7 @@ import type { FastifyInstance } from 'fastify'
 import sharp from 'sharp'
 import { z } from 'zod'
 import { requireEditor, requireUser } from '../auth.js'
+import { accessOf } from '../access.js'
 import { config } from '../config.js'
 import { db, now } from '../db.js'
 import { uid } from '../pages.js'
@@ -163,7 +164,9 @@ export async function mapRoutes(app: FastifyInstance) {
     if (!m) return reply.code(404).send({ error: 'not found' })
     const layers = db.prepare('SELECT id, name, sort, visible FROM map_layers WHERE map_id = ? ORDER BY sort, rowid').all(id)
       .map((l: any) => ({ ...l, visible: !!l.visible }))
-    const items = (db.prepare('SELECT * FROM map_items WHERE map_id = ?').all(id) as ItemRow[]).map(itemOut)
+    const a = accessOf(req, m.workspace_id)
+    // a pin of a page kept from this person is kept from them too
+    const items = (db.prepare('SELECT * FROM map_items WHERE map_id = ?').all(id) as ItemRow[]).filter((i) => a.sees(i.page_id)).map(itemOut)
     return { ...mapOut(m), layers, items }
   })
 

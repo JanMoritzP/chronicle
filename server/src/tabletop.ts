@@ -48,11 +48,11 @@ export function parseSettings(raw: string | null | undefined): TableSettings {
 }
 
 /**
- * The owner account and anyone named in the settings run the table. Members who write in the world are players. Members who only read it
+ * The owner account, the GMs of the world and anyone named in the settings run the table. Members who write in the world are players. Members who only read it
  * watch, unless they play a character (a page names them, or they move a token): then they are players too.
  */
-export function roleAt(user: { id: string; role: string }, worldRole: 'editor' | 'viewer', settings: TableSettings, plays = false): TableRole {
-  if (user.role === 'owner' || settings.gms.includes(user.id)) return 'gm'
+export function roleAt(user: { id: string; role: string }, worldRole: 'gm' | 'editor' | 'viewer', settings: TableSettings, plays = false): TableRole {
+  if (user.role === 'owner' || worldRole === 'gm' || settings.gms.includes(user.id)) return 'gm'
   return worldRole === 'viewer' && !plays ? 'spectator' : 'player'
 }
 

@@ -21,7 +21,7 @@ import { onPresenceChange } from './presence.js'
 const COOKIE = 'dnd_admin'
 const sha = (s: string) => crypto.createHash('sha256').update(s).digest('hex')
 const role = z.enum(['owner', 'editor', 'viewer'])
-const memberRole = z.enum(['editor', 'viewer'])
+const memberRole = z.enum(['gm', 'editor', 'viewer'])
 
 export function ensureAdmin(): boolean {
   const count = (db.prepare('SELECT COUNT(*) c FROM admins').get() as { c: number }).c
@@ -59,7 +59,7 @@ function overview() {
   const worlds = db.prepare('SELECT id, name, created_at AS createdAt FROM workspaces WHERE deleted_at IS NULL ORDER BY created_at').all() as
     { id: string; name: string; createdAt: number }[]
   const pages = new Map((db.prepare('SELECT workspace_id AS w, COUNT(*) n FROM pages WHERE deleted_at IS NULL GROUP BY workspace_id').all() as { w: string; n: number }[]).map((r) => [r.w, r.n]))
-  const members = db.prepare('SELECT workspace_id AS worldId, user_id AS userId, role FROM workspace_members').all() as { worldId: string; userId: string; role: string }[]
+  const members = db.prepare("SELECT workspace_id AS worldId, user_id AS userId, CASE WHEN gm = 1 AND role = 'editor' THEN 'gm' ELSE role END AS role FROM workspace_members").all() as { worldId: string; userId: string; role: string }[]
   const titles = new Map((db.prepare('SELECT id, title FROM pages').all() as { id: string; title: string }[]).map((r) => [r.id, r.title]))
   const worldName = new Map(worlds.map((w) => [w.id, w.name]))
   const editing = new Map<string, { pageId: string; title: string; world: string; canWrite: boolean }[]>()

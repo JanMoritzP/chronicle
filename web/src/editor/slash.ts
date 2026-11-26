@@ -57,7 +57,7 @@ const COMMANDS: Cmd[] = [
   { id: 'callout', label: 'Note box', sub: 'Highlighted box for a note', keywords: 'callout info highlight', icon: Info, run: viaChain('callout') },
   { id: 'warning', label: 'Warning box', sub: 'Highlighted box for a danger or a rule to remember', keywords: 'callout caution danger', icon: TriangleAlert, run: viaChain('warning') },
   { id: 'aloud', label: 'Read-aloud box', sub: 'Text to read to the players', keywords: 'callout boxed text describe narration', icon: BookOpen, run: viaChain('aloud') },
-  { id: 'secret', label: 'Secret', sub: 'Only you see it: shared pages keep it closed', keywords: 'callout gm hidden private spoiler', icon: Lock, run: viaChain('secret') },
+  { id: 'secret', label: 'Secret', sub: 'For GMs, and the players they name: shared pages keep it closed', keywords: 'callout gm hidden private spoiler', icon: Lock, run: viaChain('secret') },
   { id: 'imgframe', label: 'Image placeholder', sub: 'An empty frame for a picture to add later', keywords: 'picture empty slot frame later', icon: ImagePlus, run: (e, r) => { e.chain().focus().deleteRange(r).insertContent(imagePlaceholder()).run() } },
   { id: 'fold', label: 'Collapsible section', sub: 'A titled section that can be closed', keywords: 'toggle accordion details spoiler', icon: ChevronsUpDown, run: viaChain('fold') },
   { id: 'columns', label: 'Columns', sub: 'Two columns side by side (cols3 for three)', keywords: 'layout side', icon: Columns2, run: viaChain('cols') },

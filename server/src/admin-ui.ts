@@ -179,7 +179,7 @@ const js = String.raw`
   function act(promise) { return promise.then(load).catch(fail) }
 
   var ROLES = [['viewer', 'Viewer'], ['editor', 'Editor'], ['owner', 'Owner']]
-  var roleLabel = { owner: 'Owner', editor: 'Editor', viewer: 'Viewer' }
+  var roleLabel = { owner: 'Owner', gm: 'GM', editor: 'Editor', viewer: 'Viewer' }
 
   function userName(id) {
     var u = state.data.users.filter(function (x) { return x.id === id })[0]
@@ -205,7 +205,7 @@ const js = String.raw`
     var others = d.users.filter(function (u) { return u.role !== 'owner' && memberIds.indexOf(u.id) < 0 })
     var owners = d.users.filter(function (u) { return u.role === 'owner' })
     var picker = h('select', { 'aria-label': 'Person to add to ' + w.name }, others.map(function (u) { return h('option', { value: u.id }, u.username) }))
-    var rolePick = h('select', { 'aria-label': 'Access' }, [h('option', { value: 'editor' }, 'Editor'), h('option', { value: 'viewer' }, 'Viewer')])
+    var rolePick = h('select', { 'aria-label': 'Access' }, [h('option', { value: 'gm' }, 'GM'), h('option', { value: 'editor' }, 'Editor'), h('option', { value: 'viewer' }, 'Viewer')])
     return h('div', { class: 'card' },
       h('div', { class: 'row' },
         h('h2', { class: 'grow' }, w.name),
@@ -231,7 +231,7 @@ const js = String.raw`
             if (!u || u.role === 'owner') return null
             var sel = h('select', { 'aria-label': 'Access for ' + u.username, onchange: function () {
               act(call('PUT', '/api/worlds/' + w.id + '/members/' + u.id, { role: sel.value }))
-            } }, [h('option', { value: 'editor' }, 'Editor'), h('option', { value: 'viewer' }, 'Viewer')])
+            } }, [h('option', { value: 'gm' }, 'GM'), h('option', { value: 'editor' }, 'Editor'), h('option', { value: 'viewer' }, 'Viewer')])
             sel.value = m.role
             return h('tr', {}, h('td', {}, u.username),
               h('td', {}, u.role === 'viewer' ? h('span', { class: 'muted' }, 'Viewer (account is read-only)') : sel),

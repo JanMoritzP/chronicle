@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { requireEditor, requireUser } from '../auth.js'
+import { accessOf } from '../access.js'
 import { db, now } from '../db.js'
 import { uid } from '../pages.js'
 
@@ -56,9 +57,11 @@ export async function timelineRoutes(app: FastifyInstance) {
   // ---------- events (a page can have a time without being on any map) ----------
   app.get('/api/workspaces/:ws/events', { preHandler: requireUser }, async (req) => {
     const { ws } = req.params as { ws: string }
-    return db.prepare(
+    const a = accessOf(req, ws)
+    // an event about a page kept from this person is kept from them too
+    return (db.prepare(
       `SELECT id, page_id AS pageId, title, t_start AS tStart, t_end AS tEnd FROM events WHERE workspace_id = ? ORDER BY t_start`,
-    ).all(ws)
+    ).all(ws) as { pageId: string | null }[]).filter((e) => a.sees(e.pageId))
   })
 
   const eventBody = z.object({

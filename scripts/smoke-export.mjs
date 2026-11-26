@@ -89,11 +89,11 @@ check('world.json has the structure', wj.format === 'chronicle-world' && wj.page
 check('world.json keeps the editor documents', wj.pages.find((x) => x.id === hero.id).content.content[1].content[1].attrs.pageId === city.id)
 check('other worlds are not in the export', !JSON.stringify(wj).includes('Exp World') || wj.workspace.name === 'Exp World')
 
-// viewer may export a world (read access) but not the whole instance
+// the export is the whole world, secrets and hidden pages included: only its GMs take it, and only owners the whole instance
 const vn = 'ev' + Math.floor(Math.random() * 1e6)
 await call('POST', '/api/users', { username: vn, password: 'viewerpass1', role: 'viewer' })
 const vc = (await call('POST', '/api/auth/login', { username: vn, password: 'viewerpass1' }, { anon: true })).set.split(';')[0]
-check('viewer can export a world', (await call('GET', `/api/workspaces/${W.id}/export`, null, { cookie: vc, binary: true })).status === 200)
+check('a viewer can not export a world', (await call('GET', `/api/workspaces/${W.id}/export`, null, { cookie: vc, binary: true })).status === 403)
 check('viewer cannot download full backup', (await call('GET', '/api/export/full', null, { cookie: vc, binary: true })).status === 403)
 check('viewer cannot restore', (await call('POST', '/api/backups/x.db/restore', {}, { cookie: vc })).status === 403)
 
