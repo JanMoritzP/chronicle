@@ -13,7 +13,7 @@ import { presenceChanged } from './presence.js'
 import { ALLOWED, AUDIO, VIDEO } from './routes/uploads.js'
 import { darknessAt } from './daylight.js'
 import { parseChat, readable, withInline, type Kind, type Part } from './chat.js'
-import { buildSight, canSee, type Sight, type SightToken } from './sight.js'
+import { buildSight, canSee, type ObscureData, type Sight, type SightToken } from './sight.js'
 import { blockedPath, type MoveWall } from './movement.js'
 import { playersOf, playsInWorld } from './players.js'
 import { revalidateCollab } from './collab.js'
@@ -158,12 +158,17 @@ function wallsFor(c: Conn, scene: string | null) {
   return (db.prepare('SELECT id, x1, y1, x2, y2, kind, open, locked FROM scene_walls WHERE scene_id = ? AND workspace_id = ?').all(scene, c.ws) as WallDb[])
     .map((w) => ({ id: w.id, locked: !!w.locked, x1: w.x1, y1: w.y1, x2: w.x2, y2: w.y2, kind: w.kind === 'secret' && c.role !== 'gm' ? (w.open ? 'door' : 'wall') : w.kind, open: !!w.open }))
 }
-/** Light given off by tokens, hidden ones too: a torch in the dark is seen whoever carries it. */
+/** Light given off by tokens, hidden ones too: a torch in the dark is seen whoever carries it. Placed fog and magical darkness ride along as `obscure`. */
 function lightsOf(ws: string, scene: string | null) {
   if (!scene) return []
-  return (db.prepare("SELECT id, x, y, data FROM tokens WHERE scene_id = ? AND workspace_id = ? AND data LIKE '%\"light\"%'").all(scene, ws) as { id: string; x: number; y: number; data: string }[])
-    .map((r) => ({ id: r.id, x: r.x, y: r.y, ...(parse<Record<string, any>>(r.data, {}).light ?? {}) }))
-    .filter((l) => !l.off && ((l.bright ?? 0) > 0 || (l.dim ?? 0) > 0))
+  return (db.prepare("SELECT id, x, y, data FROM tokens WHERE scene_id = ? AND workspace_id = ? AND (data LIKE '%\"light\"%' OR data LIKE '%\"obscure\"%')").all(scene, ws) as { id: string; x: number; y: number; data: string }[])
+    .map((r): Record<string, any> => {
+      const data = parse<Record<string, any>>(r.data, {})
+      const o = data.obscure as ObscureData | undefined
+      if (o) return { id: r.id, x: r.x, y: r.y, obscure: { kind: o.kind === 'fog' ? 'fog' : 'darkness', radius: o.radius ?? 0, ...(o.off ? { off: true } : {}) } }
+      return { id: r.id, x: r.x, y: r.y, ...(data.light ?? {}) }
+    })
+    .filter((l) => (l.obscure ? !l.obscure.off && l.obscure.radius > 0 : !l.off && ((l.bright ?? 0) > 0 || (l.dim ?? 0) > 0)))
 }
 const fogOf = (c: Conn, scene: string | null) => {
   if (!scene) return null
@@ -505,7 +510,7 @@ function emitToken(ws: string, before: TokenRow | null, after: TokenRow | null) 
     const hp = (t: TokenRow) => (t.data.hp as { value?: number; max?: number } | undefined)
     if (hp(before)?.value !== hp(after)?.value) logEvent(ws, 'hp', sceneId, { id: after.id, name: after.name, value: hp(after)?.value ?? null, max: hp(after)?.max ?? null })
   }
-  const glows = (t: TokenRow | null) => { const l = t?.data.light as { bright?: number; dim?: number } | undefined; return !!l && ((l.bright ?? 0) > 0 || (l.dim ?? 0) > 0) }
+  const glows = (t: TokenRow | null) => { const l = t?.data.light as { bright?: number; dim?: number } | undefined; return !!t?.data.obscure || (!!l && ((l.bright ?? 0) > 0 || (l.dim ?? 0) > 0)) }
   if (glows(before) || glows(after)) sendLights(ws, sceneId)
   for (const c of inWorld(ws)) {
     if (c.scene !== sceneId) continue

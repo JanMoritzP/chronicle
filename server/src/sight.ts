@@ -1,4 +1,4 @@
-import { coneOf, pointInPolygon, visibility, type Pt, type Seg } from './visibility.js'
+import { coneOf, pointInPolygon, sightWithAreas, visibility, type Obscure, type Pt, type Seg } from './visibility.js'
 
 // Who may be told where a token is. On a scene with fog or darkness a player is only sent the tokens their own tokens can see:
 // in the line of sight (walls block it) and lit (by the sky, a light, or darkvision). It mirrors what their screen draws
@@ -9,7 +9,18 @@ export interface SightScene { width: number; height: number; gridSize: number; d
 export type SightWall = Seg & { oneway?: boolean }
 export interface SightToken {
   id: string; x: number; y: number; owners: string[]
-  data: { /** the whole party sees through this token */ sharedSight?: boolean; vision?: { sight?: number | null; dark?: number }; light?: { bright?: number; dim?: number; angle?: number; dir?: number } }
+  data: { /** the whole party sees through this token */ sharedSight?: boolean; vision?: { sight?: number | null; dark?: number; blind?: number; true?: number }; light?: { bright?: number; dim?: number; angle?: number; dir?: number }; /** a placed area of fog or magical darkness */ obscure?: ObscureData }
+}
+
+/** A cloud of fog or a sphere of magical darkness placed with the light tool, its radius in the scene's unit. */
+export interface ObscureData { kind?: 'darkness' | 'fog'; radius?: number; off?: boolean }
+/** The fog and darkness areas among the tokens, in pixels. The browser has the same rule (web/src/tabletop/fog.ts, `obscuresOf`). */
+export function obscuresOf(tokens: { x: number; y: number; data: { obscure?: ObscureData } }[], px: (units: number) => number): Obscure[] {
+  return tokens.flatMap((t) => {
+    const o = t.data.obscure
+    if (!o || o.off || !((o.radius ?? 0) > 0)) return []
+    return [{ x: t.x, y: t.y, r: px(o.radius!), kind: o.kind === 'fog' ? 'fog' as const : 'darkness' as const }]
+  })
 }
 
 /** What one player's tokens see right now: the outlines of the areas in view and in light. Cheap to ask about any point. */
@@ -29,7 +40,11 @@ export function buildSight(scene: SightScene, walls: SightWall[], tokens: SightT
   // a one-way wall can be seen through from one side: the side its direction points away from
   const seeThrough = (w: SightWall, p: Pt) => w.oneway === true && (w.x2 - w.x1) * (p.y - w.y1) - (w.y2 - w.y1) * (p.x - w.x1) < 0
   const sightFor = (p: Pt) => walls.filter((w) => !seeThrough(w, p))
-  const seen = mine.map((t) => visibility(t, sightFor(t), bounds, t.data.vision?.sight == null ? Infinity : px(t.data.vision.sight)))
+  const areas = obscuresOf(tokens, px)
+  const seen = mine.flatMap((t) => {
+    const v = t.data.vision
+    return sightWithAreas(t, sightFor(t), bounds, { sight: v?.sight == null ? Infinity : px(v.sight), blind: px(v?.blind ?? 0), truesight: px(v?.true ?? 0) }, areas, scene.gridSize)
+  })
   const lit: Pt[][] = []
   const dark = scene.darkness > 0.02
   if (dark) {
@@ -42,7 +57,7 @@ export function buildSight(scene: SightScene, walls: SightWall[], tokens: SightT
       if (dim > 0) carve(t, dim, coneOf(l))
     }
     // darkvision, blindsight and truesight all see in the dark within their reach
-    for (const t of mine) { const v = t.data.vision as { dark?: number; blind?: number; true?: number } | undefined; const d = Math.max(v?.dark ?? 0, v?.blind ?? 0, v?.true ?? 0); if (d > 0) carve(t, px(d)) }
+    for (const t of mine) { const v = t.data.vision; const d = Math.max(v?.dark ?? 0, v?.blind ?? 0, v?.true ?? 0); if (d > 0) carve(t, px(d)) }
   }
   return { mine: new Set(mine.map((t) => t.id)), seen, lit, dark, reveals }
 }

@@ -475,6 +475,9 @@ areas:
       - id: table.lighting
         name: "Lighting is switched on for a scene, a light is placed with the light tool and set up in its panel"
         files: [web/src/components/TableLight.tsx, web/src/tabletop/fog.ts]
+      - id: table.obscure
+        name: "Fog clouds and magical darkness are placed with the light tool and block what players see"
+        files: [web/src/components/TableLight.tsx, web/src/tabletop/fog.ts, web/src/tabletop/visibility.ts, server/src/sight.ts]
       - id: table.walls-block
         name: "A dragged token stops at a wall"
         files: [web/src/tabletop/movement.ts]

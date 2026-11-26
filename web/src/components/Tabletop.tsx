@@ -28,7 +28,7 @@ import { CallPanel } from './CallPanel'
 import { Replay } from './Replay'
 import { TokenActions, TokenBars, TokenLook } from './TokenLook'
 import { TablesAndDecks } from './TableDecks'
-import { LIGHT_PRESETS, LightSourcePanel, SceneLights } from './TableLight'
+import { AREA_PRESETS, LIGHT_PRESETS, LightSourcePanel, SceneLights } from './TableLight'
 import { ChatPanel, CombatPanel, LinkPage, PagePicture, SightLight, TokenSheet, TokenStats } from './TableParts'
 import { Select } from './Select'
 import { blockedPath } from '../tabletop/movement'
@@ -126,8 +126,10 @@ export function TableView() {
         const st = useTable.getState()
         const id = st.sceneId
         if (!id) return
-        const preset = LIGHT_PRESETS.find((x) => x.id === lightPresetRef.current) ?? LIGHT_PRESETS[1]
         const n = st.tokens.filter(isLightSource).length + 1
+        const area = AREA_PRESETS.find((x) => x.id === lightPresetRef.current)
+        if (area) { sendTable({ t: 'token.add', sceneId: id, token: { name: `${area.label} ${n}`, hidden: true, size: 0.5, x: p.x, y: p.y, data: { lightSource: true, obscure: { ...area.area } } } }); return }
+        const preset = LIGHT_PRESETS.find((x) => x.id === lightPresetRef.current) ?? LIGHT_PRESETS[1]
         sendTable({ t: 'token.add', sceneId: id, token: { name: `${preset.label} ${n}`, hidden: true, size: 0.5, x: p.x, y: p.y, data: { lightSource: true, light: { ...preset.light } } } })
       },
       onPin: (pin) => { if (pin.pageId) useStore.getState().navigate({ type: 'page', id: pin.pageId }) },
@@ -309,7 +311,7 @@ export function TableView() {
     { id: 'games', label: 'Tables and decks', icon: <Dices size={16} />, show: true },
     { id: 'table', label: 'Table', icon: <Settings2 size={16} />, show: true },
   ]
-  const title: Record<typeof panel, string> = { token: one ? (isLightSource(one) ? 'Light' : one.name || 'Token') : selected.length > 1 ? `${selected.length} tokens` : selectedTile ? 'Prop' : 'Tokens', combat: 'Combat', chat: 'Chat and dice', scene: scene?.name ?? 'Scene', encounters: 'Encounters', handouts: 'Handouts', games: 'Tables, decks and sound', table: 'The table' }
+  const title: Record<typeof panel, string> = { token: one ? (isLightSource(one) ? (one.data.obscure ? (one.data.obscure.kind === 'fog' ? 'Fog' : 'Magical darkness') : 'Light') : one.name || 'Token') : selected.length > 1 ? `${selected.length} tokens` : selectedTile ? 'Prop' : 'Tokens', combat: 'Combat', chat: 'Chat and dice', scene: scene?.name ?? 'Scene', encounters: 'Encounters', handouts: 'Handouts', games: 'Tables, decks and sound', table: 'The table' }
   const toolButton = (t: Tool, label: string, hint: string, icon: React.ReactNode) => (
     <button className={`tt-tool${tool === t ? ' on' : ''}`} title={hint} aria-label={label} aria-pressed={tool === t} onClick={() => setTool(tool === t && t !== 'select' ? 'select' : t)}>{icon}</button>
   )
@@ -423,12 +425,15 @@ export function TableView() {
               )}
               {gm && tool === 'light' && (
                 <>
-                  <label className="tt-inline">New lights are
-                    <Select className="input" value={lightPreset} onChange={setLightPreset} title="What a new light is like; change it later in its panel">
+                  <label className="tt-inline">Place
+                    <Select className="input" value={lightPreset} onChange={setLightPreset} title="What a click places; change it later in its panel">
                       {LIGHT_PRESETS.map((p) => <option key={p.id} value={p.id}>{p.label} ({p.light.bright}/{p.light.dim} {scene.unit})</option>)}
+                      {AREA_PRESETS.map((p) => <option key={p.id} value={p.id}>{p.label} ({p.area.radius} {scene.unit} radius)</option>)}
                     </Select>
                   </label>
-                  <span className="tt-hint-inline">{lit ? 'Click the map to place one.' : 'Click the map to place one. Switch lighting on in the Scene panel to see it work.'}</span>
+                  <span className="tt-hint-inline">{AREA_PRESETS.some((p) => p.id === lightPreset)
+                    ? (scene.fog || lit ? 'Click the map to place it. It blocks the view of players, darkvision included.' : 'Click the map to place it. Switch fog of war or lighting on in the Scene panel to see it work.')
+                    : lit ? 'Click the map to place one.' : 'Click the map to place one. Switch lighting on in the Scene panel to see it work.'}</span>
                 </>
               )}
               {gm && tool === 'pin' && <span className="tt-hint-inline">Click the map to pin a note.</span>}
@@ -687,9 +692,10 @@ function ScenePanel({ scene, active, wsId, onPlaceLight, centre }: { scene: Scen
           <>
             <label>Darkness ({Math.round(scene.darkness * 100)} %)<input type="range" min={0} max={100} value={Math.round(scene.darkness * 100)} onChange={(e) => patch({ darkness: Number(e.target.value) / 100 })} /></label>
             <DaylightControl scene={scene} />
-            <SceneLights scene={scene} onPlace={onPlaceLight} />
           </>
         )}
+        {/* fog clouds and magical darkness count with fog of war alone, so the list is there with either */}
+        {(lighting || scene.fog) && <SceneLights scene={scene} onPlace={onPlaceLight} />}
       </Fold>
       <Fold id="scene-mood" title="Mood">
         <label>Weather
@@ -777,7 +783,6 @@ function TablePanel() {
       <label className="tt-check"><input type="checkbox" checked={lefty} onChange={(e) => { setLefty(e.target.checked); try { localStorage.setItem('tt-left', e.target.checked ? '1' : '') } catch { /* private window */ } }} />Panel on the left (for left-handed use)</label>
       <div className="tt-form" role="group" aria-label="Slower machine">
         <b>If the table is slow</b>
-        <PerfBox k="fogOnDrop" label="Work out the fog when a token is put down" />
         <PerfBox k="light" label="Lighter drawing: coarser fog, no weather, no moving lights" />
         <PerfBox k="noDice" label="No tumbling dice when someone rolls" />
         <PerfBox k="show" label="Show frames per second" />

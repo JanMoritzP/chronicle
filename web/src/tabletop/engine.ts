@@ -278,7 +278,7 @@ export class TableEngine {
   upsert(t: Token) { this.poke();
     this.tokens.set(t.id, t)
     if (!this.ready) return
-    const key = [t.image, t.color, t.name, t.size, t.hidden, t.locked, JSON.stringify(t.data.hp ?? null), (t.data.conditions ?? []).join(','), JSON.stringify([t.data.shape, t.data.border, t.data.tint, t.data.flip, t.data.nameplate, t.data.elevation, t.data.aura, t.data.bars, isLightSource(t), isLightSource(t) ? t.data.light : null])].join('|')
+    const key = [t.image, t.color, t.name, t.size, t.hidden, t.locked, JSON.stringify(t.data.hp ?? null), (t.data.conditions ?? []).join(','), JSON.stringify([t.data.shape, t.data.border, t.data.tint, t.data.flip, t.data.nameplate, t.data.elevation, t.data.aura, t.data.bars, isLightSource(t), isLightSource(t) ? [t.data.light, t.data.obscure] : null])].join('|')
     let v = this.views.get(t.id)
     if (!v || v.key !== key) {
       v?.box.destroy({ children: true })
@@ -398,8 +398,30 @@ export class TableEngine {
   }
 
   /** A light source is not a creature: the GM sees a small lamp in the light's colour and a ring where its light ends. */
+  /** A placed cloud of fog or magical darkness: for the GM the area it covers, and a marker in the middle to pick it by. */
+  private buildArea(v: TokenView) {
+    const t = v.token
+    const o = t.data.obscure as { kind?: string; radius?: number; off?: boolean }
+    const fog = o.kind === 'fog', off = !!o.off || !((o.radius ?? 0) > 0)
+    const col = fog ? 0xc4cad1 : 0x141018
+    const s = this.scene
+    if (s && !off) {
+      const area = new Graphics().circle(0, 0, ((o.radius ?? 0) / s.dist) * s.gridSize).fill({ color: col, alpha: fog ? 0.45 : 0.55 }).stroke({ width: 2, color: fog ? 0xe3e7ec : 0x8a6fb0, alpha: 0.8 })
+      area.label = 'aura'
+      v.box.addChild(area)
+    }
+    const mark = new Graphics().circle(0, 0, 13).fill({ color: off ? 0x55524c : col }).stroke({ width: 2.5, color: fog ? 0x1b1a17 : 0x8a6fb0, alpha: 0.85 })
+    if (fog) mark.moveTo(-7, -3).lineTo(7, -3).moveTo(-8, 2).lineTo(6, 2).moveTo(-5, 7).lineTo(5, 7).stroke({ width: 2, color: 0x1b1a17, alpha: 0.7 })
+    else mark.circle(3, -2, 7).fill({ color: 0x8a6fb0, alpha: 0.9 }).circle(5, -4, 6).fill({ color: off ? 0x55524c : col })
+    mark.label = 'lamp'
+    v.box.addChild(mark)
+    v.box.eventMode = 'none'
+    this.drawSelection(v)
+  }
+
   private buildLight(v: TokenView) {
     const t = v.token
+    if (t.data.obscure) return this.buildArea(v)
     const l = (t.data.light ?? {}) as { bright?: number; dim?: number; color?: string; off?: boolean }
     const col = /^#[0-9a-fA-F]{3,8}$/.test(l.color ?? '') ? new Color(l.color!).toNumber() : 0xffd27a
     const off = !!l.off || !((l.bright ?? 0) > 0 || (l.dim ?? 0) > 0)
@@ -750,16 +772,16 @@ export class TableEngine {
   /** Tokens that give their owner sight, and who is hidden by the dark. */
   private refreshVision() {
     this.updateRoofs()
-    // on a slow machine the fog waits until the token is put down
-    if (this.perf.fogOnDrop && this.drag?.kind === 'tokens' && this.drag.moved) { this.visionPending = true; return }
+    // what a token sees changes when it is put down, not on its way there: tokens that come and go meanwhile keep the view from before the drag
+    if (this.drag?.kind === 'tokens' && this.drag.moved) { this.visionPending = true; this.applyTokenVisibility(); return }
     if (!this.ready || this.gmView) {
       for (const v of this.views.values()) v.box.visible = true
       return
     }
     const mine = [...this.tokens.values()].filter((t) => this.isViewer(t))
     this.fog.setViewers(mine.map((t) => {
-      const vis = (t.data.vision ?? {}) as { sight?: number | null; dark?: number }
-      return { id: t.id, x: t.x, y: t.y, sight: vis.sight ?? null, dark: Math.max(vis.dark ?? 0, (vis as { blind?: number }).blind ?? 0, (vis as { true?: number }).true ?? 0) }
+      const vis = (t.data.vision ?? {}) as { sight?: number | null; dark?: number; blind?: number; true?: number }
+      return { id: t.id, x: t.x, y: t.y, sight: vis.sight ?? null, dark: Math.max(vis.dark ?? 0, vis.blind ?? 0, vis.true ?? 0), blind: vis.blind ?? 0, truesight: vis.true ?? 0 }
     }))
     window.setTimeout(() => this.applyTokenVisibility(), 40)
   }
@@ -1310,14 +1332,14 @@ export class TableEngine {
   private poke = () => { this.activeUntil = performance.now() + 600 }
 
   /** Settings for a slow machine, and the numbers that show how it is doing. */
-  private perf = { fogOnDrop: false, light: false }
+  private perf = { light: false }
   /** the looping video behind the map, when the map is one */
   private videoEl: HTMLVideoElement | null = null
   private visionPending = false
   private frames = 0
   private frameFrom = performance.now()
   private fps = 0
-  setPerformance(p: { fogOnDrop: boolean; light: boolean }) {
+  setPerformance(p: { light: boolean }) {
     this.perf = p
     if (!this.fog) return
     this.fog.setDetail(p.light)

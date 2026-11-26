@@ -28,7 +28,7 @@ test('lighting is switched on for a scene, a light is placed and set up in its p
 
   // the light tool places a lamp where the map is clicked
   await app.getByRole('button', { name: 'Place a light', exact: true }).first().click()
-  await expect(app.getByRole('group', { name: 'Tool options' })).toContainText('New lights are')
+  await expect(app.getByRole('group', { name: 'Tool options' })).toContainText('Place')
   await app.locator('.tt-canvas canvas').click({ position: { x: 400, y: 300 } })
   const lights = app.getByRole('group', { name: 'Lights on this scene' })
   await expect(lights).toContainText('Torch 1')
@@ -54,6 +54,41 @@ test('lighting is switched on for a scene, a light is placed and set up in its p
   await expect(app.getByRole('button', { name: 'Show the light on my screen' })).toHaveCount(0)
   await lighting.click()
   await expect(app.getByText(/^Darkness \(70 %\)/)).toBeVisible()
+})
+
+test('fog clouds and magical darkness are placed with the light tool and set up in their panel', { tag: '@feature:table.obscure' }, async ({ app }) => {
+  await openTable(app)
+  await makeScene(app, 'Marsh')
+  await app.getByRole('button', { name: 'Place a light', exact: true }).first().click()
+  const options = app.getByRole('group', { name: 'Tool options' })
+  await options.getByTitle(/What a click places/).click()
+  await app.getByRole('option', { name: /^Fog cloud/ }).click()
+  await expect(options).toContainText('Switch fog of war or lighting on')
+  // with fog of war alone (no lighting) the areas already count, and are listed with the lights
+  await app.getByRole('button', { name: 'Scene', exact: true }).click()
+  await app.getByLabel(/^Fog of war/).check()
+  await expect(options).toContainText('It blocks the view of players')
+  await app.locator('.tt-canvas canvas').click({ position: { x: 400, y: 300 } })
+  const lights = app.getByRole('group', { name: 'Lights on this scene' })
+  await expect(lights).toContainText('Fog cloud 1')
+  await expect(lights).toContainText('fog, 20 ft')
+
+  // its panel turns it into magical darkness, changes its size and lifts it
+  await lights.getByRole('button', { name: /^Fog cloud 1/ }).click()
+  await app.getByRole('button', { name: 'Token', exact: true }).click()
+  await expect(app.locator('.tt-panel-title')).toHaveText('Fog')
+  await app.locator('.tt-light-head').getByTitle('What the area is').click()
+  await app.getByRole('option', { name: 'Magical darkness' }).click()
+  await expect(app.locator('.tt-panel-title')).toHaveText('Magical darkness')
+  await expect(app.getByText('Darkvision and light do not reach into it.')).toBeVisible()
+  const radius = app.getByLabel('Radius')
+  await radius.fill('15')
+  await radius.press('Enter')
+  await app.getByRole('button', { name: 'Lift it' }).click()
+  await expect(app.getByRole('button', { name: 'Bring it back' })).toBeVisible()
+  await app.getByRole('button', { name: 'Scene', exact: true }).click()
+  await expect(lights).toContainText('darkness, 15 ft')
+  await expect(lights.getByRole('button', { name: 'Bring back Fog cloud 1' })).toBeVisible()
 })
 
 test('a token stops at a wall, and the GM passes with Ctrl', { tag: '@feature:table.walls-block' }, async ({ app, world }) => {

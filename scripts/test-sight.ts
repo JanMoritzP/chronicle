@@ -52,6 +52,18 @@ const sensed = [tok('hero', 200, 300, ['p1'], { vision: { blind: 30 } }), tok('n
 check('blindsight sees in the dark within its reach', names(visibleTokens(dim, [], sensed, 'p1')) === 'hero,near')
 check('so does truesight', names(visibleTokens(dim, [], [tok('hero', 200, 300, ['p1'], { vision: { true: 30 } }), tok('near', 300, 300)], 'p1')) === 'hero,near')
 
+// fog clouds and magical darkness placed with the light tool (100 px is 5 ft here)
+const cloud = (kind: 'fog' | 'darkness', x = 500, radius = 10, y = 300) => tok('c', x, y, [], { obscure: { kind, radius } })
+const lane = (data: SightToken['data'] = {}) => [tok('hero', 200, 300, ['p1'], data), tok('inside', 500, 300), tok('behind', 800, 300), tok('aside', 200, 80)]
+check('a fog cloud hides what is in it and behind it', names(visibleTokens(scene(), [], [...lane(), cloud('fog')], 'p1')) === 'aside,hero')
+check('so does magical darkness', names(visibleTokens(scene(), [], [...lane(), cloud('darkness')], 'p1')) === 'aside,hero')
+check('darkvision does not see into magical darkness', names(visibleTokens(dim, [], [...lane({ vision: { dark: 120 } }), cloud('darkness')], 'p1')) === 'aside,hero')
+check('truesight does', names(visibleTokens(dim, [], [...lane({ vision: { true: 120 } }), cloud('darkness')], 'p1')) === 'aside,behind,c,hero,inside')
+check('but not into fog', names(visibleTokens(scene(), [], [...lane({ vision: { true: 120 } }), cloud('fog')], 'p1')) === 'aside,hero')
+check('blindsight senses into fog within its reach', names(visibleTokens(scene(), [], [...lane({ vision: { blind: 20 } }), cloud('fog')], 'p1')) === 'aside,c,hero,inside')
+check('a cloud that was lifted hides nothing', names(visibleTokens(scene(), [], [...lane(), tok('c', 500, 300, [], { obscure: { kind: 'fog', radius: 10, off: true } })], 'p1')) === 'aside,behind,c,hero,inside')
+check('from inside a cloud a token sees only what is next to it', names(visibleTokens(scene(), [], [tok('hero', 500, 300, ['p1']), tok('next', 560, 300), tok('far', 700, 300), cloud('fog', 500, 30, 500)], 'p1')) === 'hero,next')
+
 // the server copy of the maths matches the one the screen uses
 const walls = [wall(100, 100, 400, 120), wall(400, 120, 420, 400), wall(50, 300, 300, 350)]
 const a = serverVisibility({ x: 250, y: 220 }, walls, { x: 0, y: 0, w: 600, h: 500 }, 180)

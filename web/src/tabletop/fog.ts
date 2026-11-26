@@ -1,7 +1,7 @@
 import { Container, Graphics, RenderTexture, Sprite, Texture, type Application } from 'pixi.js'
 import type { Pt } from './grid'
 import type { Scene } from './state'
-import { coneOf, pointInPolygon, visibility, type Cone, type Seg } from './visibility'
+import { coneOf, pointInPolygon, sightWithAreas, visibility, type Cone, type Obscure, type Seg } from './visibility'
 
 // Fog of war and light. A player sees what their own tokens can see (walls block sight) and that is also lit (by the sky, a light source,
 // or the token's darkvision). What they have seen stays on the map, dimmed. Everything is drawn into small off-screen pictures that are
@@ -15,8 +15,15 @@ export const darknessOf = (s: Pick<Scene, 'darkness' | 'lighting'>) => (s.lighti
 
 export interface Wall { id: string; x1: number; y1: number; x2: number; y2: number; kind: 'wall' | 'door' | 'secret' | 'window' | 'oneway' | 'terrain'; open: boolean; locked?: boolean }
 export interface Rect { id?: string; x: number; y: number; w: number; h: number }
-export interface Light { id: string; x: number; y: number; bright?: number; dim?: number; color?: string; animation?: 'flicker' | 'pulse'; /** degrees across, 360 or none is a full circle */ angle?: number; /** where a cone points, degrees clockwise from the top */ dir?: number }
-export interface Viewer { id: string; x: number; y: number; sight: number | null; dark: number }
+export interface Light { id: string; x: number; y: number; bright?: number; dim?: number; color?: string; animation?: 'flicker' | 'pulse'; /** degrees across, 360 or none is a full circle */ angle?: number; /** where a cone points, degrees clockwise from the top */ dir?: number; /** not a light but a cloud of fog or magical darkness, radius in the scene's unit */ obscure?: ObscureArea }
+export interface ObscureArea { kind: 'darkness' | 'fog'; radius: number; off?: boolean }
+/** `dark` is the farthest the token sees in the dark by any sense; blindsight and truesight also see into fog and magical darkness. */
+export interface Viewer { id: string; x: number; y: number; sight: number | null; dark: number; blind?: number; truesight?: number }
+
+/** The fog and darkness areas among the lights, in pixels (the server has the same rule in server/src/sight.ts). */
+export function obscuresOf(lights: Light[], px: (units: number) => number): Obscure[] {
+  return lights.flatMap((l) => (l.obscure && !l.obscure.off && l.obscure.radius > 0 ? [{ x: l.x, y: l.y, r: px(l.obscure.radius), kind: l.obscure.kind === 'fog' ? 'fog' as const : 'darkness' as const }] : []))
+}
 
 const MAX_SIDE = 768
 const SAVE_EVERY_MS = 4000
@@ -50,6 +57,10 @@ export class FogLayer {
   private e?: RenderTexture
   private o?: RenderTexture
   private out?: Sprite
+  /** fog clouds and magical darkness, drawn over the map where the player's eye reaches them */
+  private a?: RenderTexture
+  private areaOut?: Sprite
+  private areaMask = new Graphics()
   /** what a player sees right now, so the colour of a light behind a wall does not show through the dark */
   private tintMask?: Sprite
   /** the colour of coloured lights, under the darkness so unseen places stay dark */
@@ -82,9 +93,12 @@ export class FogLayer {
   }
 
   private free() {
-    for (const t of [this.v, this.d, this.r, this.e, this.o]) t?.destroy(true)
-    this.v = this.d = this.r = this.e = this.o = undefined
+    for (const t of [this.v, this.d, this.r, this.e, this.o, this.a]) t?.destroy(true)
+    this.v = this.d = this.r = this.e = this.o = this.a = undefined
     this.out?.destroy()
+    this.areaOut?.destroy()
+    this.areaOut = undefined
+    this.areaMask.clear()
     this.tint.mask = null
     this.tintMask?.destroy()
     this.tintMask = undefined
@@ -101,12 +115,16 @@ export class FogLayer {
     this.k = Math.min(1, this.maxSide / Math.max(s.width, s.height))
     const w = Math.max(16, Math.round(s.width * this.k)), h = Math.max(16, Math.round(s.height * this.k))
     const make = () => RenderTexture.create({ width: w, height: h, resolution: 1 })
-    this.v = make(); this.d = make(); this.r = make(); this.e = make(); this.o = make()
+    this.v = make(); this.d = make(); this.r = make(); this.e = make(); this.o = make(); this.a = make()
     this.out = new Sprite(this.o)
     this.out.scale.set(1 / this.k)
     this.tintMask = new Sprite(this.v)
     this.tintMask.scale.set(1 / this.k)
-    this.view.addChild(this.tintMask, this.tint, this.out)
+    this.areaOut = new Sprite(this.a)
+    this.areaOut.scale.set(1 / this.k)
+    this.areaOut.mask = this.areaMask
+    this.areaOut.visible = false
+    this.view.addChild(this.tintMask, this.tint, this.out, this.areaMask, this.areaOut)
   }
 
   setWalls(walls: Wall[]) { this.walls = walls; this.update() }
@@ -198,7 +216,17 @@ export class FogLayer {
     this.animate(performance.now())
 
     // what the players' tokens see
-    this.seen = this.viewers.map((vw) => visibility(vw, this.walls.filter((w) => blocksSight(w) && !seesThrough(w, vw)).map(asSeg), bounds, vw.sight == null ? Infinity : this.px(vw.sight)))
+    // fog and magical darkness stop the eye; `open` is the view without them, where the clouds themselves can be seen
+    const areas = obscuresOf(this.lights, (u) => this.px(u))
+    const open: Pt[][] = []
+    const sensed: Pt[][] = []
+    this.seen = this.viewers.flatMap((vw) => {
+      const own = this.walls.filter((w) => blocksSight(w) && !seesThrough(w, vw)).map(asSeg)
+      const sight = vw.sight == null ? Infinity : this.px(vw.sight)
+      const polys = sightWithAreas(vw, own, bounds, { sight, blind: this.px(vw.blind ?? 0), truesight: this.px(vw.truesight ?? 0) }, areas, s.gridSize)
+      if (areas.length) { open.push(visibility(vw, own, bounds, sight)); sensed.push(...polys.slice(1)) }
+      return polys
+    })
     const rectPoly = (r: Rect): Pt[] => [{ x: r.x, y: r.y }, { x: r.x + r.w, y: r.y }, { x: r.x + r.w, y: r.y + r.h }, { x: r.x, y: r.y + r.h }]
     for (const r of this.reveals) this.seen.push(rectPoly(r))
     const seenG = new Graphics()
@@ -230,7 +258,8 @@ export class FogLayer {
     // the GM's view is the darkness alone: nothing is hidden and nothing is remembered
     this.app.renderer.render({ container: darkC, target: gm ? this.o : this.d, clear: true, clearColor: clear })
     darkC.destroy({ children: true })
-    if (gm) { this.lastMs = performance.now() - t0; this.onDrawn(); return }
+    // the GM sees the clouds as the placed areas themselves
+    if (gm) { if (this.areaOut) this.areaOut.visible = false; this.lastMs = performance.now() - t0; this.onDrawn(); return }
 
     // seen and lit: the part of the view that is not dark
     const combine = new Container()
@@ -259,6 +288,20 @@ export class FogLayer {
     cover.addChild(old, now)
     this.app.renderer.render({ container: cover, target: this.o, clear: true, clearColor: clear })
     cover.destroy({ children: true })
+
+    // the clouds, where the eye reaches them; what blindsight or truesight makes out inside is left clear
+    this.areaMask.clear()
+    if (areas.length && this.a && this.areaOut) {
+      const clouds = new Container()
+      const discs = new Graphics()
+      for (const a of areas) discs.circle(a.x * k, a.y * k, a.r * k).fill(a.kind === 'fog' ? { color: 0xc4cad1, alpha: 0.82 } : { color: 0x050508, alpha: 0.94 })
+      clouds.addChild(discs)
+      for (const poly of sensed) { const g = new Graphics().poly(flat(poly)).fill({ color: 0xffffff, alpha: 1 }); g.blendMode = 'erase'; clouds.addChild(g) }
+      this.app.renderer.render({ container: clouds, target: this.a, clear: true, clearColor: clear })
+      clouds.destroy({ children: true })
+      for (const poly of [...open, ...this.reveals.map(rectPoly)]) if (poly.length > 2) this.areaMask.poly(poly.flatMap((p) => [p.x, p.y])).fill({ color: 0xffffff })
+    }
+    if (this.areaOut) this.areaOut.visible = areas.length > 0
     this.lastMs = performance.now() - t0
     this.onDrawn()
   }
@@ -284,6 +327,7 @@ export class FogLayer {
   destroy() {
     this.flushSave()
     this.free()
+    this.areaMask.destroy()
     this.view.destroy()
   }
 }

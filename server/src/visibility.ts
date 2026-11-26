@@ -104,3 +104,31 @@ export function pointInPolygon(pt: Pt, poly: Pt[]) {
   }
   return inside
 }
+
+/** A cloud of fog or a sphere of magical darkness on the map (centre and radius in pixels). Sight does not pass into it or through it. */
+export interface Obscure { x: number; y: number; r: number; kind: 'darkness' | 'fog' }
+/** How far a viewer sees, in pixels: by eye (Infinity for as far as walls allow), by blindsight and by truesight (0 for none). */
+export interface Senses { sight: number; blind: number; truesight: number }
+
+const AREA_SIDES = 32
+const areaWalls = (areas: Obscure[]): Seg[] => areas.flatMap((a) => Array.from({ length: AREA_SIDES }, (_, i) => {
+  const p = (i / AREA_SIDES) * Math.PI * 2, q = ((i + 1) / AREA_SIDES) * Math.PI * 2
+  return { x1: a.x + a.r * Math.cos(p), y1: a.y + a.r * Math.sin(p), x2: a.x + a.r * Math.cos(q), y2: a.y + a.r * Math.sin(q) }
+}))
+const within = (o: Pt, areas: Obscure[]) => areas.some((a) => Math.hypot(o.x - a.x, o.y - a.y) < a.r)
+
+/**
+ * What a viewer sees when fog or magical darkness is on the map, as outlines to join: the eye stops at the edge of every area
+ * (from inside one it reaches one `cell`), blindsight passes all of them, truesight passes magical darkness but not fog.
+ * With no areas it is the plain view.
+ */
+export function sightWithAreas(o: Pt, walls: Seg[], bounds: Bounds, s: Senses, areas: Obscure[], cell: number): Pt[][] {
+  if (!areas.length) return [visibility(o, walls, bounds, s.sight)]
+  const out = [visibility(o, [...walls, ...areaWalls(areas)], bounds, within(o, areas) ? Math.min(s.sight, cell) : s.sight)]
+  if (s.blind > 0) out.push(visibility(o, walls, bounds, s.blind))
+  if (s.truesight > 0) {
+    const fog = areas.filter((a) => a.kind === 'fog')
+    out.push(visibility(o, [...walls, ...areaWalls(fog)], bounds, within(o, fog) ? Math.min(s.truesight, cell) : s.truesight))
+  }
+  return out.filter((p) => p.length > 2)
+}

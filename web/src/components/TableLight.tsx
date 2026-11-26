@@ -1,4 +1,4 @@
-import { Lightbulb, LightbulbOff, Trash2 } from 'lucide-react'
+import { Cloud, Eye, EyeOff, Lightbulb, LightbulbOff, Moon, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { confirmDialog } from '../lib/dialog'
 import { isLightSource, sendTable, useTable, type Scene, type Token } from '../tabletop/state'
@@ -22,7 +22,20 @@ export const LIGHT_PRESETS: { id: string; label: string; light: LightData }[] = 
   { id: 'magic', label: 'Arcane glow', light: { bright: 10, dim: 20, color: '#8fb8ff', animation: 'pulse' } },
 ]
 
+export interface AreaData { kind: 'darkness' | 'fog'; radius: number; off?: boolean }
+
+/** Places that block sight, placed with the light tool like a lamp: the eye does not pass into them or through them. */
+export const AREA_PRESETS: { id: string; label: string; area: AreaData }[] = [
+  { id: 'darkness', label: 'Magical darkness', area: { kind: 'darkness', radius: 15 } },
+  { id: 'fogcloud', label: 'Fog cloud', area: { kind: 'fog', radius: 20 } },
+]
+const AREA_HINTS: Record<AreaData['kind'], string> = {
+  darkness: 'Darkvision and light do not reach into it. Blindsight and truesight see through it.',
+  fog: 'Nothing is seen into it or through it. Only blindsight sees through it.',
+}
+
 const lightOf = (t: Token) => (t.data.light ?? {}) as LightData
+const areaOf = (t: Token) => t.data.obscure as AreaData | undefined
 const shines = (l: LightData) => !l.off && ((l.bright ?? 0) > 0 || (l.dim ?? 0) > 0)
 /** A light written back to a token: no light at all is no `light` key, so the server stops counting it. */
 function saveLight(token: Token, light: LightData | null) {
@@ -94,17 +107,38 @@ export function LightFields({ token, unit }: { token: Token; unit: string }) {
   )
 }
 
-/** The panel of a light the GM placed: a name, the light itself, and a way to remove it. Players never see the lamp, only its light. */
+/** A cloud of fog or magical darkness: which of the two, how far it reaches, and a switch that lifts it without losing it. */
+function AreaFields({ token, area, unit }: { token: Token; area: AreaData; unit: string }) {
+  const set = (patch: Partial<AreaData>) => sendTable({ t: 'token.update', id: token.id, patch: { data: { ...token.data, obscure: { ...area, ...patch } } } })
+  return (
+    <div className="tt-light">
+      <div className="tt-row tt-light-head">
+        <Select className="input" value={area.kind} title="What the area is" onChange={(v) => set({ kind: v === 'fog' ? 'fog' : 'darkness' })}>
+          <option value="darkness">Magical darkness</option><option value="fog">Fog</option>
+        </Select>
+        <button className={`btn sm square${area.off ? '' : ' on'}`} aria-pressed={!area.off} aria-label={area.off ? 'Bring it back' : 'Lift it'} title={area.off ? 'Bring it back' : 'Lift it for now (the settings are kept)'} onClick={() => set({ off: !area.off })}>
+          {area.off ? <EyeOff size={14} /> : <Eye size={14} />}
+        </button>
+      </div>
+      <Distance label="Radius" value={area.radius} min={1} onCommit={(n) => set({ radius: n })} />
+      <p className="muted tt-hint">{AREA_HINTS[area.kind]} Works on scenes with fog of war or darkness.{unit === 'ft' ? ' The Darkness spell is 15 ft, Fog Cloud 20 ft.' : ''}</p>
+    </div>
+  )
+}
+
+/** The panel of a light the GM placed (or an area of fog or darkness): a name, the light itself, and a way to remove it. Players never see the lamp, only its light. */
 export function LightSourcePanel({ token }: { token: Token }) {
   const unit = useTable((s) => s.scenes.find((x) => x.id === s.sceneId)?.unit ?? 'ft')
   const [name, setName] = useState(token.name)
   useEffect(() => setName(token.name), [token.id, token.name])
+  const area = areaOf(token)
+  const what = area ? 'area' : 'light'
   return (
     <div className="tt-form">
-      <p className="muted tt-hint">A light on the map. Players see its light, never the lamp. Drag it to move it.</p>
+      <p className="muted tt-hint">{area ? 'An area that blocks sight. Players see the cloud where their eyes reach it, never the marker.' : 'A light on the map. Players see its light, never the lamp.'} Drag it to move it.</p>
       <label>Name<input className="input" value={name} onChange={(e) => setName(e.target.value)} onBlur={() => name.trim() && name !== token.name && sendTable({ t: 'token.update', id: token.id, patch: { name: name.trim() } })} onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} /></label>
-      <LightFields token={token} unit={unit} />
-      <button className="btn sm danger" onClick={async () => { if (await confirmDialog(`“${token.name || 'This light'}” is taken off the map.`, { title: 'Remove light', okLabel: 'Remove', danger: true })) sendTable({ t: 'token.delete', ids: [token.id] }) }}><Trash2 size={13} /> Remove light</button>
+      {area ? <AreaFields token={token} area={area} unit={unit} /> : <LightFields token={token} unit={unit} />}
+      <button className="btn sm danger" onClick={async () => { if (await confirmDialog(`“${token.name || `This ${what}`}” is taken off the map.`, { title: `Remove ${what}`, okLabel: 'Remove', danger: true })) sendTable({ t: 'token.delete', ids: [token.id] }) }}><Trash2 size={13} /> Remove {what}</button>
     </div>
   )
 }
@@ -120,9 +154,17 @@ export function SceneLights({ scene, onPlace }: { scene: Scene; onPlace: () => v
         <b>Lights</b>
         <button className="btn sm" title="Then click the map where the light should be" onClick={onPlace}><Lightbulb size={13} /> Place a light</button>
       </div>
-      {!lights.length && <p className="muted tt-hint">No lights yet. Place lamps and braziers here, or give a token a torch in its own panel.</p>}
+      {!lights.length && <p className="muted tt-hint">No lights yet. Place lamps and braziers here, or give a token a torch in its own panel. The light tool also places fog clouds and magical darkness.</p>}
       <ul className="tt-lights">
         {lights.map((t) => {
+          const area = areaOf(t)
+          if (area) return (
+            <li key={t.id}>
+              <span className="tt-swatch-dot">{area.kind === 'fog' ? <Cloud size={10} /> : <Moon size={10} />}</span>
+              <button className="btn ghost sm grow" onClick={() => select(t)}>{t.name || 'Area'}<small className="muted"> {area.kind === 'fog' ? 'fog' : 'darkness'}, {area.radius} {scene.unit}</small></button>
+              <button className={`btn ghost sm square${area.off ? '' : ' on'}`} aria-label={`${area.off ? 'Bring back' : 'Lift'} ${t.name || 'the area'}`} title={area.off ? 'Bring it back' : 'Lift it'} onClick={() => sendTable({ t: 'token.update', id: t.id, patch: { data: { ...t.data, obscure: { ...area, off: !area.off } } } })}>{area.off ? <EyeOff size={13} /> : <Eye size={13} />}</button>
+            </li>
+          )
           const l = lightOf(t)
           return (
             <li key={t.id}>
