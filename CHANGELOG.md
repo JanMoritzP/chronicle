@@ -2,6 +2,11 @@
 
 Newest first. The version in `electron/package.json` is the app version; the release notes on GitHub are what the in-app update dialog shows, so keep each entry short and in plain words. Sections after 0.2.0 are written by `scripts/release.mjs` from the commit subjects, so the commit messages carry the release notes.
 
+## 0.86.0 (2026-11-26)
+
+### Features
+- the player box on a character sheet suggests the people of the world, and an image block can be an empty placeholder that you or the image administration fill later
+
 ## 0.85.0 (2026-11-26)
 
 ### Features
