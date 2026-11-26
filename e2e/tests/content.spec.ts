@@ -156,7 +156,7 @@ test.describe('creature sheet', () => {
 })
 
 test('a person page gets a character sheet that works out the numbers', { tag: '@feature:sheet.character' }, async ({ app, makePage }) => {
-  await makePage('Aria', { props: { type: 'person' } })
+  await makePage('Aria', { props: { type: 'pc' } })
   await app.reload()
   await openPage(app, 'Aria')
   await app.getByRole('button', { name: 'Add a character sheet' }).click()
@@ -189,7 +189,7 @@ test('a person page gets a character sheet that works out the numbers', { tag: '
 })
 
 test('a character sheet tracks rests, hit dice, death saves, spell slots, items and coins', { tag: '@feature:sheet.character-more' }, async ({ app, makePage }) => {
-  await makePage('Brann', { props: { type: 'person' } })
+  await makePage('Brann', { props: { type: 'pc' } })
   await app.reload()
   await openPage(app, 'Brann')
   await app.getByRole('button', { name: 'Add a character sheet' }).click()
@@ -256,7 +256,7 @@ test('a creature sheet takes legendary actions, recharges and uses per day', { t
 })
 
 test('a character levels up, and what they carry and are attuned to is counted', { tag: '@feature:sheet.levelup' }, async ({ app, makePage }) => {
-  await makePage('Garrick', { props: { type: 'person' } })
+  await makePage('Garrick', { props: { type: 'pc' } })
   await app.reload()
   await openPage(app, 'Garrick')
   await app.getByRole('button', { name: 'Add a character sheet' }).click()
@@ -302,7 +302,7 @@ test('a character levels up, and what they carry and are attuned to is counted',
 })
 
 test('a character from Foundry, D&D Beyond or Roll20 can be imported, and a character exported', { tag: '@feature:sheet.import' }, async ({ app, makePage }) => {
-  await makePage('Seraphine', { props: { type: 'person' } })
+  await makePage('Seraphine', { props: { type: 'pc' } })
   await app.reload()
   await openPage(app, 'Seraphine')
   const actor = {
@@ -328,7 +328,7 @@ test('a character from Foundry, D&D Beyond or Roll20 can be imported, and a char
 })
 
 test('an item can add to armor class while it is equipped', { tag: '@feature:sheet.item-ac' }, async ({ app, makePage }) => {
-  await makePage('Dara', { props: { type: 'person' } })
+  await makePage('Dara', { props: { type: 'pc' } })
   await app.reload()
   await openPage(app, 'Dara')
   await app.getByRole('button', { name: 'Add a character sheet' }).click()
@@ -344,7 +344,7 @@ test('an item can add to armor class while it is equipped', { tag: '@feature:she
 })
 
 test('a Pathfinder character from Pathbuilder can be imported', { tag: '@feature:sheet.import-pathbuilder' }, async ({ app, makePage }) => {
-  await makePage('Seelah', { props: { type: 'person' } })
+  await makePage('Seelah', { props: { type: 'pc' } })
   await app.reload()
   await openPage(app, 'Seelah')
   const build = { success: true, build: {

@@ -10,6 +10,7 @@ import { HomebrewDialog } from './Homebrew'
 import { ABILITIES, abilityMod, signed, SKILLS, type Ability, type Sheet } from '../lib/sheet'
 import { useRules } from '../lib/pack'
 import { Select } from './Select'
+import { LibraryInput } from './LibraryInput'
 
 // Making a character step by step, for a person page. Each step shows only what has to be decided there, says what the
 // choice does, and the last step shows the finished sheet's numbers before anything is written to the page.
@@ -221,7 +222,7 @@ export function CharacterBuilder({ ruleset, name, onCreate, onClose }: { ruleset
     <div className="cb-finish">
       <div className="cb-row">
         <label className="cb-field">Name<input className="input" value={c.name} placeholder="Aria Thornwood" onChange={(e) => set({ name: e.target.value })} /></label>
-        <label className="cb-field">Alignment<input className="input" value={c.alignment ?? ''} placeholder="Neutral good" onChange={(e) => set({ alignment: e.target.value })} /></label>
+        <label className="cb-field">Alignment<LibraryInput className="input" label="Alignment" categories={['alignment']} value={c.alignment ?? ''} placeholder="Neutral good" onChange={(v) => set({ alignment: v })} /></label>
       </div>
       {issues.length > 0 && <ul className="cb-issues">{issues.map((i) => <li key={i}>{i}</li>)}</ul>}
       {preview && (

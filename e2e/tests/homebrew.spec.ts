@@ -5,7 +5,7 @@ import { dismissAlert, menuItem, openPage, openView } from '../lib/ui'
 // character's banner, portrait and token. Libraries belong to the whole server, so every test names its own.
 
 test('a new class is made in the character builder and chosen there', { tag: '@feature:library.homebrew-builder' }, async ({ app, makePage }) => {
-  await makePage('Wren', { props: { type: 'person' } })
+  await makePage('Wren', { props: { type: 'pc' } })
   await app.reload()
   await openPage(app, 'Wren')
   await app.getByRole('button', { name: 'Build a character' }).click()
@@ -59,7 +59,7 @@ test('the builder offers Open5e species it does not have and homebrew without ru
   if (!status.open5e) await api.json('post', '/api/library/refresh')
   await expect.poll(async () => (await api.json<{ open5e: number; running: boolean }>('get', '/api/library/status')).open5e, { timeout: 30_000 }).toBeGreaterThan(5)
   await makePage('Tide warden', { props: { type: 'class', data: { hit_die: 'd12', saves: [{ name: 'Wisdom' }, { name: 'Constitution' }] } } })
-  await makePage('Pell', { props: { type: 'person' } })
+  await makePage('Pell', { props: { type: 'pc' } })
   await app.reload()
   await openPage(app, 'Pell')
   await app.getByRole('button', { name: 'Build a character' }).click()

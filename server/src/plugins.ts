@@ -55,6 +55,7 @@ const SHAPES = new Set(['square', 'circle', 'wide', 'tall'])
 /** The image blocks of the built-in page types (the layouts themselves live in the web app). */
 const BUILTIN_IMAGES: Record<string, ImageBlock[]> = {
   person: [{ key: 'portrait', label: 'Portrait', shape: 'square' }],
+  pc: [{ key: 'portrait', label: 'Portrait', shape: 'square' }],
   monster: [{ key: 'portrait', label: 'Portrait', shape: 'wide' }],
   item: [{ key: 'portrait', label: 'Portrait', shape: 'square' }],
   location: [{ key: 'portrait', label: 'Banner', shape: 'wide' }],

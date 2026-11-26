@@ -4,6 +4,8 @@ import { Fragment, useState, type ReactNode } from 'react'
 import { ABILITIES, FEATURE_GROUPS, SENSES, SPEED_MODES, abilityMod, crFromText, crText, passivePerception, profBonus, signed, speedText, type Ability, type Feature, type FeatureGroup, type Sheet } from '../lib/sheet'
 import { xpOfCr } from '../tabletop/encounter'
 import { Select } from './Select'
+import { LibraryInput } from './LibraryInput'
+import type { LibraryCategory } from '../types'
 import { makeLinker, useAutoLinks, type Linker } from './useAutoLinks'
 
 // The sheet of a creature as the printed stat block. With `set` it can be edited in place; every change is one or two field paths
@@ -31,14 +33,17 @@ function usageText(f: Feature) {
   return parts.length ? ` (${parts.join(', ')})` : ''
 }
 
-export function FeatureEditor({ group, list, set }: { group: FeatureGroup; list: Feature[]; set: (next: Feature[]) => void }) {
+/** With `categories`, the name suggests entries of the library (a weapon, a spell, a feat) so that the sheet links it. */
+export function FeatureEditor({ group, list, set, categories }: { group: FeatureGroup; list: Feature[]; set: (next: Feature[]) => void; categories?: LibraryCategory[] }) {
   const change = (i: number, p: Partial<Feature>) => set(list.map((f, j) => (j === i ? { ...f, ...p } : f)))
   return (
     <div className="sv-features">
       {list.map((f, i) => (
         <div key={i} className="sv-feature">
           <div className="sv-feature-head">
-            <Txt className="sv-fname" value={f.name} label={`Name of ${GROUP_TITLE[group].toLowerCase()} ${i + 1}`} placeholder="Name" onChange={(v) => change(i, { name: v })} />
+            {categories
+              ? <LibraryInput className="sv-text sv-fname" value={f.name} label={`Name of ${GROUP_TITLE[group].toLowerCase()} ${i + 1}`} placeholder="Name" categories={categories} onChange={(v) => change(i, { name: v })} />
+              : <Txt className="sv-fname" value={f.name} label={`Name of ${GROUP_TITLE[group].toLowerCase()} ${i + 1}`} placeholder="Name" onChange={(v) => change(i, { name: v })} />}
             <Select className="sv-usage" title="How often" value={f.usage?.type ?? ''} onChange={(t) => {
               const { usage: _drop, ...rest } = f
               set(list.map((x, j) => (j === i ? (t === 'recharge' ? { ...rest, usage: { type: 'recharge' as const, min: 5 } } : t === 'perDay' ? { ...rest, usage: { type: 'perDay' as const, times: 3 } } : t === 'rest' ? { ...rest, usage: { type: 'rest' as const } } : rest) : x)))

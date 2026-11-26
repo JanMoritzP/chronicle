@@ -61,6 +61,9 @@ export function useEntryFinder(ruleset: string): FindEntry | null {
 interface Links { find: FindEntry | null; peek: (t: Target) => void }
 const LinksContext = createContext<Links>({ find: null, peek: () => {} })
 
+/** The finder of the sheet around, for edit boxes that show whether their name is linked. */
+export const useFindEntry = () => useContext(LinksContext).find
+
 /** Gives the links on a sheet their finder, and shows a clicked entry in a window over the sheet, so the sheet stays open. */
 export function SheetLinksHost({ ruleset, children }: { ruleset: string; children: ReactNode }) {
   const find = useEntryFinder(ruleset)
@@ -107,6 +110,11 @@ export function SpellLinks({ text }: { text: string }) {
       })}
     </>
   )
+}
+
+/** "Thieves' tools, Common, Elvish" with each part that names an entry linked. */
+export function ListLinks({ text, categories }: { text: string; categories: LibraryCategory[] }) {
+  return <>{text.split(/(,\s*|;\s*)/).map((p, k) => (k % 2 ? p : <EntryLink key={k} name={p} categories={categories} />))}</>
 }
 
 /** A page of the world, read-only: the fields of its special page type where its layout puts them, then its text. */

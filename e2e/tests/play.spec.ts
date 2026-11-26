@@ -94,7 +94,7 @@ test('a token stops at a wall, and the GM passes with Ctrl', { tag: '@feature:ta
 })
 
 test('a character is built step by step with the rules worked out', { tag: '@feature:sheet.builder' }, async ({ app, makePage }) => {
-  await makePage('Brann', { props: { type: 'person' } })
+  await makePage('Brann', { props: { type: 'pc' } })
   await app.reload()
   await openPage(app, 'Brann')
   await app.getByRole('button', { name: 'Build a character' }).click()
@@ -141,7 +141,7 @@ test('a character is built step by step with the rules worked out', { tag: '@fea
 
 test('a page names who plays it, and a reader who plays it may change its sheet', { tag: '@feature:sheet.players' }, async ({ app, as, makePage, world, api }) => {
   await grantAccess(world.id, 'viewer')
-  const page = await makePage('Hero', { props: { type: 'person' } })
+  const page = await makePage('Hero', { props: { type: 'pc' } })
   await app.reload()
   await openPage(app, 'Hero')
   await app.getByRole('button', { name: 'Add a character sheet' }).click()

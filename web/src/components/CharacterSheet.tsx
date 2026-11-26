@@ -8,16 +8,18 @@ import {
 } from '../lib/sheet'
 import { attunedCount, capacityOf, carriedWeight, loadOf, MAX_ATTUNED } from '../lib/levelup'
 import { LevelUpPanel } from './LevelUpPanel'
-import { LibraryAdd } from './LibraryAdd'
+import { LibraryInput, type Picked } from './LibraryInput'
 import { backgroundPatch, speciesPatch } from '../lib/origin'
 import { homebrewBackgroundPatch, homebrewSpeciesPatch } from '../lib/homebrew'
 import { useStore } from '../store'
-import type { LibraryEntry } from '../types'
+import type { LibraryRow } from '../types'
+import { api } from '../api'
+import { fetchLibraryEntry } from '../lib/library'
 import { HomebrewDialog } from './Homebrew'
 import { exportCharacter } from '../lib/importers'
 import { FeatureEditor, type SheetPatch } from './SheetView'
 import { Select } from './Select'
-import { EntryLink, SheetLinksHost, SpellLinks } from './SheetLinks'
+import { EntryLink, ListLinks, SheetLinksHost, SpellLinks } from './SheetLinks'
 import { makeLinker, useAutoLinks } from './useAutoLinks'
 
 // A player character: the same sheet as a creature, with what a player tracks through a game. Editable by people who can edit the page;
@@ -96,6 +98,7 @@ export function CharacterSheet({ sheet, set, roll, pictures }: { sheet: Sheet; s
   const cur = sheet.hp.current ?? sheet.hp.max
   const ratio = sheet.hp.max ? Math.max(0, Math.min(1, cur / sheet.hp.max)) : 0
   const [adding, setAdding] = useState('')
+  const [addingSpell, setAddingSpell] = useState('')
   const [levelling, setLevelling] = useState(false)
   const act = (patch: SheetPatch) => set?.(patch)
   const bonus = (n: number) => `${n >= 0 ? '+' : '-'}${Math.abs(n)}`
@@ -104,10 +107,26 @@ export function CharacterSheet({ sheet, set, roll, pictures }: { sheet: Sheet; s
   const features = (g: 'traits' | 'actions'): Feature[] => sheet.features[g]
   // a new species or background made right here, from the sheet
   const canMake = useStore((s) => s.user?.role !== 'viewer')
-  const [making, setMaking] = useState<'species' | 'background' | null>(null)
-  const pickOrigin = (kind: 'species' | 'background', e: LibraryEntry) => {
-    if (e.homebrew && e.data?.rules) act(kind === 'species' ? homebrewSpeciesPatch(sheet, e.name, e.data.rules) : homebrewBackgroundPatch(sheet, e.name, e.data.rules))
-    else act(kind === 'species' ? speciesPatch(sheet, e.data, e.name) : backgroundPatch(sheet, e.data, e.name))
+  const [making, setMaking] = useState<{ kind: 'species' | 'background'; name: string } | null>(null)
+  /** A species or background chosen from the suggestions fills in what it gives (speed, senses, skills, traits); a page of the world gives its rules or the entry it was imported from. */
+  const pickOrigin = async (kind: 'species' | 'background', p: Picked) => {
+    let e = p.entry
+    if (!e && p.pageId) {
+      const page = await api.getPage(p.pageId).catch(() => null)
+      const rules = page?.props?.rules
+      if (rules) { act(kind === 'species' ? homebrewSpeciesPatch(sheet, p.name, rules) : homebrewBackgroundPatch(sheet, p.name, rules)); return }
+      const key = page?.props?.library
+      if (typeof key === 'string') e = await fetchLibraryEntry(key).catch(() => undefined)
+    }
+    if (!e) act({ [kind]: p.name })
+    else if (e.homebrew && e.data?.rules) act(kind === 'species' ? homebrewSpeciesPatch(sheet, p.name, e.data.rules) : homebrewBackgroundPatch(sheet, p.name, e.data.rules))
+    else act(kind === 'species' ? speciesPatch(sheet, e.data, p.name) : backgroundPatch(sheet, e.data, p.name))
+  }
+  const isSubclass = (r: LibraryRow) => r[4].startsWith('Subclass of')
+  const subclassOf = (cls: string) => (r: LibraryRow) => isSubclass(r) && (!cls.trim() || r[4].toLowerCase() === `subclass of ${cls.trim().toLowerCase()}`)
+  const addItem = (p: Picked) => {
+    const w = Number(p.entry?.data?.weight)
+    setItems([...items, { name: p.name, qty: 1, equipped: false, note: p.entry?.data?.requires_attunement ? 'requires attunement' : '', ...(w > 0 ? { weight: w } : {}) }])
   }
 
   // in the text of a feature, the names of spells, conditions and other entries link to them
@@ -116,7 +135,7 @@ export function CharacterSheet({ sheet, set, roll, pictures }: { sheet: Sheet; s
   const who = [
     sheet.species && <EntryLink key="s" name={sheet.species} categories={['species']} />,
     sheet.background && <EntryLink key="b" name={sheet.background} categories={['background']} />,
-    sheet.alignment, sheet.player && `played by ${sheet.player}`,
+    sheet.alignment && <EntryLink key="a" name={sheet.alignment} categories={['alignment']} />, sheet.player && `played by ${sheet.player}`,
   ].filter(Boolean)
 
   return (
@@ -132,34 +151,29 @@ export function CharacterSheet({ sheet, set, roll, pictures }: { sheet: Sheet; s
           {edit ? (
             <>
               <Txt value={sheet.player ?? ''} label="Player" placeholder="Player" onChange={(v) => act({ player: v })} />
-              <Txt value={sheet.species ?? ''} label="Species" placeholder="Species" onChange={(v) => act({ species: v })} />
-              <Txt value={sheet.background ?? ''} label="Background" placeholder="Background" onChange={(v) => act({ background: v })} />
-              <Txt value={sheet.alignment} label="Alignment" placeholder="Alignment" onChange={(v) => act({ alignment: v })} />
+              <LibraryInput value={sheet.species ?? ''} label="Species" placeholder="Species" categories={['species']} onChange={(v) => act({ species: v })}
+                onPick={(p) => void pickOrigin('species', p)} onMake={canMake ? (n) => setMaking({ kind: 'species', name: n }) : undefined} />
+              <LibraryInput value={sheet.background ?? ''} label="Background" placeholder="Background" categories={['background']} onChange={(v) => act({ background: v })}
+                onPick={(p) => void pickOrigin('background', p)} onMake={canMake ? (n) => setMaking({ kind: 'background', name: n }) : undefined} />
+              <LibraryInput value={sheet.alignment} label="Alignment" placeholder="Alignment" categories={['alignment']} onChange={(v) => act({ alignment: v })} />
             </>
           ) : <span className="muted">{who.map((w, i) => <span key={i}>{i > 0 && ' · '}{w}</span>)}</span>}
         </div>
           </div>
         </div>
-        {edit && (
-          <div className="cs-line">
-            <LibraryAdd label="Choose a species from the library" categories={['species']} onPick={(e) => pickOrigin('species', e)} />
-            {canMake && <button className="btn sm" onClick={() => setMaking('species')}><Plus size={12} /> New species</button>}
-            <LibraryAdd label="Choose a background from the library" categories={['background']} onPick={(e) => pickOrigin('background', e)} />
-            {canMake && <button className="btn sm" onClick={() => setMaking('background')}><Plus size={12} /> New background</button>}
-          </div>
-        )}
-        {making && <HomebrewDialog category={making} ruleset={sheet.ruleset === '5e-2024' ? '5e-2024' : '5e'} onClose={() => setMaking(null)} onDone={(m) => {
+        {making && <HomebrewDialog category={making.kind} initialName={making.name} ruleset={sheet.ruleset === '5e-2024' ? '5e-2024' : '5e'} onClose={() => setMaking(null)} onDone={(m) => {
           setMaking(null)
-          if (m.rules) act(making === 'species' ? homebrewSpeciesPatch(sheet, m.name, m.rules) : homebrewBackgroundPatch(sheet, m.name, m.rules))
+          if (m.rules) act(making.kind === 'species' ? homebrewSpeciesPatch(sheet, m.name, m.rules) : homebrewBackgroundPatch(sheet, m.name, m.rules))
+          else act({ [making.kind]: m.name })
         }} />}
         <div className="cs-classes">
           {classes.map((c, i) => (
             <span key={i} className="cs-class">
               {edit ? (
                 <>
-                  <Txt value={c.name} label={`Class ${i + 1}`} placeholder="Class" onChange={(v) => act({ classes: classes.map((x, j) => (j === i ? { ...x, name: v } : x)) })} />
+                  <LibraryInput value={c.name} label={`Class ${i + 1}`} placeholder="Class" categories={['class']} filter={(r) => !isSubclass(r)} onChange={(v) => act({ classes: classes.map((x, j) => (j === i ? { ...x, name: v } : x)) })} />
                   <Num value={c.level} label={`Level of ${c.name || `class ${i + 1}`}`} min={0} max={20} width={48} onChange={(n) => act({ classes: classes.map((x, j) => (j === i ? { ...x, level: Math.min(20, n) } : x)) })} />
-                  <Txt value={c.subclass ?? ''} label={`Subclass ${i + 1}`} placeholder="Subclass" onChange={(v) => act({ classes: classes.map((x, j) => (j === i ? { ...x, subclass: v } : x)) })} />
+                  <LibraryInput value={c.subclass ?? ''} label={`Subclass ${i + 1}`} placeholder="Subclass" categories={['class']} filter={subclassOf(c.name)} onChange={(v) => act({ classes: classes.map((x, j) => (j === i ? { ...x, subclass: v } : x)) })} />
                   {classes.length > 1 && <button className="icon-btn" aria-label={`Remove class ${i + 1}`} onClick={() => act({ classes: classes.filter((_, j) => j !== i) })}><Trash2 size={12} /></button>}
                 </>
               ) : <span><EntryLink name={c.name} categories={['class']} /> {c.level}{c.subclass ? <> (<EntryLink name={c.subclass} categories={['class']} />)</> : ''}</span>}
@@ -242,7 +256,7 @@ export function CharacterSheet({ sheet, set, roll, pictures }: { sheet: Sheet; s
         <div className="cs-line"><span><b>Passive Perception</b> {passivePerception(sheet)}</span></div>
         {edit
           ? <label className="sv-block"><b>Other proficiencies and languages</b><Txt value={profs.tools ?? ''} label="Other proficiencies" placeholder="Thieves' tools, Common, Elvish" onChange={(v) => act({ profs: { ...profs, tools: v } })} /></label>
-          : profs.tools ? <div className="cs-line"><b>Proficiencies</b> {profs.tools}</div> : null}
+          : profs.tools ? <div className="cs-line"><b>Proficiencies</b> <span><ListLinks text={profs.tools} categories={['language', 'item', 'skill', 'weaponproperty']} /></span></div> : null}
       </section>
 
       {(edit || !!sheet.spellcasting?.ability || slots.some((x) => x.total > 0) || !!sheet.spells?.trim()) && <section className="cs-spells" aria-label="Spellcasting" {...place('spells')}>
@@ -267,18 +281,20 @@ export function CharacterSheet({ sheet, set, roll, pictures }: { sheet: Sheet; s
             ))}
           </div>
         )}
-        {edit && <LibraryAdd label="Add a spell from the library" categories={['spell']} onPick={(e) => { const lv = Number(e.data?.level ?? e.data?.level_int ?? 0); act({ spells: `${sheet.spells ? `${sheet.spells}
-` : ''}${lv > 0 ? `Level ${lv}` : 'Cantrip'}: ${e.name}` }) }} />}
+        {edit && <LibraryInput value={addingSpell} onChange={setAddingSpell} label="Add a spell" placeholder="Add a spell: Fire Bolt, Shield" categories={['spell']} onAdd={(p) => {
+          const lv = Number(p.entry?.data?.level ?? p.entry?.data?.level_int ?? NaN)
+          act({ spells: `${sheet.spells ? `${sheet.spells}\n` : ''}${lv > 0 ? `Level ${lv}: ` : lv === 0 ? 'Cantrip: ' : ''}${p.name}` })
+        }} />}
         {edit ? <textarea className="sv-area" aria-label="Spells" rows={3} placeholder="Cantrips and spells known or prepared" value={sheet.spells ?? ''} onChange={(e) => act({ spells: e.target.value })} />
           : sheet.spells ? <p className="cs-notes"><SpellLinks text={sheet.spells} /></p> : null}
       </section>}
 
       <section className="cs-features" aria-label="Features and attacks" {...place('features')}>
         <h4>Attacks and spells</h4>
-        {edit ? <FeatureEditor group="actions" list={features('actions')} set={(list) => act({ 'features.actions': list })} />
+        {edit ? <FeatureEditor group="actions" categories={['item', 'magicitem', 'spell']} list={features('actions')} set={(list) => act({ 'features.actions': list })} />
           : features('actions').map((f, i) => <p key={i}><b><i><EntryLink name={f.name} categories={['spell', 'item', 'magicitem']} />.</i></b> {featureText(f.text)}</p>)}
         <h4>Features and traits</h4>
-        {edit ? <FeatureEditor group="traits" list={features('traits')} set={(list) => act({ 'features.traits': list })} />
+        {edit ? <FeatureEditor group="traits" categories={['feat', 'rule', 'condition', 'spell']} list={features('traits')} set={(list) => act({ 'features.traits': list })} />
           : features('traits').map((f, i) => <p key={i}><b><i><EntryLink name={f.name} categories={['feat', 'rule', 'condition', 'spell']} />.</i></b> {featureText(f.text)}</p>)}
       </section>
 
@@ -308,7 +324,8 @@ export function CharacterSheet({ sheet, set, roll, pictures }: { sheet: Sheet; s
                 <>
                   <input type="checkbox" aria-label={`${it.name || 'Item'} equipped`} title="Equipped" checked={it.equipped} onChange={(e) => setItems(items.map((x, j) => (j === i ? { ...x, equipped: e.target.checked } : x)))} />
                   <Num label={`Quantity of ${it.name || 'item'}`} value={it.qty} width={52} onChange={(n) => setItems(items.map((x, j) => (j === i ? { ...x, qty: n } : x)))} />
-                  <Txt value={it.name} label={`Item ${i + 1}`} placeholder="Item" onChange={(v) => setItems(items.map((x, j) => (j === i ? { ...x, name: v } : x)))} />
+                  <LibraryInput value={it.name} label={`Item ${i + 1}`} placeholder="Item" categories={['item', 'magicitem']} onChange={(v) => setItems(items.map((x, j) => (j === i ? { ...x, name: v } : x)))}
+                    onPick={(p) => { const w = Number(p.entry?.data?.weight); setItems(items.map((x, j) => (j === i ? { ...x, name: p.name, ...(x.weight == null && w > 0 ? { weight: w } : {}), ...(!x.note && p.entry?.data?.requires_attunement ? { note: 'requires attunement' } : {}) } : x))) }} />
                   <Txt value={it.note} label={`Note on ${it.name || 'item'}`} placeholder="Note" onChange={(v) => setItems(items.map((x, j) => (j === i ? { ...x, note: v } : x)))} />
                   <input type="number" className="sv-num" min={0} step="any" aria-label={`Weight of ${it.name || 'item'} in pounds`} title="Pounds, each" placeholder="lb" style={{ width: 56 }} value={it.weight ?? ''} onChange={(e) => setItems(items.map((x, j) => (j === i ? { ...x, weight: e.target.value === '' ? undefined : Math.max(0, Number(e.target.value)) } : x)))} />
                   <label className="sv-mini" title="Charges: spent, and in all"><Num label={`Charges of ${it.name || 'item'}`} value={it.charges?.max ?? 0} width={44} onChange={(n) => setItems(items.map((x, j) => (j === i ? { ...x, charges: n > 0 ? { used: Math.min(x.charges?.used ?? 0, n), max: n } : undefined } : x)))} />charges</label>
@@ -337,16 +354,9 @@ export function CharacterSheet({ sheet, set, roll, pictures }: { sheet: Sheet; s
           )
         })()}
         {edit && (
-          <LibraryAdd label="Add an item from the library" categories={['item', 'magicitem']} onPick={(e) => {
-            const w = Number(e.data?.weight)
-            setItems([...items, { name: e.name, qty: 1, equipped: false, note: e.data?.requires_attunement ? 'requires attunement' : '', ...(w > 0 ? { weight: w } : {}) }])
-          }} />
-        )}
-        {edit && (
           <div className="cs-line">
-            <input className="sv-text" aria-label="New item" placeholder="Add an item" value={adding} onChange={(e) => setAdding(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && adding.trim()) { setItems([...items, { name: adding.trim(), qty: 1, equipped: false, note: '' }]); setAdding('') } }} />
-            <button className="btn sm" onClick={() => { if (adding.trim()) { setItems([...items, { name: adding.trim(), qty: 1, equipped: false, note: '' }]); setAdding('') } }}><Plus size={12} /> Add</button>
+            <LibraryInput value={adding} onChange={setAdding} label="New item" placeholder="Add an item: Longsword, Rope" categories={['item', 'magicitem']} onAdd={addItem} />
+            <button className="btn sm" onClick={() => { if (adding.trim()) { addItem({ name: adding.trim() }); setAdding('') } }}><Plus size={12} /> Add</button>
           </div>
         )}
         <div className="cs-line cs-money">

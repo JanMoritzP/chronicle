@@ -141,10 +141,16 @@ const BUILTIN_LAYOUTS: Record<string, { name: string; icon: string; tag: string;
     layout: { inText: true, columns: 'side-right', flow: 'wrap',
       side: [
         { type: 'image', key: 'portrait', shape: 'square' },
-        { type: 'fields', title: 'Details', fields: [f('race', 'Race', { library: 'species' }), f('class', 'Class / Role', { library: 'class' }), f('age', 'Age'), f('alignment', 'Alignment'), f('affiliation', 'Affiliation'), f('home', 'Home')] },
+        { type: 'fields', title: 'Details', fields: [f('race', 'Race', { library: 'species' }), f('class', 'Class / Role', { library: 'class' }), f('age', 'Age'), f('alignment', 'Alignment', { library: 'alignment' }), f('affiliation', 'Affiliation'), f('home', 'Home')] },
       ],
       main: [{ type: 'body' }],
     },
+  },
+  // a character someone plays: the character sheet (drawn by PageView) holds the facts, so the layout is the text alone
+  pc: {
+    name: 'Player character', icon: 'swords', tag: 'pc',
+    starter: 'h2{Backstory}+p+h2{Personality}+p+h2{Goals and bonds}+p+h2{Notes}+p',
+    layout: { inText: true, columns: 'single', main: [{ type: 'body' }] },
   },
   monster: {
     name: 'Monster', icon: 'skull', tag: 'monster',

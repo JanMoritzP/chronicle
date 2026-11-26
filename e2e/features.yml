@@ -436,8 +436,11 @@ areas:
         name: "A monster page edits its numbers in place and keeps them"
         files: [web/src/components/SheetView.tsx]
       - id: sheet.character
-        name: "A person page gets a character sheet that works out the numbers"
+        name: "A player character page gets a character sheet that works out the numbers"
         files: [web/src/components/CharacterSheet.tsx]
+      - id: sheet.pc-type
+        name: "Player characters have their own special page; a person with a character sheet can be made one"
+        files: [web/src/lib/pageTypes.ts, web/src/components/PageView.tsx]
       - id: sheet.character-more
         name: "A character sheet tracks rests, hit dice, death saves, spell slots, items and coins"
         files: [web/src/components/CharacterSheet.tsx]
@@ -489,7 +492,10 @@ areas:
         files: [web/src/lib/lightitems.ts, web/src/components/TableParts.tsx, server/src/table.ts]
       - id: library.sheet
         name: "A spell or an item from the library added to a character sheet"
-        files: [web/src/components/LibraryAdd.tsx, web/src/components/CharacterSheet.tsx]
+        files: [web/src/components/LibraryInput.tsx, web/src/components/CharacterSheet.tsx]
+      - id: library.sheet-suggest
+        name: "Species, background, class, subclass, alignment, items and features on a character sheet suggest library entries while you type"
+        files: [web/src/components/LibraryInput.tsx, web/src/components/CharacterSheet.tsx, web/src/components/SheetView.tsx]
       - id: packs.sheet
         name: "A system pack adds its own fields to a character sheet"
         files: [web/src/components/CharacterSheet.tsx, server/src/pack.ts, web/src/lib/systems.ts]

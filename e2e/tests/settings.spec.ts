@@ -257,7 +257,7 @@ test('a system pack can add its own fields to a character sheet', { tag: '@featu
   await confirmDialog(app)
   await app.getByRole('button', { name: 'Use Doomed' }).click()
   await expect(app.getByRole('list', { name: 'Installed packs' })).toContainText('in use')
-  await makePage('Brann', { props: { type: 'person' } })
+  await makePage('Brann', { props: { type: 'pc' } })
   await app.reload()
   await openPage(app, 'Brann')
   await app.getByRole('button', { name: 'Add a character sheet' }).click()

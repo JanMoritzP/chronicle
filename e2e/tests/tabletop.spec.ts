@@ -418,7 +418,7 @@ test('a world that plays by the 2024 rules rates a fight against a budget', { ta
 
 test('a Pathfinder 2e character works out its numbers from level and ranks', { tag: '@feature:pf2e.character' }, async ({ app, api, world, makePage }) => {
   await api.json('patch', `/api/workspaces/${world.id}`, { settings: { system: 'pf2e' } })
-  await makePage('Valeros', { props: { type: 'person' } })
+  await makePage('Valeros', { props: { type: 'pc' } })
   await app.reload()
   await openPage(app, 'Valeros')
   await app.getByRole('button', { name: 'Add a character sheet' }).click()

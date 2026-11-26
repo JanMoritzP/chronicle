@@ -368,6 +368,16 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
     schedule({ propsPatch: { type: id || null }, ...(nextTags !== tags ? { tags: nextTags } : {}) }, 100)
   }
 
+  /** A person page that was given a character sheet before player characters had their own type: the sheet stays, the details box goes. */
+  const makePlayerCharacter = () => {
+    if (editor?.isEditable) {
+      const boxes: { from: number; to: number }[] = []
+      editor.state.doc.descendants((n, pos) => { if (n.type.name === 'infobox') boxes.push({ from: pos, to: pos + n.nodeSize }) })
+      if (boxes.length) { const tr = editor.state.tr; for (const b of boxes.reverse()) tr.delete(b.from, b.to); editor.view.dispatch(tr) }
+    }
+    changeType('pc')
+  }
+
   const nav = useStore.getState().navigate
   const width = usePageWidth()
   const nextWidth = PAGE_WIDTHS[(PAGE_WIDTHS.findIndex((w) => w.id === width) + 1) % PAGE_WIDTHS.length]
@@ -496,7 +506,11 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
           )}
           {meta && <span style={{ marginLeft: 'auto' }}>{words} words · edited {ago(meta.updatedAt)}</span>}
         </div>
-        {(pageType?.id === 'person' || sheetOf(props)?.kind === 'character' || players.length > 0) && !zen && <PlayedBy players={players} readOnly={viewer} onChange={setPlayers} />}
+        {(pageType?.id === 'pc' || sheetOf(props)?.kind === 'character' || players.length > 0) && !zen && <PlayedBy players={players} readOnly={viewer} onChange={setPlayers} />}
+        {pageType?.id === 'person' && sheetOf(props)?.kind === 'character' && !viewer && !zen && (
+          <p className="cs-convert muted">This person has a character sheet. Player characters now have their own special page, without the details box.
+            <button className="btn sm" onClick={makePlayerCharacter}>Make it a player character</button></p>
+        )}
         {viewer && !readOnly && <p className="player-note muted">You play this character: you can change its text and sheet.</p>}
         {sheetOf(props)?.kind === 'character' ? (
           sheetOf(props)!.pf2e?.char
@@ -507,7 +521,7 @@ function PageEditor({ page, anchor, onReload }: { page: FullPage; anchor?: strin
               token: typeof props.data?.token === 'string' ? props.data.token : undefined,
               ...(readOnly ? {} : { set: (k: PictureKey, url: string | null) => setTypeValue(k, url), pick: pickImage }),
             }} />
-        ) : pageType?.id === 'person' && !readOnly && !zen ? (
+        ) : pageType?.id === 'pc' && !readOnly && !zen ? (
           <div className="cs-start">
             <div>
               <b>No character sheet yet</b>

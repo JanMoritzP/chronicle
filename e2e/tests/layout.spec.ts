@@ -118,6 +118,33 @@ test('a new person page shows its details as a box in the text that can move, wi
   await expect(app.locator('.tl-side')).toHaveCount(0)
 })
 
+test('player characters have their own special page, and a person with a sheet can become one', { tag: '@feature:sheet.pc-type' }, async ({ app, makePage }) => {
+  await app.getByTitle('New special page (person, monster, location…)').click()
+  await app.locator('.menu').getByRole('button', { name: /Player character/ }).click()
+  await expect(app.getByRole('button', { name: 'Add a character sheet' })).toBeVisible()
+  await expect(app.getByRole('button', { name: 'Build a character' })).toBeVisible()
+  await expect(editorOf(app).locator('.infobox')).toHaveCount(0)
+  await expect(editorOf(app).getByRole('heading', { name: 'Backstory' })).toBeVisible()
+  await expect(app.locator('.meta-row')).toContainText('#pc')
+  // a person is someone of the world: details, no character sheet
+  await app.getByTitle('New special page (person, monster, location…)').click()
+  await app.locator('.menu').getByRole('button', { name: /^Person/ }).click()
+  await expect(editorOf(app).locator('.infobox')).toContainText('Race')
+  await expect(app.getByRole('button', { name: 'Add a character sheet' })).toHaveCount(0)
+  // a person page that already has a character sheet keeps it and can be made a player character
+  await makePage('Old hero', { props: { type: 'person', sheet: { v: 1, kind: 'character', ruleset: '5e', name: 'Old hero', size: 'Medium', type: 'humanoid', alignment: '', abilities: { str: 14, dex: 12, con: 14, int: 10, wis: 10, cha: 10 }, ac: { value: 16, note: '' }, hp: { max: 20, formula: '' }, speed: { walk: 30 }, saves: {}, skills: {}, senses: {}, vulnerabilities: '', resistances: '', immunities: '', conditionImmunities: '', languages: '', features: { traits: [], actions: [], bonus: [], reactions: [], legendary: [] }, classes: [{ name: 'Fighter', level: 2 }] } } })
+  await app.reload()
+  await openPage(app, 'Old hero')
+  await expect(app.getByLabel('Character sheet')).toBeVisible()
+  await expect(editorOf(app).locator('.infobox')).toHaveCount(0)
+  await app.getByRole('button', { name: 'Make it a player character' }).click()
+  await expect(app.locator('.type-pick')).toContainText('Player character')
+  await expect(app.locator('.meta-row')).toContainText('#pc')
+  await expect(app.locator('.meta-row')).not.toContainText('#person')
+  await expect(app.getByLabel('Character sheet')).toBeVisible()
+  await expect(app.getByRole('button', { name: 'Make it a player character' })).toHaveCount(0)
+})
+
 test('the built-in templates are listed and start a page with a side box', { tag: '@feature:templates.builtin' }, async ({ app }) => {
   await openView(app, 'Templates')
   const row = app.locator('.todo-row', { hasText: 'Shop or inn' })

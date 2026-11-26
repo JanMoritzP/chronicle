@@ -140,10 +140,11 @@ const SECTIONS: Section[] = [
     ),
   },
   {
-    id: 'special', title: 'Special pages and stat blocks', text: 'person monster location page type stat block fields portrait',
+    id: 'special', title: 'Special pages and stat blocks', text: 'person player character pc monster location page type stat block fields portrait',
     body: () => (
       <>
         <p>A <b>special page</b> is a page with fixed fields next to its text, for example a Person with race, class and home, or a Monster with a stat block. Create one from the menu next to “New page”. Chronicle adds a tag to it automatically.</p>
+        <p>A <b>Player character</b> is the page for a character someone plays: it offers a character sheet (build one, start blank or import one) and the text below it. On the sheet, the boxes for species, background, class, items and the rest suggest entries of the library while you type, so their names link to what they do.</p>
         <p>Design your own kinds under <b>Special pages</b> in the sidebar: pick the fields, where they sit and which tag the pages get. Deleting a kind keeps its pages as plain pages.</p>
         <p>A <b>stat block</b> is a form of stats that shows up in hover previews. Insert one with <Code>/stat</Code>, or design your own form under <b>Stat block forms</b>.</p>
       </>
